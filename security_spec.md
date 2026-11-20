@@ -1,0 +1,24 @@
+# Security Specification — Sagitarius Parcel PWA
+
+## Data Invariants
+1. **User Role Integrity**: Only `akun310786@gmail.com` (verified via Google Auth `email_verified == true`) or existing admins may assign `agen`, `korwil`, or `admin` roles. New user registrations (via Google Auth or WhatsApp/Username/Email+Password) may only create `role: "member"`.
+2. **Login Alias Isolation**: `/login_aliases/{aliasId}` maps normalized WhatsApp numbers (`wa_62...`) or usernames (`u_...`) strictly for single-document `get` lookup prior to `signInWithEmailAndPassword`. Collection `list` queries on `login_aliases` are strictly denied (`allow list: if false`) to prevent enumeration/scraping.
+3. **Contract Ownership & Initial State**: A `subscription` can only be created by the authenticated `member_id` with `total_terkumpul == 0` and `status == "aktif"`.
+4. **Deposit & Withdrawal Binding**: A transaction in `deposits` (`jenis_transaksi` in `setoran`, `penarikan`) must reference an existing `subscription_id`. Members may only submit `status_verifikasi: "pending"` (either `metode: "transfer"` for `setoran` or `metode in ["pencairan_tunai", "transfer_keluar"]` for `penarikan`). Only the assigned Agen, Korwil, or Admin may verify/validate (`validated_by`) transactions or record direct `verified` cash deposits/withdrawals.
+5. **Terminal State Lock**: Once a subscription reaches `status == "diambil"`, non-admins cannot mutate its balance or status.
+6. **PII Isolation**: User profiles (`users/{userId}`) containing personal WhatsApp/email are readable only by the owner, assigned Agen, Korwil, or Admin. Public agent listings live in `agents/{agentId}`.
+7. **Contact Message Privacy**: Public visitors may create `/contact_messages/{messageId}` strictly with `status == "baru"` and server timestamps; reading, marking as `"dibalas"`, or deleting messages is strictly restricted to Admin.
+
+## Dirty Dozen Payloads (Must Return PERMISSION_DENIED)
+1. Unauthenticated `create` on `/users/attacker`
+2. Self-escalation `create` on `/users/{uid}` with `role: "admin"` by non-admin user
+3. Self-escalation `update` on `/users/{uid}` modifying `role` from `"member"` to `"agen"`
+4. Shadow update on `/users/{uid}` adding ghost field `isVerified: true`
+5. Spoofed `createdAt` timestamp not equal to `request.time`
+6. Spoofed `akun310786@gmail.com` with `email_verified == false` attempting admin write
+7. Enumeration `list` query on `/login_aliases` to scrape member phone/username aliases
+8. Creating `/login_aliases/{aliasId}` with `uid` belonging to another user
+9. Creating `/subscriptions/{subId}` with `total_terkumpul: 1000000` or `status: "lunas"`
+10. Reading another user's `/subscriptions/{subId}` as an unrelated member
+11. Member creating `/deposits/{depId}` with `metode: "tunai_agen"` and `status_verifikasi: "verified"`
+12. Poisoned 1.5KB document ID on `/subscriptions/{1500_char_id}`

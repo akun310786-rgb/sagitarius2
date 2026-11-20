@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Playfair Display', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sp-ivory: #F5F1E9;
+    --sp-purple: #381E5A;
+    --sp-purple-deep: #241040;
+    --sp-emerald: #0C3328;
+    --sp-emerald-mid: #144738;
+    --sp-gold: #C8A053;
+    --sp-border: #E4DCCB;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #F5F1E9;
+    color: #1F1B24;
+  }
+
+  h1, h2, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle Islamic geometric pattern overlay for warm ivory backgrounds */
+.bg-arabesque-ivory {
+  background-color: #F5F1E9;
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23C8A053' stroke-opacity='0.14' stroke-width='0.9'%3E%3Cpath d='M40 0 L52 28 L80 40 L52 52 L40 80 L28 52 L0 40 L28 28 Z'/%3E%3Ccircle cx='40' cy='40' r='10'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Subtle Islamic geometric pattern overlay for dark forest emerald panels */
+.bg-arabesque-emerald {
+  background-color: #0C3328;
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23C8A053' stroke-opacity='0.11' stroke-width='0.9'%3E%3Cpath d='M40 0 L52 28 L80 40 L52 52 L40 80 L28 52 L0 40 L28 28 Z'/%3E%3Ccircle cx='40' cy='40' r='10'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Subtle header royal purple pattern */
+.bg-arabesque-purple {
+  background: linear-gradient(135deg, #271344 0%, #381E5A 55%, #16382E 100%);
+  background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23C8A053' stroke-opacity='0.1' stroke-width='0.8'%3E%3Cpath d='M40 0 L52 28 L80 40 L52 52 L40 80 L28 52 L0 40 L28 28 Z'/%3E%3C/g%3E%3C/svg%3E"), linear-gradient(135deg, #271344 0%, #381E5A 55%, #16382E 100%);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

@@ -1,0 +1,372 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'akun310786@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))) ||
+        (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isKorwil() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'korwil';
+    }
+
+    function isAgen() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'agen';
+    }
+
+    function isValidWilayah(w) {
+      return w in ['Ciamis', 'Tasikmalaya', 'Banjar', 'Pangandaran', 'Garut'];
+    }
+
+    function isValidKategori(k) {
+      return k in ['bunda', 'anak', 'pilihan', 'uang', 'satuan'];
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'nama', 'no_wa', 'role', 'wilayah', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'nama', 'username', 'no_wa', 'email', 'role', 'kode_agen', 'wilayah', 'agen_id', 'korwil_id', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 100 &&
+        (!('username' in data) || (data.username is string && data.username.size() <= 40)) &&
+        data.no_wa is string && data.no_wa.size() >= 8 && data.no_wa.size() <= 20 &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        data.role in ['member', 'agen', 'korwil', 'admin'] &&
+        (!('kode_agen' in data) || (data.kode_agen is string && data.kode_agen.size() <= 32)) &&
+        isValidWilayah(data.wilayah) &&
+        (!('agen_id' in data) || (data.agen_id is string && data.agen_id.size() <= 128)) &&
+        (!('korwil_id' in data) || (data.korwil_id is string && data.korwil_id.size() <= 128)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidLoginAlias(data) {
+      return data.keys().hasAll(['uid', 'auth_email', 'alias_type', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'auth_email', 'alias_type', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.auth_email is string && data.auth_email.size() >= 5 && data.auth_email.size() <= 150 &&
+        data.alias_type in ['wa', 'username'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAgent(data) {
+      return data.keys().hasAll(['kode_agen', 'nama', 'wilayah', 'no_wa', 'jumlah_member', 'aktif', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['kode_agen', 'nama', 'wilayah', 'kecamatan', 'no_wa', 'jumlah_member', 'komisi_persen', 'aktif', 'korwil_id', 'createdAt', 'updatedAt']) &&
+        data.kode_agen is string && data.kode_agen.size() >= 3 && data.kode_agen.size() <= 32 &&
+        data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 100 &&
+        isValidWilayah(data.wilayah) &&
+        (!('kecamatan' in data) || (data.kecamatan is string && data.kecamatan.size() <= 80)) &&
+        data.no_wa is string && data.no_wa.size() >= 8 && data.no_wa.size() <= 20 &&
+        data.jumlah_member is number && data.jumlah_member >= 0 &&
+        (!('komisi_persen' in data) || (data.komisi_persen is number && data.komisi_persen >= 0 && data.komisi_persen <= 15)) &&
+        data.aktif is bool &&
+        (!('korwil_id' in data) || (data.korwil_id is string && data.korwil_id.size() <= 128)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidPackage(data) {
+      return data.keys().hasAll(['nama_paket', 'kategori', 'harga_total', 'setoran_harian', 'setoran_mingguan', 'durasi_hari', 'daftar_isi', 'bonus_thr', 'foto_url', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['nama_paket', 'kategori', 'sub_kategori', 'harga_total', 'setoran_harian', 'setoran_mingguan', 'durasi_hari', 'bobot_kg', 'daftar_isi', 'bonus_thr', 'foto_url', 'jadwal_ambil', 'createdAt', 'updatedAt']) &&
+        data.nama_paket is string && data.nama_paket.size() >= 2 && data.nama_paket.size() <= 120 &&
+        isValidKategori(data.kategori) &&
+        (!('sub_kategori' in data) || (data.sub_kategori is string && data.sub_kategori.size() <= 60)) &&
+        data.harga_total is number && data.harga_total >= 1000 &&
+        data.setoran_harian is number && data.setoran_harian >= 100 &&
+        data.setoran_mingguan is number && data.setoran_mingguan >= 500 &&
+        data.durasi_hari is number && data.durasi_hari >= 7 && data.durasi_hari <= 400 &&
+        (!('bobot_kg' in data) || (data.bobot_kg is number && data.bobot_kg >= 0)) &&
+        data.daftar_isi is list && data.daftar_isi.size() > 0 && data.daftar_isi.size() <= 30 && data.daftar_isi[0] is string &&
+        data.bonus_thr is number && data.bonus_thr >= 0 &&
+        data.foto_url is string && data.foto_url.size() <= 500 &&
+        (!('jadwal_ambil' in data) || (data.jadwal_ambil is string && data.jadwal_ambil.size() <= 40)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSubscription(data) {
+      return data.keys().hasAll(['member_id', 'member_nama', 'agen_id', 'wilayah', 'package_id', 'package_nama', 'target_nominal', 'total_terkumpul', 'status', 'qr_code_token', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['member_id', 'member_nama', 'agen_id', 'korwil_id', 'agen_kode', 'agen_nama', 'wilayah', 'package_id', 'package_nama', 'kategori', 'target_nominal', 'total_terkumpul', 'setoran_nominal', 'frekuensi', 'durasi_minggu', 'status', 'qr_code_token', 'jadwal_ambil', 'daftar_isi', 'createdAt', 'updatedAt']) &&
+        isValidId(data.member_id) &&
+        data.member_nama is string && data.member_nama.size() >= 2 && data.member_nama.size() <= 100 &&
+        isValidId(data.agen_id) &&
+        (!('korwil_id' in data) || (data.korwil_id is string && data.korwil_id.size() <= 128)) &&
+        (!('agen_kode' in data) || (data.agen_kode is string && data.agen_kode.size() <= 32)) &&
+        (!('agen_nama' in data) || (data.agen_nama is string && data.agen_nama.size() <= 100)) &&
+        isValidWilayah(data.wilayah) &&
+        isValidId(data.package_id) &&
+        data.package_nama is string && data.package_nama.size() >= 2 && data.package_nama.size() <= 120 &&
+        (!('kategori' in data) || isValidKategori(data.kategori)) &&
+        data.target_nominal is number && data.target_nominal >= 1000 &&
+        data.total_terkumpul is number && data.total_terkumpul >= 0 &&
+        (!('setoran_nominal' in data) || (data.setoran_nominal is number && data.setoran_nominal >= 100)) &&
+        (!('frekuensi' in data) || (data.frekuensi in ['harian', 'mingguan'])) &&
+        (!('durasi_minggu' in data) || (data.durasi_minggu is number && data.durasi_minggu >= 1 && data.durasi_minggu <= 60)) &&
+        data.status in ['aktif', 'lunas', 'diambil'] &&
+        data.qr_code_token is string && data.qr_code_token.size() >= 6 && data.qr_code_token.size() <= 120 &&
+        (!('jadwal_ambil' in data) || (data.jadwal_ambil is string && data.jadwal_ambil.size() <= 40)) &&
+        (!('daftar_isi' in data) || (data.daftar_isi is list && data.daftar_isi.size() <= 30)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDeposit(data) {
+      return data.keys().hasAll(['subscription_id', 'member_id', 'agen_id', 'nominal', 'metode', 'status_verifikasi', 'tanggal', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['subscription_id', 'member_id', 'member_nama', 'agen_id', 'korwil_id', 'wilayah', 'jenis_transaksi', 'nominal', 'metode', 'bukti_foto_url', 'catatan', 'status_verifikasi', 'validated_by', 'tanggal', 'createdAt', 'updatedAt']) &&
+        isValidId(data.subscription_id) &&
+        isValidId(data.member_id) &&
+        (!('member_nama' in data) || (data.member_nama is string && data.member_nama.size() <= 100)) &&
+        isValidId(data.agen_id) &&
+        (!('korwil_id' in data) || (data.korwil_id is string && data.korwil_id.size() <= 128)) &&
+        (!('wilayah' in data) || isValidWilayah(data.wilayah)) &&
+        (!('jenis_transaksi' in data) || (data.jenis_transaksi in ['setoran', 'penarikan'])) &&
+        data.nominal is number && data.nominal >= 1000 &&
+        data.metode in ['tunai_agen', 'transfer', 'pencairan_tunai', 'transfer_keluar'] &&
+        (!('bukti_foto_url' in data) || (data.bukti_foto_url is string && data.bukti_foto_url.size() <= 250000)) &&
+        (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 250)) &&
+        data.status_verifikasi in ['pending', 'verified', 'rejected'] &&
+        (!('validated_by' in data) || (data.validated_by is string && data.validated_by.size() <= 100)) &&
+        data.tanggal is string && data.tanggal.size() >= 4 && data.tanggal.size() <= 40 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidContactMessage(data) {
+      return data.keys().hasAll(['nama', 'no_wa', 'pesan', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['nama', 'no_wa', 'pesan', 'status', 'createdAt', 'updatedAt']) &&
+        data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 100 &&
+        data.no_wa is string && data.no_wa.size() >= 6 && data.no_wa.size() <= 25 &&
+        data.pesan is string && data.pesan.size() >= 5 && data.pesan.size() <= 1000 &&
+        data.status in ['baru', 'dibalas'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- Collection Match Blocks ---
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (adminId == request.auth.uid || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create, update, delete: if isAdmin() && isValidId(adminId);
+    }
+
+    match /login_aliases/{aliasId} {
+      allow get: if isValidId(aliasId);
+      allow list: if false;
+      allow create: if isSignedIn() && isValidId(aliasId) &&
+        isValidLoginAlias(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (aliasId.matches('^wa_62[0-9]{6,15}$') || aliasId.matches('^u_[a-z0-9_]{3,40}$'));
+      allow update: if isSignedIn() && isValidId(aliasId) &&
+        isValidLoginAlias(incoming()) &&
+        existing().uid == request.auth.uid &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['auth_email', 'updatedAt']);
+      allow delete: if isSignedIn() && isValidId(aliasId) &&
+        (existing().uid == request.auth.uid || isAdmin());
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (
+        userId == request.auth.uid ||
+        isAdmin() ||
+        isKorwil() ||
+        (isAgen() && existing().agen_id == request.auth.uid)
+      );
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.uid == request.auth.uid ||
+        resource.data.agen_id == request.auth.uid ||
+        resource.data.korwil_id == request.auth.uid
+      );
+      allow create: if isSignedIn() && isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUser(incoming()) &&
+        incoming().uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().role == 'member' || isBootstrappedAdmin());
+      allow update: if isSignedIn() && isValidId(userId) &&
+        isValidUser(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            userId == request.auth.uid &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'username', 'no_wa', 'wilayah', 'agen_id', 'kode_agen', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    match /agents/{agentId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(agentId) && isValidAgent(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(agentId) && isValidAgent(incoming()) &&
+        incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(agentId);
+    }
+
+    match /packages/{packageId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isValidId(packageId) && isValidPackage(incoming()) &&
+        incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(packageId) && isValidPackage(incoming()) &&
+        incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(packageId);
+    }
+
+    match /subscriptions/{subscriptionId} {
+      allow get: if isSignedIn() && isValidId(subscriptionId) && (
+        existing().member_id == request.auth.uid ||
+        existing().agen_id == request.auth.uid ||
+        isKorwil() ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.member_id == request.auth.uid ||
+        resource.data.agen_id == request.auth.uid ||
+        resource.data.korwil_id == request.auth.uid
+      );
+      allow create: if isSignedIn() && isValidId(subscriptionId) &&
+        isValidSubscription(incoming()) &&
+        incoming().member_id == request.auth.uid &&
+        incoming().total_terkumpul == 0 &&
+        incoming().status == 'aktif' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && isValidId(subscriptionId) &&
+        isValidSubscription(incoming()) &&
+        incoming().member_id == existing().member_id &&
+        incoming().package_id == existing().package_id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().status != 'diambil' &&
+            ((isAgen() && existing().agen_id == request.auth.uid) || isKorwil()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['total_terkumpul', 'status', 'updatedAt'])
+          ) ||
+          (
+            existing().member_id == request.auth.uid &&
+            existing().status == 'aktif' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(subscriptionId);
+    }
+
+    match /deposits/{depositId} {
+      allow get: if isSignedIn() && isValidId(depositId) && (
+        existing().member_id == request.auth.uid ||
+        existing().agen_id == request.auth.uid ||
+        isKorwil() ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.member_id == request.auth.uid ||
+        resource.data.agen_id == request.auth.uid ||
+        resource.data.korwil_id == request.auth.uid
+      );
+      allow create: if isSignedIn() && isValidId(depositId) &&
+        isValidDeposit(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)) &&
+        (
+          isAdmin() ||
+          (
+            incoming().member_id == request.auth.uid &&
+            incoming().status_verifikasi == 'pending' &&
+            (
+              ((!('jenis_transaksi' in incoming()) || incoming().jenis_transaksi == 'setoran') && incoming().metode == 'transfer') ||
+              (incoming().jenis_transaksi == 'penarikan' && incoming().metode in ['pencairan_tunai', 'transfer_keluar'])
+            )
+          ) ||
+          (
+            ((isAgen() && incoming().agen_id == request.auth.uid) || isKorwil()) &&
+            incoming().status_verifikasi == 'verified' &&
+            incoming().metode in ['tunai_agen', 'pencairan_tunai', 'transfer_keluar']
+          )
+        );
+      allow update: if isSignedIn() && isValidId(depositId) &&
+        isValidDeposit(incoming()) &&
+        incoming().subscription_id == existing().subscription_id &&
+        incoming().member_id == existing().member_id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().status_verifikasi == 'pending' &&
+            ((isAgen() && existing().agen_id == request.auth.uid) || isKorwil()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status_verifikasi', 'validated_by', 'catatan', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(depositId);
+    }
+
+    match /contact_messages/{messageId} {
+      allow get: if isAdmin() && isValidId(messageId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isValidId(messageId) &&
+        isValidContactMessage(incoming()) &&
+        incoming().status == 'baru' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(messageId) &&
+        isValidContactMessage(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(messageId);
+    }
+  }
+}

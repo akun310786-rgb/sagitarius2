@@ -1,0 +1,8 @@
+{
+  "name": "Sagitarius Parcel",
+  "description": "Aplikasi PWA Katalog & Tabungan Parcel Lebaran, Paket Bunda, Anak, Uang THR, Sembako Satuan, dan Direktori Agen Resmi Priangan Timur.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

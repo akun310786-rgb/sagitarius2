@@ -1,0 +1,434 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil pengguna terdaftar (member, agen, korwil, atau admin) beserta relasi ke agen binaan dan wilayah Priangan Timur.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^[a-zA-Z0-9_]*$"
+        },
+        "no_wa": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 20
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "enum": ["member", "agen", "korwil", "admin"]
+        },
+        "kode_agen": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "wilayah": {
+          "type": "string",
+          "enum": ["Ciamis", "Tasikmalaya", "Banjar", "Pangandaran", "Garut"]
+        },
+        "agen_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "nama", "no_wa", "role", "wilayah", "createdAt", "updatedAt"]
+    },
+    "AgentDirectory": {
+      "title": "AgentDirectory",
+      "description": "Direktori publik agen resmi Sagitarius Parcel di wilayah Priangan Timur.",
+      "type": "object",
+      "properties": {
+        "kode_agen": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 32
+        },
+        "nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "wilayah": {
+          "type": "string",
+          "enum": ["Ciamis", "Tasikmalaya", "Banjar", "Pangandaran", "Garut"]
+        },
+        "kecamatan": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "no_wa": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 20
+        },
+        "jumlah_member": {
+          "type": "number"
+        },
+        "komisi_persen": {
+          "type": "number"
+        },
+        "aktif": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["kode_agen", "nama", "wilayah", "no_wa", "jumlah_member", "aktif", "createdAt", "updatedAt"]
+    },
+    "Package": {
+      "title": "Package",
+      "description": "Katalog paket tabungan parcel Lebaran dan barang satuan sembako/daging.",
+      "type": "object",
+      "properties": {
+        "nama_paket": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "kategori": {
+          "type": "string",
+          "enum": ["bunda", "anak", "pilihan", "uang", "satuan"]
+        },
+        "sub_kategori": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "harga_total": {
+          "type": "number"
+        },
+        "setoran_harian": {
+          "type": "number"
+        },
+        "setoran_mingguan": {
+          "type": "number"
+        },
+        "durasi_hari": {
+          "type": "number"
+        },
+        "bobot_kg": {
+          "type": "number"
+        },
+        "daftar_isi": {
+          "type": "array"
+        },
+        "bonus_thr": {
+          "type": "number"
+        },
+        "foto_url": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "jadwal_ambil": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["nama_paket", "kategori", "harga_total", "setoran_harian", "setoran_mingguan", "durasi_hari", "daftar_isi", "bonus_thr", "foto_url", "createdAt", "updatedAt"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Kontrak tabungan parcel milik member bersama agen penyetor dan status pelunasan serta token QR pengambilan.",
+      "type": "object",
+      "properties": {
+        "member_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "member_nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "agen_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "korwil_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "agen_kode": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "agen_nama": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "wilayah": {
+          "type": "string",
+          "enum": ["Ciamis", "Tasikmalaya", "Banjar", "Pangandaran", "Garut"]
+        },
+        "package_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "package_nama": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "kategori": {
+          "type": "string",
+          "enum": ["bunda", "anak", "pilihan", "uang", "satuan"]
+        },
+        "target_nominal": {
+          "type": "number"
+        },
+        "total_terkumpul": {
+          "type": "number"
+        },
+        "setoran_nominal": {
+          "type": "number"
+        },
+        "frekuensi": {
+          "type": "string",
+          "enum": ["harian", "mingguan"]
+        },
+        "durasi_minggu": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["aktif", "lunas", "diambil"]
+        },
+        "qr_code_token": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "jadwal_ambil": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "daftar_isi": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["member_id", "member_nama", "agen_id", "wilayah", "package_id", "package_nama", "target_nominal", "total_terkumpul", "status", "qr_code_token", "createdAt", "updatedAt"]
+    },
+    "Deposit": {
+      "title": "Deposit",
+      "description": "Riwayat setoran tunai/transfer maupun penarikan saldo tabungan dengan status verifikasi agen.",
+      "type": "object",
+      "properties": {
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "member_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "member_nama": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "agen_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "korwil_id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "wilayah": {
+          "type": "string",
+          "enum": ["Ciamis", "Tasikmalaya", "Banjar", "Pangandaran", "Garut"]
+        },
+        "jenis_transaksi": {
+          "type": "string",
+          "enum": ["setoran", "penarikan"]
+        },
+        "nominal": {
+          "type": "number"
+        },
+        "metode": {
+          "type": "string",
+          "enum": ["tunai_agen", "transfer", "pencairan_tunai", "transfer_keluar"]
+        },
+        "bukti_foto_url": {
+          "type": "string",
+          "maxLength": 250000
+        },
+        "catatan": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "status_verifikasi": {
+          "type": "string",
+          "enum": ["pending", "verified", "rejected"]
+        },
+        "validated_by": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "tanggal": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["subscription_id", "member_id", "agen_id", "nominal", "metode", "status_verifikasi", "tanggal", "createdAt", "updatedAt"]
+    },
+    "LoginAlias": {
+      "title": "LoginAlias",
+      "description": "Pemetaan alias tunggal (nomor WhatsApp atau username) ke identifier Firebase Auth email/password tanpa mengekspos daftar pengguna.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "auth_email": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 150
+        },
+        "alias_type": {
+          "type": "string",
+          "enum": ["wa", "username"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "auth_email", "alias_type", "createdAt", "updatedAt"]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Pesan konsultasi dan pertanyaan yang dikirim dari halaman Kontak Sagitarius Parcel.",
+      "type": "object",
+      "properties": {
+        "nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "no_wa": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 25
+        },
+        "pesan": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["baru", "dibalas"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["nama", "no_wa", "pesan", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Profil pengguna privat beserta peran RBAC."
+    },
+    "/login_aliases/{aliasId}": {
+      "schema": { "$ref": "#/entities/LoginAlias" },
+      "description": "Pemetaan alias login tunggal berdasarkan nomor WhatsApp atau username."
+    },
+    "/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/AgentDirectory" },
+      "description": "Direktori publik agen resmi wilayah Priangan Timur."
+    },
+    "/packages/{packageId}": {
+      "schema": { "$ref": "#/entities/Package" },
+      "description": "Katalog paket tabungan dan barang satuan sembako/daging."
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/Subscription" },
+      "description": "Kontrak tabungan parcel milik member."
+    },
+    "/deposits/{depositId}": {
+      "schema": { "$ref": "#/entities/Deposit" },
+      "description": "Riwayat setoran tabungan harian/mingguan dan penarikan."
+    },
+    "/contact_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Kotak pesan konsultasi dari pengunjung dan member."
+    }
+  }
+}
