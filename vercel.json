@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/api/cs-chat(.*)", "dest": "/api/cs-chat.js" },
+    { "src": "/cs-chat(.*)", "dest": "/api/cs-chat.js" }
+  ]
+}
