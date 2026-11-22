@@ -73,7 +73,8 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/cs-chat', {
+      const apiBase = ((import.meta as { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL || '').replace(/\/$/, '');
+      const res = await fetch(`${apiBase}/api/cs-chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -81,6 +82,13 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
           ...(memberContext ? { memberContext } : {}),
         }),
       });
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          `Layanan CS Online AI memerlukan backend API aktif. Untuk bantuan langsung, silakan hubungi WhatsApp CS Resmi di ${COMPANY_INFO.csWhatsappDisplay}.`
+        );
+      }
 
       const data = (await res.json()) as { reply?: string; error?: string };
       if (!res.ok || !data.reply) {

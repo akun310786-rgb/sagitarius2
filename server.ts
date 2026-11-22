@@ -61,6 +61,27 @@ async function startServer() {
   const httpServer = http.createServer(app);
   app.use(express.json({ limit: '1mb' }));
 
+  const allowedOrigins = new Set([
+    'https://www.sagitarius-parcel.web.id',
+    'https://sagitarius-parcel.web.id',
+    'https://sagitarius-parcel.web.app',
+    'https://sagitarius-parcel.firebaseapp.com',
+  ]);
+
+  app.use('/api', (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && (allowedOrigins.has(origin) || origin.startsWith('http://localhost:'))) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    }
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+    return next();
+  });
+
   app.post('/api/cs-chat', async (req, res) => {
     try {
       const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
