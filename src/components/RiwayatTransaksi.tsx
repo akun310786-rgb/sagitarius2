@@ -18,6 +18,7 @@ interface RiwayatTransaksiProps {
   subscriptions: Subscription[];
   activeContract: Subscription | null;
   onPreviewProof: (url: string) => void;
+  onOpenReceipt?: (dep: Deposit) => void;
 }
 
 type FilterJenis = 'all' | TransactionType;
@@ -60,6 +61,7 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
   subscriptions,
   activeContract,
   onPreviewProof,
+  onOpenReceipt,
 }) => {
   const [filterJenis, setFilterJenis] = useState<FilterJenis>('all');
   const [scope, setScope] = useState<ScopeMode>('active');
@@ -395,18 +397,30 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
                       {formatRupiah(dep.nominal)}
                     </td>
                     <td className="py-3 text-right whitespace-nowrap">
-                      {dep.bukti_foto_url ? (
-                        <button
-                          type="button"
-                          onClick={() => onPreviewProof(dep.bukti_foto_url || '')}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
-                        >
-                          <FileImage className="h-3.5 w-3.5" />
-                          <span>Lihat</span>
-                        </button>
-                      ) : (
-                        <span className="text-xs text-stone-400">—</span>
-                      )}
+                      <div className="inline-flex items-center gap-2.5">
+                        {onOpenReceipt && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenReceipt(dep)}
+                            className="inline-flex items-center gap-1 rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8D8] cursor-pointer"
+                          >
+                            <Download className="h-3 w-3 text-[#C8A053]" />
+                            <span>Struk PNG</span>
+                          </button>
+                        )}
+                        {dep.bukti_foto_url ? (
+                          <button
+                            type="button"
+                            onClick={() => onPreviewProof(dep.bukti_foto_url || '')}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
+                          >
+                            <FileImage className="h-3.5 w-3.5" />
+                            <span>Lihat</span>
+                          </button>
+                        ) : !onOpenReceipt ? (
+                          <span className="text-xs text-stone-400">—</span>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );

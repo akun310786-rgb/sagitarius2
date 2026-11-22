@@ -4,31 +4,41 @@ import {
   ArrowUpRight,
   BarChart3,
   Boxes,
+  Check,
   CheckCircle2,
   ClipboardCheck,
   Coins,
+  Copy,
   Download,
   Edit3,
   FileImage,
   FileSpreadsheet,
   Gift,
+  Layers,
+  Link2,
   Megaphone,
   MessageCircle,
   Package as PackageIcon,
   Plus,
+  Printer,
   QrCode,
+  Replace,
   Search,
   Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Trophy,
+  Truck,
   UserCheck,
   UserPlus,
   Users,
   Wallet,
+  Warehouse,
   X,
   XCircle,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   addDoc,
   collection,
@@ -54,22 +64,27 @@ import {
   AgentSettlement,
   AgentSettlementType,
   AppPublicSettings,
+  AuditLogEntry,
   ContactMessage,
+  DeliveryStage,
   Deposit,
   DepositMethod,
   DoorPrizeDraw,
   PackageCategory,
   ParcelPackage,
+  ProductSubstitution,
   Subscription,
   SubscriptionStatus,
   TransactionType,
   UserProfile,
   UserRole,
+  WarehouseInventoryItem,
   WILAYAH_LIST,
   WilayahPriangan,
 } from '../types';
 import { AdminAnalyticsTab } from './AdminAnalyticsTab';
 import { QrCameraScanner } from './QrCameraScanner';
+import { ReceiptGeneratorModal } from './ReceiptGeneratorModal';
 
 interface AgentKorwilAdminDashboardProps {
   userProfile: UserProfile | null;
@@ -82,8 +97,19 @@ interface AgentKorwilAdminDashboardProps {
   appSettings: AppPublicSettings;
   doorPrizeDraws?: DoorPrizeDraw[];
   agentSettlements?: AgentSettlement[];
+  warehouseInventory?: WarehouseInventoryItem[];
+  productSubstitutions?: ProductSubstitution[];
+  auditLogs?: AuditLogEntry[];
   onNeedLogin: () => void;
 }
+
+const DELIVERY_STAGE_OPTIONS: Array<{ value: DeliveryStage; label: string }> = [
+  { value: 'menunggu_lunas', label: 'Menunggu Lunas' },
+  { value: 'dikemas_gudang', label: 'Dikemas Gudang' },
+  { value: 'kirim_korwil', label: 'Dikirim ke Korwil/Agen' },
+  { value: 'siap_diambil', label: 'Siap Diambil Member' },
+  { value: 'selesai', label: 'Selesai Diterima' },
+];
 
 type AdminTab =
   | 'agen'
@@ -153,6 +179,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   appSettings,
   doorPrizeDraws = [],
   agentSettlements = [],
+  warehouseInventory = [],
+  productSubstitutions = [],
+  auditLogs = [],
   onNeedLogin,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('agen');
@@ -180,6 +209,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [contractSearch, setContractSearch] = useState('');
   const [contractStatusFilter, setContractStatusFilter] = useState<'all' | SubscriptionStatus>('all');
   const [contractWilayahFilter, setContractWilayahFilter] = useState<'all' | WilayahPriangan>('all');
+  const [contractGroupFilter, setContractGroupFilter] = useState<string>('all');
   const [editingBalanceSubId, setEditingBalanceSubId] = useState<string | null>(null);
   const [editBalanceValue, setEditBalanceValue] = useState<string>('');
   const [confirmDeleteSubId, setConfirmDeleteSubId] = useState<string | null>(null);
@@ -222,9 +252,27 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [agentFormAktif, setAgentFormAktif] = useState(true);
   const [savingAgent, setSavingAgent] = useState(false);
 
-  // Tab 5: Gudang & QR
+  // Tab 5: Gudang & QR + Stok HPP + Manifest + Substitusi
   const [qrInput, setQrInput] = useState<string>('');
   const [warehouseScheduleFilter, setWarehouseScheduleFilter] = useState<string>('all');
+  const [manifestGroupBy, setManifestGroupBy] = useState<'wilayah' | 'agen'>('wilayah');
+  const [manifestOnlyPending, setManifestOnlyPending] = useState(true);
+
+  const [invEditId, setInvEditId] = useState<string | null>(null);
+  const [invNama, setInvNama] = useState('');
+  const [invStok, setInvStok] = useState('100');
+  const [invHarga, setInvHarga] = useState('45000');
+  const [invSatuan, setInvSatuan] = useState('unit');
+  const [invCatatan, setInvCatatan] = useState('');
+  const [savingInv, setSavingInv] = useState(false);
+  const [confirmDeleteInvId, setConfirmDeleteInvId] = useState<string | null>(null);
+
+  const [subNoticePkgId, setSubNoticePkgId] = useState<string>('all');
+  const [subNoticeLama, setSubNoticeLama] = useState('');
+  const [subNoticeBaru, setSubNoticeBaru] = useState('');
+  const [subNoticeAlasan, setSubNoticeAlasan] = useState('');
+  const [savingSubNotice, setSavingSubNotice] = useState(false);
+  const [confirmDeleteSubNoticeId, setConfirmDeleteSubNoticeId] = useState<string | null>(null);
 
   // Tab 6: Pengguna & RBAC
   const [userSearch, setUserSearch] = useState('');
@@ -235,6 +283,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offNama, setOffNama] = useState('');
   const [offWa, setOffWa] = useState('');
+  const [offGrupArisan, setOffGrupArisan] = useState('');
   const [offPackageId, setOffPackageId] = useState<string>(packages[0]?.id || '');
   const [offFrekuensi, setOffFrekuensi] = useState<'harian' | 'mingguan'>('mingguan');
   const [offDurasiMinggu, setOffDurasiMinggu] = useState('46');
@@ -244,12 +293,16 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [offAgentId, setOffAgentId] = useState<string>(agents[0]?.id || '');
   const [savingOffline, setSavingOffline] = useState(false);
 
-  // Tab 4: Tutup Kas Setor Tunai Pusat & Klaim Komisi (agent_settlements)
+  // Tab 4: Tutup Kas Setor Tunai Pusat & Klaim Komisi + Referral Link
   const [settleJenis, setSettleJenis] = useState<AgentSettlementType>('setor_tunai_pusat');
   const [settleNominal, setSettleNominal] = useState('250000');
   const [settleCatatan, setSettleCatatan] = useState('Setoran tunai kolektif member binaan');
   const [savingSettlement, setSavingSettlement] = useState(false);
   const [confirmDeleteSettleId, setConfirmDeleteSettleId] = useState<string | null>(null);
+  const [referralAgentCode, setReferralAgentCode] = useState<string>(
+    userProfile?.kode_agen || agents[0]?.kode_agen || 'AGT-TSM-01'
+  );
+  const [copiedRefLink, setCopiedRefLink] = useState(false);
 
   // Tab Door Prize State
   const [prizeName, setPrizeName] = useState('Rice Cooker Digital');
@@ -276,9 +329,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     setSetPengAktif(appSettings.pengumuman_aktif);
   }, [appSettings]);
 
-  // General UI Feedback
+  // General UI Feedback & Receipt Modal
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [previewProof, setPreviewProof] = useState<string | null>(null);
+  const [lastValidatedDeposit, setLastValidatedDeposit] = useState<Deposit | null>(null);
+  const [receiptDeposit, setReceiptDeposit] = useState<Deposit | null>(null);
   const [lastWaPayload, setLastWaPayload] = useState<{
     phone: string;
     message: string;
@@ -290,6 +345,33 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     (userProfile.role === 'agen' ||
       userProfile.role === 'korwil' ||
       userProfile.role === 'admin');
+
+  useEffect(() => {
+    if (userProfile?.kode_agen) {
+      setReferralAgentCode(userProfile.kode_agen);
+    }
+  }, [userProfile?.kode_agen]);
+
+  const writeAuditLog = async (aksi: string, targetLabel: string, detail: string) => {
+    if (!isAdmin || !userProfile) return;
+    try {
+      const safeAksi = (aksi.trim() || 'ADMIN_ACTION').slice(0, 60);
+      const safeTarget = (targetLabel.trim() || 'Sistem').slice(0, 120);
+      const safeDetail = (detail.trim() || 'Perubahan data oleh admin').slice(0, 400);
+      const safeActor = (userProfile.nama.trim() || 'Admin').slice(0, 100);
+      await addDoc(collection(db, 'audit_logs'), {
+        aksi: safeAksi.length < 2 ? `${safeAksi}-` : safeAksi,
+        target_label: safeTarget.length < 2 ? `${safeTarget}-` : safeTarget,
+        detail: safeDetail.length < 2 ? `${safeDetail}-` : safeDetail,
+        actor_uid: userProfile.uid,
+        actor_nama: safeActor.length < 2 ? 'Admin' : safeActor,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      console.error('Audit log write skipped:', err);
+    }
+  };
 
   // Visible subscriptions for current user role
   const managedSubscriptions = useMemo(() => {
@@ -415,7 +497,71 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     });
   }, [agentCommissionSummary, subscriptions]);
 
-  // Warehouse Logistics Aggregation (H-7 & H-2)
+  // Daily Closing Sheet (Rekap Kas Hari Ini)
+  const todayIsoDate = new Date().toISOString().slice(0, 10);
+  const dailyClosingSummary = useMemo(() => {
+    const subIds = new Set(managedSubscriptions.map((s) => s.id));
+    let cashIn = 0;
+    let transferIn = 0;
+    let cashOut = 0;
+    let txCountToday = 0;
+
+    deposits.forEach((d) => {
+      if (d.status_verifikasi !== 'verified') return;
+      if (d.tanggal !== todayIsoDate) return;
+      if (!isAdmin && !subIds.has(d.subscription_id)) return;
+      txCountToday += 1;
+      if (getTxType(d) === 'penarikan') {
+        cashOut += d.nominal || 0;
+      } else if (d.metode === 'transfer') {
+        transferIn += d.nominal || 0;
+      } else {
+        cashIn += d.nominal || 0;
+      }
+    });
+
+    const netCashInHand = Math.max(0, cashIn - cashOut);
+    return {
+      todayIsoDate,
+      cashIn,
+      transferIn,
+      cashOut,
+      netCashInHand,
+      txCountToday,
+    };
+  }, [deposits, managedSubscriptions, isAdmin, todayIsoDate]);
+
+  // Agent Leaderboard sorted by live collected volume
+  const agentLeaderboard = useMemo(() => {
+    return [...agentCommissionSummary]
+      .filter((a) => a.aktif)
+      .sort((a, b) => b.liveCollected - a.liveCollected || b.totalMembers - a.totalMembers)
+      .map((a, idx) => {
+        const nextTierTarget = a.totalMembers >= 25 ? 25 : a.totalMembers >= 10 ? 25 : 10;
+        const nextTierRate = a.totalMembers >= 25 ? 7 : a.totalMembers >= 10 ? 7 : 5.5;
+        const tierPct = Math.min(100, Math.round((a.totalMembers / nextTierTarget) * 100));
+        return {
+          ...a,
+          rank: idx + 1,
+          nextTierTarget,
+          nextTierRate,
+          tierPct,
+        };
+      });
+  }, [agentCommissionSummary]);
+
+  // Arisan Groups list for Tab 2 filter
+  const arisanGroups = useMemo(() => {
+    const names = new Set<string>();
+    managedSubscriptions.forEach((s) => {
+      if (s.grup_arisan && s.grup_arisan.trim()) {
+        names.add(s.grup_arisan.trim());
+      }
+    });
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [managedSubscriptions]);
+
+  // Warehouse Logistics Aggregation (H-7 & H-2) matched against warehouseInventory
   const warehouseRecap = useMemo(() => {
     const itemCounts = new Map<string, { item: string; qty: number; jadwal: string }>();
     let totalThrBonus = 0;
@@ -443,13 +589,59 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       });
     });
 
+    const rowsWithStock = Array.from(itemCounts.values())
+      .sort((a, b) => b.qty - a.qty)
+      .map((r) => {
+        const lowName = r.item.toLowerCase();
+        const inv = warehouseInventory.find((w) => {
+          const wLow = w.item_nama.toLowerCase();
+          return lowName.includes(wLow) || wLow.includes(lowName);
+        });
+        const stokTersedia = inv ? inv.stok_tersedia : null;
+        const selisihBelanja = stokTersedia !== null ? Math.max(0, r.qty - stokTersedia) : null;
+        return {
+          ...r,
+          stokTersedia,
+          selisihBelanja,
+        };
+      });
+
     return {
-      rows: Array.from(itemCounts.values()).sort((a, b) => b.qty - a.qty),
+      rows: rowsWithStock,
       totalThrBonus,
       readyToPickSubs: subscriptions.filter((s) => s.status === 'lunas'),
       pickedUpCount: subscriptions.filter((s) => s.status === 'diambil').length,
     };
-  }, [subscriptions, packages, warehouseScheduleFilter]);
+  }, [subscriptions, packages, warehouseScheduleFilter, warehouseInventory]);
+
+  // Delivery Manifest Grouping (Surat Jalan Wilayah / Agen)
+  const manifestGroups = useMemo(() => {
+    const groups = new Map<string, { label: string; subs: Subscription[]; totalNilai: number }>();
+    managedSubscriptions.forEach((s) => {
+      const stage: DeliveryStage =
+        s.status_pengiriman ||
+        (s.status === 'diambil'
+          ? 'selesai'
+          : s.status === 'lunas'
+            ? 'siap_diambil'
+            : 'menunggu_lunas');
+      if (manifestOnlyPending && (stage === 'selesai' || s.status === 'diambil')) {
+        return;
+      }
+      const key =
+        manifestGroupBy === 'wilayah'
+          ? s.wilayah
+          : `${s.agen_nama || s.agen_kode || 'Agen'} (${s.wilayah})`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.subs.push(s);
+        existing.totalNilai += s.target_nominal;
+      } else {
+        groups.set(key, { label: key, subs: [s], totalNilai: s.target_nominal });
+      }
+    });
+    return Array.from(groups.values()).sort((a, b) => b.subs.length - a.subs.length);
+  }, [managedSubscriptions, manifestGroupBy, manifestOnlyPending]);
 
   // Filtered Contracts List
   const filteredContracts = useMemo(() => {
@@ -457,6 +649,12 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     return managedSubscriptions.filter((s) => {
       if (contractStatusFilter !== 'all' && s.status !== contractStatusFilter) return false;
       if (contractWilayahFilter !== 'all' && s.wilayah !== contractWilayahFilter) return false;
+      if (
+        contractGroupFilter !== 'all' &&
+        (s.grup_arisan || '').trim() !== contractGroupFilter
+      ) {
+        return false;
+      }
       if (!q) return true;
       const hay = [
         s.member_nama,
@@ -464,13 +662,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         s.qr_code_token,
         s.agen_nama || '',
         s.agen_kode || '',
+        s.grup_arisan || '',
         s.wilayah,
       ]
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [managedSubscriptions, contractSearch, contractStatusFilter, contractWilayahFilter]);
+  }, [
+    managedSubscriptions,
+    contractSearch,
+    contractStatusFilter,
+    contractWilayahFilter,
+    contractGroupFilter,
+  ]);
 
   // Filtered Packages for Master Tab
   const filteredMasterPackages = useMemo(() => {
@@ -606,6 +811,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
       const metode: DepositMethod =
         cashTxType === 'penarikan' ? withdrawMethod : 'tunai_agen';
+      const todayDate = new Date().toISOString().slice(0, 10);
+      const finalCatatan =
+        cashNote.trim() ||
+        (cashTxType === 'penarikan' ? 'Penarikan Dana via Agen/Admin' : 'Setoran Tunai Agen');
 
       batch.set(depRef, {
         subscription_id: targetSub.id,
@@ -616,12 +825,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         jenis_transaksi: cashTxType,
         nominal: nominalNum,
         metode,
-        catatan:
-          cashNote.trim() ||
-          (cashTxType === 'penarikan' ? 'Penarikan Dana via Agen/Admin' : 'Setoran Tunai Agen'),
+        catatan: finalCatatan,
         status_verifikasi: 'verified',
         validated_by: userProfile.nama,
-        tanggal: new Date().toISOString().slice(0, 10),
+        tanggal: todayDate,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -633,6 +840,23 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       });
 
       await batch.commit();
+
+      const receiptItem: Deposit = {
+        id: depRef.id,
+        subscription_id: targetSub.id,
+        member_id: targetSub.member_id,
+        member_nama: targetSub.member_nama,
+        agen_id: targetSub.agen_id,
+        wilayah: targetSub.wilayah,
+        jenis_transaksi: cashTxType,
+        nominal: nominalNum,
+        metode,
+        catatan: finalCatatan,
+        status_verifikasi: 'verified',
+        validated_by: userProfile.nama,
+        tanggal: todayDate,
+      };
+      setLastValidatedDeposit(receiptItem);
 
       const memberObj = allUsers.find((u) => u.uid === targetSub.member_id);
       const sisa = Math.max(0, targetSub.target_nominal - newTotal);
@@ -683,13 +907,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     try {
       const batch = writeBatch(db);
       const depRef = doc(db, 'deposits', dep.id);
+      const nextNote =
+        decision === 'verified'
+          ? `${dep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Divalidasi (${userProfile.nama})`
+          : `${dep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Ditolak (${userProfile.nama})`;
       batch.update(depRef, {
         status_verifikasi: decision,
         validated_by: userProfile.nama,
-        catatan:
-          decision === 'verified'
-            ? `${dep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Divalidasi (${userProfile.nama})`
-            : `${dep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Ditolak (${userProfile.nama})`,
+        catatan: nextNote.slice(0, 250),
         updatedAt: serverTimestamp(),
       });
 
@@ -717,6 +942,12 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       await batch.commit();
 
       if (decision === 'verified') {
+        setLastValidatedDeposit({
+          ...dep,
+          status_verifikasi: 'verified',
+          validated_by: userProfile.nama,
+          catatan: nextNote,
+        });
         const memberObj = allUsers.find((u) => u.uid === targetSub.member_id);
         const sisa = Math.max(0, targetSub.target_nominal - newTotal);
         setLastWaPayload({
@@ -746,8 +977,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   };
 
   const handleDeleteDepositRecord = async (depId: string) => {
+    const depObj = deposits.find((d) => d.id === depId);
     try {
       await deleteDoc(doc(db, 'deposits', depId));
+      await writeAuditLog(
+        'HAPUS_TRANSAKSI',
+        depObj?.member_nama || depId,
+        `Menghapus log transaksi ${depObj ? formatRupiah(depObj.nominal) : depId} (${depObj?.tanggal || '-'})`
+      );
       setConfirmDeleteDepId(null);
       setStatusMessage('Log transaksi berhasil dihapus oleh Admin.');
     } catch (err) {
@@ -755,18 +992,86 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  // --- Handlers: Contracts Management ---
+  // --- Handlers: Contracts Management & Delivery Tracking ---
   const handleUpdateContractStatus = async (sub: Subscription, newStatus: SubscriptionStatus) => {
     try {
       await updateDoc(doc(db, 'subscriptions', sub.id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog(
+        'UBAH_STATUS_KONTRAK',
+        sub.member_nama,
+        `Status kontrak ${sub.package_nama} diubah ${sub.status} -> ${newStatus}`
+      );
       setStatusMessage(
         `Status kontrak ${sub.member_nama} (${sub.package_nama}) diperbarui menjadi ${newStatus.toUpperCase()}.`
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${sub.id}`);
+    }
+  };
+
+  const handleUpdateDeliveryStage = async (sub: Subscription, nextStage: DeliveryStage) => {
+    if (!isAdmin && sub.status === 'diambil') {
+      setStatusMessage('Kontrak sudah berstatus Diambil dan tidak dapat diubah lagi oleh agen.');
+      return;
+    }
+    try {
+      const updates: Record<string, unknown> = {
+        status_pengiriman: nextStage,
+        updatedAt: serverTimestamp(),
+      };
+      if (nextStage === 'selesai' && sub.status === 'lunas') {
+        updates.status = 'diambil';
+      }
+      await updateDoc(doc(db, 'subscriptions', sub.id), updates);
+      await writeAuditLog(
+        'UPDATE_PENGIRIMAN',
+        sub.member_nama,
+        `Tahap pengiriman ${sub.package_nama} diperbarui menjadi ${nextStage}`
+      );
+      setStatusMessage(
+        `Tahap pengiriman paket ${sub.member_nama} (${sub.package_nama}) diperbarui menjadi ${
+          DELIVERY_STAGE_OPTIONS.find((o) => o.value === nextStage)?.label || nextStage
+        }.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${sub.id}`);
+    }
+  };
+
+  const handleBatchAdvanceDelivery = async (subs: Subscription[], nextStage: DeliveryStage) => {
+    const eligible = subs.filter((s) => isAdmin || s.status !== 'diambil');
+    if (eligible.length === 0) {
+      setStatusMessage('Tidak ada paket dalam grup ini yang dapat diperbarui tahap pengirimannya.');
+      return;
+    }
+    try {
+      const batch = writeBatch(db);
+      eligible.forEach((s) => {
+        const updates: Record<string, unknown> = {
+          status_pengiriman: nextStage,
+          updatedAt: serverTimestamp(),
+        };
+        if (nextStage === 'selesai' && s.status === 'lunas') {
+          updates.status = 'diambil';
+        }
+        batch.update(doc(db, 'subscriptions', s.id), updates);
+      });
+      await batch.commit();
+      await writeAuditLog(
+        'BATCH_MANIFEST_KIRIM',
+        `${eligible.length} Paket`,
+        `Memperbarui tahap pengiriman massal ${eligible.length} kontrak ke ${nextStage}`
+      );
+      setStatusMessage(
+        `${eligible.length} paket berhasil diperbarui tahap pengirimannya menjadi "${
+          DELIVERY_STAGE_OPTIONS.find((o) => o.value === nextStage)?.label || nextStage
+        }".`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'subscriptions/batch');
     }
   };
 
@@ -788,6 +1093,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         status: nextStatus,
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog(
+        'KOREKSI_SALDO',
+        sub.member_nama,
+        `Koreksi saldo ${sub.package_nama}: ${formatRupiah(sub.total_terkumpul)} -> ${formatRupiah(val)}`
+      );
       setEditingBalanceSubId(null);
       setStatusMessage(
         `Saldo kontrak ${sub.member_nama} dikoreksi menjadi ${formatRupiah(val)} (${nextStatus.toUpperCase()}).`
@@ -798,8 +1108,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   };
 
   const handleDeleteContract = async (subId: string) => {
+    const subObj = subscriptions.find((s) => s.id === subId);
     try {
       await deleteDoc(doc(db, 'subscriptions', subId));
+      await writeAuditLog(
+        'HAPUS_KONTRAK',
+        subObj?.member_nama || subId,
+        `Menghapus kontrak ${subObj?.package_nama || subId} (saldo ${formatRupiah(subObj?.total_terkumpul || 0)})`
+      );
       setConfirmDeleteSubId(null);
       setStatusMessage('Kontrak berhasil dihapus dari Firestore.');
     } catch (err) {
@@ -1089,6 +1405,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         kode_agen: nextKode,
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog(
+        'UBAH_ROLE_RBAC',
+        targetUser.nama,
+        `Role ${targetUser.role} -> ${newRole} | Wilayah ${targetUser.wilayah} -> ${newWilayah}`
+      );
       setStatusMessage(
         `Peran ${targetUser.nama} diperbarui menjadi ${newRole.toUpperCase()} (${newWilayah}).`
       );
@@ -1152,6 +1473,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const openOfflineRegistration = () => {
     setOffNama('');
     setOffWa('');
+    setOffGrupArisan('');
     const firstPkg = packages[0];
     setOffPackageId(firstPkg?.id || '');
     setOffFrekuensi('mingguan');
@@ -1197,7 +1519,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
     setSavingOffline(true);
     try {
-      const createdRef = await addDoc(collection(db, 'subscriptions'), {
+      const payload: Record<string, unknown> = {
         member_id: `offline_${Date.now().toString(36)}`,
         member_nama: memberLabel.slice(0, 100),
         agen_id: assignedAgenId,
@@ -1214,12 +1536,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         frekuensi: offFrekuensi,
         durasi_minggu: durasi,
         status: 'aktif',
+        status_pengiriman: 'menunggu_lunas',
         qr_code_token: qrToken,
         jadwal_ambil: (pkg.jadwal_ambil || 'Selambatnya 15 Ramadhan').slice(0, 40),
         daftar_isi: (pkg.daftar_isi || [pkg.nama_paket]).slice(0, 30),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+      if (offGrupArisan.trim()) {
+        payload.grup_arisan = offGrupArisan.trim().slice(0, 80);
+      }
+      const createdRef = await addDoc(collection(db, 'subscriptions'), payload);
       setSelectedSubId(createdRef.id);
       setShowOfflineModal(false);
       setStatusMessage(
@@ -1280,6 +1607,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         validated_by: userProfile.nama.slice(0, 100),
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog(
+        'VALIDASI_KAS_AGEN',
+        item.agen_nama,
+        `${item.jenis} sebesar ${formatRupiah(item.nominal)} -> ${decision.toUpperCase()}`
+      );
       setStatusMessage(
         `Pengajuan ${item.agen_nama} (${formatRupiah(item.nominal)}) telah ${
           decision === 'verified' ? 'DIVALIDASI' : 'DITOLAK'
@@ -1297,6 +1629,146 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       setStatusMessage('Catatan tutup kas / komisi berhasil dihapus.');
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `agent_settlements/${id}`);
+    }
+  };
+
+  // --- Handlers: Warehouse Inventory CRUD & Product Substitution CRUD ---
+  const handleSaveInventoryItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile || !isAdmin) return;
+    const cleanName = invNama.trim().slice(0, 120);
+    const cleanSatuan = invSatuan.trim().slice(0, 30) || 'unit';
+    const stokNum = Math.max(0, Math.round(Number(invStok) || 0));
+    const hargaNum = Math.max(0, Math.round(Number(invHarga) || 0));
+
+    if (cleanName.length < 2) {
+      setStatusMessage('Nama barang inventaris minimal 2 karakter.');
+      return;
+    }
+
+    setSavingInv(true);
+    try {
+      if (invEditId) {
+        await updateDoc(doc(db, 'warehouse_inventory', invEditId), {
+          item_nama: cleanName,
+          stok_tersedia: stokNum,
+          harga_beli_satuan: hargaNum,
+          satuan: cleanSatuan,
+          catatan: invCatatan.trim().slice(0, 200),
+          updated_by: userProfile.nama.slice(0, 100),
+          updatedAt: serverTimestamp(),
+        });
+        await writeAuditLog(
+          'UPDATE_STOK_HPP',
+          cleanName,
+          `Stok: ${stokNum} ${cleanSatuan}, HPP: ${formatRupiah(hargaNum)}`
+        );
+        setStatusMessage(`Stok & HPP "${cleanName}" berhasil diperbarui.`);
+      } else {
+        await addDoc(collection(db, 'warehouse_inventory'), {
+          item_nama: cleanName,
+          stok_tersedia: stokNum,
+          harga_beli_satuan: hargaNum,
+          satuan: cleanSatuan,
+          catatan: invCatatan.trim().slice(0, 200),
+          updated_by: userProfile.nama.slice(0, 100),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        await writeAuditLog(
+          'TAMBAH_STOK_HPP',
+          cleanName,
+          `Stok awal: ${stokNum} ${cleanSatuan}, HPP: ${formatRupiah(hargaNum)}`
+        );
+        setStatusMessage(`Barang gudang "${cleanName}" berhasil ditambahkan.`);
+      }
+      setInvEditId(null);
+      setInvNama('');
+      setInvStok('100');
+      setInvHarga('45000');
+      setInvSatuan('unit');
+      setInvCatatan('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'warehouse_inventory');
+    } finally {
+      setSavingInv(false);
+    }
+  };
+
+  const handleDeleteInventoryItem = async (id: string) => {
+    const item = warehouseInventory.find((w) => w.id === id);
+    try {
+      await deleteDoc(doc(db, 'warehouse_inventory', id));
+      await writeAuditLog(
+        'HAPUS_STOK_HPP',
+        item?.item_nama || id,
+        `Menghapus item stok gudang ${item?.item_nama || id}`
+      );
+      setConfirmDeleteInvId(null);
+      setStatusMessage('Item stok gudang berhasil dihapus.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `warehouse_inventory/${id}`);
+    }
+  };
+
+  const handleCreateSubstitutionNotice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile || !isAdmin) return;
+    const lama = subNoticeLama.trim().slice(0, 120);
+    const baru = subNoticeBaru.trim().slice(0, 120);
+    const alasan = subNoticeAlasan.trim().slice(0, 250);
+    if (lama.length < 2 || baru.length < 2 || alasan.length < 2) {
+      setStatusMessage('Isi produk lama, produk pengganti, dan alasan substitusi minimal 2 karakter.');
+      return;
+    }
+
+    const chosenPkg = packages.find((p) => p.id === subNoticePkgId);
+    const pkgId = chosenPkg ? chosenPkg.id.replace(/[^a-zA-Z0-9_-]/g, '') : 'all';
+    const pkgNama = chosenPkg ? chosenPkg.nama_paket.slice(0, 120) : 'Semua Paket Terkait';
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    setSavingSubNotice(true);
+    try {
+      await addDoc(collection(db, 'product_substitutions'), {
+        package_id: pkgId || 'all',
+        package_nama: pkgNama,
+        produk_lama: lama,
+        produk_pengganti: baru,
+        alasan,
+        tanggal: todayStr,
+        created_by: userProfile.nama.slice(0, 100),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await writeAuditLog(
+        'SUBSTITUSI_PRODUK',
+        pkgNama,
+        `${lama} -> ${baru} (${alasan})`
+      );
+      setSubNoticeLama('');
+      setSubNoticeBaru('');
+      setSubNoticeAlasan('');
+      setStatusMessage('Pengumuman substitusi produk resmi dipublikasikan ke Dashboard Member.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'product_substitutions');
+    } finally {
+      setSavingSubNotice(false);
+    }
+  };
+
+  const handleDeleteSubstitutionNotice = async (id: string) => {
+    const item = productSubstitutions.find((s) => s.id === id);
+    try {
+      await deleteDoc(doc(db, 'product_substitutions', id));
+      await writeAuditLog(
+        'HAPUS_SUBSTITUSI',
+        item?.package_nama || id,
+        `Menghapus info substitusi ${item?.produk_lama || ''} -> ${item?.produk_pengganti || ''}`
+      );
+      setConfirmDeleteSubNoticeId(null);
+      setStatusMessage('Info substitusi produk berhasil dihapus.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `product_substitutions/${id}`);
     }
   };
 
@@ -1332,6 +1804,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog(
+        'UNDI_DOOR_PRIZE',
+        winner.sub.member_nama,
+        `Hadiah ${cleanHadiah} (Kupon ${winner.kuponKode})`
+      );
       setStatusMessage(
         `Selamat! Pemenang ${cleanHadiah}: ${winner.sub.member_nama} (${winner.kuponKode} · ${winner.sub.wilayah}).`
       );
@@ -1343,8 +1820,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   };
 
   const handleDeleteDoorPrize = async (id: string) => {
+    const dp = doorPrizeDraws.find((d) => d.id === id);
     try {
       await deleteDoc(doc(db, 'door_prize_draws', id));
+      await writeAuditLog(
+        'HAPUS_DOOR_PRIZE',
+        dp?.member_nama || id,
+        `Menghapus pemenang Door Prize ${dp?.hadiah || ''} (${dp?.kupon_kode || id})`
+      );
       setConfirmDeletePrizeId(null);
       setStatusMessage('Data pemenang Door Prize berhasil dihapus.');
     } catch (err) {
@@ -1377,6 +1860,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
       });
+      await writeAuditLog(
+        'UPDATE_PENGATURAN_PUBLIK',
+        setBankNama.trim() || 'Rekening & Info',
+        `Rekening ${setBankRekening.trim()} | Pengumuman aktif: ${setPengAktif ? 'YA' : 'TIDAK'}`
+      );
       setStatusMessage(
         'Pengaturan rekening transfer resmi & papan pengumuman berhasil dipublikasikan ke seluruh dashboard member.'
       );
@@ -1581,11 +2069,21 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         </div>
       </div>
 
-      {/* Status Alert + Quick WhatsApp Receipt */}
+      {/* Status Alert + Quick WhatsApp & PNG/Thermal Receipt */}
       {statusMessage && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
           <span>{statusMessage}</span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {lastValidatedDeposit && (
+              <button
+                type="button"
+                onClick={() => setReceiptDeposit(lastValidatedDeposit)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-1.5 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span>Cetak Struk PNG / 58mm</span>
+              </button>
+            )}
             {lastWaPayload && (
               <a
                 href={formatWhatsAppUrl(lastWaPayload.phone, lastWaPayload.message)}
@@ -1775,6 +2273,12 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 <div className="mt-4 divide-y divide-stone-100">
                   {pendingDeposits.map((dep) => {
                     const isWithdraw = getTxType(dep) === 'penarikan';
+                    const hasUniqueCode =
+                      !isWithdraw &&
+                      Boolean(
+                        dep.catatan &&
+                          (dep.catatan.includes('INV-SGT-') || dep.catatan.includes('Kode Unik'))
+                      );
                     return (
                       <div
                         key={dep.id}
@@ -1791,6 +2295,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                             >
                               {isWithdraw ? 'Penarikan' : 'Setoran'}
                             </span>
+                            {hasUniqueCode && (
+                              <span className="rounded bg-[#381E5A]/10 px-2 py-0.5 text-[10px] font-bold text-[#381E5A]">
+                                Invoice Kode Unik
+                              </span>
+                            )}
                             <p className="text-sm font-bold text-stone-900">
                               {dep.member_nama || dep.member_id} —{' '}
                               <span
@@ -1832,7 +2341,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                             className="inline-flex items-center gap-1 rounded-lg bg-emerald-900 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800 cursor-pointer"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
-                            Validasi
+                            <span>{hasUniqueCode ? 'Cocok Mutasi & Validasi' : 'Validasi'}</span>
                           </button>
                         </div>
                       </div>
@@ -1840,6 +2349,66 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                   })}
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Daily Closing Sheet / Rekap Kas Harian Agen */}
+          <div className="rounded-2xl border border-[#C8A053]/60 bg-white p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#B98E3A]">
+                  Daily Closing Sheet · {dailyClosingSummary.todayIsoDate}
+                </p>
+                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  Rekap Kas Harian &amp; Tutup Kas Otomatis
+                </h2>
+                <p className="text-xs text-stone-600">
+                  Ringkasan mutasi tervalidasi hari ini ({dailyClosingSummary.txCountToday} transaksi) sebelum disetorkan ke Admin Pusat.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettleJenis('setor_tunai_pusat');
+                  setSettleNominal(String(Math.max(1000, dailyClosingSummary.netCashInHand)));
+                  setSettleCatatan(
+                    `Tutup kas harian ${dailyClosingSummary.todayIsoDate}: Tunai ${formatRupiah(
+                      dailyClosingSummary.cashIn
+                    )}, Pencairan ${formatRupiah(dailyClosingSummary.cashOut)}`
+                  );
+                  setActiveTab('korwil');
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                <span>Ajukan Tutup Kas Hari Ini</span>
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5">
+                <p className="text-[11px] text-stone-500">Tunai Masuk Hari Ini</p>
+                <p className="mt-1 font-mono-nums text-base font-bold text-[#0C3328]">
+                  +{formatRupiah(dailyClosingSummary.cashIn)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5">
+                <p className="text-[11px] text-stone-500">Transfer Masuk Hari Ini</p>
+                <p className="mt-1 font-mono-nums text-base font-bold text-[#381E5A]">
+                  +{formatRupiah(dailyClosingSummary.transferIn)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5">
+                <p className="text-[11px] text-stone-500">Penarikan / Keluar</p>
+                <p className="mt-1 font-mono-nums text-base font-bold text-rose-700">
+                  -{formatRupiah(dailyClosingSummary.cashOut)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5">
+                <p className="text-[11px] font-semibold text-emerald-900">Kas Bersih di Tangan</p>
+                <p className="mt-1 font-mono-nums text-base font-bold text-emerald-950">
+                  {formatRupiah(dailyClosingSummary.netCashInHand)}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -2109,6 +2678,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                           </td>
                           <td className="py-2.5 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setReceiptDeposit(d)}
+                                className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-0.5 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
+                              >
+                                <Printer className="h-3 w-3" />
+                                <span>Struk PNG</span>
+                              </button>
                               {d.bukti_foto_url && (
                                 <button
                                   type="button"
@@ -2209,14 +2786,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
               <input
                 type="text"
                 value={contractSearch}
                 onChange={(e) => setContractSearch(e.target.value)}
-                placeholder="Cari nama member, paket, token QR, atau kode agen..."
+                placeholder="Cari nama member, grup arisan, paket, token QR, atau kode agen..."
                 className="w-full rounded-lg border border-stone-300 py-2 pl-8 pr-3 text-xs text-stone-900"
               />
             </div>
@@ -2246,7 +2823,62 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 </option>
               ))}
             </select>
+            {arisanGroups.length > 0 && (
+              <select
+                value={contractGroupFilter}
+                onChange={(e) => setContractGroupFilter(e.target.value)}
+                className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-[#381E5A]"
+              >
+                <option value="all">Semua Grup / Arisan ({arisanGroups.length})</option>
+                {arisanGroups.map((g) => (
+                  <option key={g} value={g}>
+                    Grup: {g}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
+
+          {contractGroupFilter !== 'all' && filteredContracts.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C8A053]/60 bg-[#FAF7F2] px-4 py-3 text-xs">
+              <div>
+                <p className="font-bold text-[#381E5A]">
+                  Grup Terhubung: {contractGroupFilter} ({filteredContracts.length} Kontrak)
+                </p>
+                <p className="font-mono-nums text-stone-600">
+                  Total Terkumpul:{' '}
+                  <strong className="text-[#0C3328]">
+                    {formatRupiah(
+                      filteredContracts.reduce((acc, s) => acc + (s.total_terkumpul || 0), 0)
+                    )}
+                  </strong>{' '}
+                  /{' '}
+                  {formatRupiah(
+                    filteredContracts.reduce((acc, s) => acc + (s.target_nominal || 0), 0)
+                  )}
+                </p>
+              </div>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `*Rekap Tabungan Grup "${contractGroupFilter}" — Sagitarius Parcel*\n` +
+                    filteredContracts
+                      .map(
+                        (s, idx) =>
+                          `${idx + 1}. ${s.member_nama} (${s.package_nama}): ${formatRupiah(
+                            s.total_terkumpul
+                          )} / ${formatRupiah(s.target_nominal)}`
+                      )
+                      .join('\n')
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A34A] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#15803D]"
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                <span>Bagikan Rekap WA Grup</span>
+              </a>
+            </div>
+          )}
 
           {filteredContracts.length === 0 ? (
             <p className="rounded-xl bg-stone-50 p-8 text-center text-sm text-stone-500">
@@ -2258,9 +2890,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 <thead>
                   <tr className="border-b border-stone-200 text-xs text-stone-500">
                     <th className="py-2.5 pr-4 font-semibold">Member &amp; Token QR</th>
-                    <th className="py-2.5 pr-4 font-semibold">Paket &amp; Wilayah</th>
+                    <th className="py-2.5 pr-4 font-semibold">Paket, Grup &amp; Wilayah</th>
                     <th className="py-2.5 pr-4 text-right font-semibold">Terkumpul / Target</th>
-                    <th className="py-2.5 pr-4 font-semibold">Status</th>
+                    <th className="py-2.5 pr-4 font-semibold">Status &amp; Pengiriman</th>
                     {isAdmin && <th className="py-2.5 text-right font-semibold">Aksi Admin</th>}
                   </tr>
                 </thead>
@@ -2271,6 +2903,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                       Math.round(((s.total_terkumpul || 0) / s.target_nominal) * 100)
                     );
                     const isEditingBal = editingBalanceSubId === s.id;
+                    const currentStage: DeliveryStage =
+                      s.status_pengiriman ||
+                      (s.status === 'diambil'
+                        ? 'selesai'
+                        : s.status === 'lunas'
+                          ? 'siap_diambil'
+                          : 'menunggu_lunas');
                     return (
                       <tr key={s.id} className="hover:bg-stone-50">
                         <td className="py-3 pr-4">
@@ -2284,6 +2923,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                           <p className="text-[11px] text-stone-500">
                             {s.wilayah} · Agen: {s.agen_nama || s.agen_kode || s.agen_id}
                           </p>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {s.grup_arisan && (
+                              <span className="inline-flex items-center gap-1 rounded bg-[#381E5A]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#381E5A]">
+                                <Layers className="h-2.5 w-2.5" />
+                                {s.grup_arisan}
+                              </span>
+                            )}
+                            {s.kode_referral_agen && (
+                              <span className="rounded bg-amber-50 px-1.5 py-0.5 font-mono-nums text-[10px] font-semibold text-amber-900">
+                                Ref: {s.kode_referral_agen}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 pr-4 text-right whitespace-nowrap">
                           {isEditingBal ? (
@@ -2322,26 +2974,43 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                           )}
                         </td>
                         <td className="py-3 pr-4 whitespace-nowrap">
-                          {isAdmin ? (
+                          <div className="flex flex-col gap-1.5">
+                            {isAdmin ? (
+                              <select
+                                value={s.status}
+                                onChange={(e) =>
+                                  handleUpdateContractStatus(
+                                    s,
+                                    e.target.value as SubscriptionStatus
+                                  )
+                                }
+                                className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-900"
+                              >
+                                <option value="aktif">Aktif</option>
+                                <option value="lunas">Lunas</option>
+                                <option value="diambil">Sudah Diambil</option>
+                              </select>
+                            ) : (
+                              <span className="text-xs font-semibold uppercase text-stone-800">
+                                {s.status}
+                              </span>
+                            )}
                             <select
-                              value={s.status}
+                              value={currentStage}
+                              disabled={!isAdmin && s.status === 'diambil'}
                               onChange={(e) =>
-                                handleUpdateContractStatus(
-                                  s,
-                                  e.target.value as SubscriptionStatus
-                                )
+                                handleUpdateDeliveryStage(s, e.target.value as DeliveryStage)
                               }
-                              className="rounded-md border border-stone-300 bg-white px-2 py-1 text-xs font-semibold text-stone-900"
+                              aria-label={`Status pengiriman ${s.member_nama}`}
+                              className="rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#0C3328] disabled:opacity-60"
                             >
-                              <option value="aktif">Aktif</option>
-                              <option value="lunas">Lunas</option>
-                              <option value="diambil">Sudah Diambil</option>
+                              {DELIVERY_STAGE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
                             </select>
-                          ) : (
-                            <span className="text-xs font-semibold uppercase text-stone-800">
-                              {s.status}
-                            </span>
-                          )}
+                          </div>
                         </td>
                         {isAdmin && (
                           <td className="py-3 text-right whitespace-nowrap">
@@ -2986,165 +3655,780 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
           </div>
+
+          {/* Link & QR Pendaftaran Khusus Agen + Leaderboard Agen */}
+          <div className="grid gap-6 lg:grid-cols-12">
+            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5">
+              <div className="flex items-center gap-2">
+                <Link2 className="h-5 w-5 text-[#381E5A]" />
+                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  Link &amp; QR Pendaftaran Agen
+                </h2>
+              </div>
+              <p className="mt-1 text-xs text-stone-600">
+                Bagikan link atau QR Code ini ke calon member agar nama Anda otomatis terpilih saat mereka mendaftar paket.
+              </p>
+
+              {isAdmin && agents.length > 0 && (
+                <div className="mt-3">
+                  <label className="block text-[11px] font-semibold text-stone-600">
+                    Pilih Agen
+                  </label>
+                  <select
+                    value={referralAgentCode}
+                    onChange={(e) => setReferralAgentCode(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-900"
+                  >
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.kode_agen}>
+                        {a.kode_agen} — {a.nama} ({a.wilayah})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {(() => {
+                const origin =
+                  typeof window !== 'undefined'
+                    ? window.location.origin
+                    : 'https://sagitariusparcel.web.id';
+                const activeCode = referralAgentCode || agents[0]?.kode_agen || 'AGT-TSM-01';
+                const referralUrl = `${origin}/?agen=${encodeURIComponent(activeCode)}`;
+                return (
+                  <div className="mt-4 flex flex-col items-center gap-4 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4 sm:flex-row">
+                    <div className="shrink-0 rounded-xl border border-[#E4DCCB] bg-white p-2.5">
+                      <QRCodeSVG value={referralUrl} size={108} />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <p className="font-mono-nums text-[11px] font-bold text-[#0C3328]">
+                        Kode Agen: {activeCode}
+                      </p>
+                      <p className="break-all rounded border border-[#E4DCCB] bg-white px-2.5 py-1.5 font-mono-nums text-[11px] text-stone-700">
+                        {referralUrl}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(referralUrl);
+                            setCopiedRefLink(true);
+                            setTimeout(() => setCopiedRefLink(false), 2000);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg bg-[#381E5A] px-3 py-1.5 text-[11px] font-bold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
+                        >
+                          {copiedRefLink ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          <span>{copiedRefLink ? 'Tersalin!' : 'Salin Link'}</span>
+                        </button>
+                        <a
+                          href={`https://wa.me/?text=${encodeURIComponent(
+                            `Assalamu'alaikum, yuk persiapkan Parcel & Tabungan Lebaran Sagitarius Parcel bersama saya (${activeCode}). Lihat katalog & daftar langsung melalui link resmi ini: ${referralUrl}`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-[#16A34A] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#15803D]"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          <span>Bagikan WA</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-7">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-[#B98E3A]" />
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                      Leaderboard Agen &amp; Progres Tier Komisi
+                    </h2>
+                    <p className="text-xs text-stone-600">
+                      Peringkat setoran terkumpul &amp; jarak menuju tier komisi 5.5% (10 member) atau 7% (25 member).
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2.5">
+                {agentLeaderboard.slice(0, 6).map((row) => (
+                  <div
+                    key={row.id}
+                    className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-4 py-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-full font-mono-nums text-[11px] font-bold ${
+                            row.rank === 1
+                              ? 'bg-[#C8A053] text-[#1D122B]'
+                              : row.rank === 2
+                                ? 'bg-stone-300 text-stone-900'
+                                : row.rank === 3
+                                  ? 'bg-amber-700 text-white'
+                                  : 'bg-white text-stone-700 border border-stone-200'
+                          }`}
+                        >
+                          #{row.rank}
+                        </span>
+                        <div>
+                          <p className="font-bold text-[#381E5A]">
+                            {row.nama}{' '}
+                            <span className="font-mono-nums text-[11px] font-normal text-stone-500">
+                              ({row.kode_agen} · {row.wilayah})
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono-nums">
+                        <p className="font-bold text-[#0C3328]">{formatRupiah(row.liveCollected)}</p>
+                        <p className="text-[11px] text-stone-600">
+                          Tier {row.rate}% · Komisi {formatRupiah(row.commissionEarned)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2 text-[11px]">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white">
+                        <div
+                          className="h-full rounded-full bg-[#0C3328]"
+                          style={{ width: `${row.tierPct}%` }}
+                        />
+                      </div>
+                      <span className="font-mono-nums font-semibold text-stone-600">
+                        {row.totalMembers >= 25
+                          ? `${row.totalMembers} Member (Tier Maks 7%)`
+                          : `${row.totalMembers}/${row.nextTierTarget} menuju ${row.nextTierRate}%`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* TAB 5: GUDANG & LOGISTIK H-7 / H-2 + QR SCANNER */}
+      {/* TAB 5: GUDANG & LOGISTIK H-7 / H-2 + STOK HPP + MANIFEST + SUBSTITUSI + QR */}
       {activeTab === 'gudang' && (
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-8">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Boxes className="h-5 w-5 text-emerald-900" />
-                  <h2 className="font-display text-xl font-bold text-stone-900">
-                    Rekap Kebutuhan Barang Gudang
-                  </h2>
+        <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-12">
+            <div className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-8">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Boxes className="h-5 w-5 text-emerald-900" />
+                    <h2 className="font-display text-xl font-bold text-stone-900">
+                      Rekap Kebutuhan Barang vs Stok Gudang
+                    </h2>
+                  </div>
+                  <p className="mt-0.5 font-mono-nums text-xs font-semibold text-amber-800">
+                    Total Alokasi Bonus THR: {formatRupiah(warehouseRecap.totalThrBonus)}
+                  </p>
                 </div>
-                <p className="mt-0.5 font-mono-nums text-xs font-semibold text-amber-800">
-                  Total Alokasi Bonus THR: {formatRupiah(warehouseRecap.totalThrBonus)}
-                </p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={warehouseScheduleFilter}
+                    onChange={(e) => setWarehouseScheduleFilter(e.target.value)}
+                    className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800"
+                  >
+                    <option value="all">Semua Jadwal</option>
+                    <option value="15 Ramadhan">15 Ramadhan</option>
+                    <option value="H-7">H-7 Lebaran</option>
+                    <option value="H-2">H-2 Idul Fitri (Daging/Telur)</option>
+                    <option value="Lebih Awal">Paket Uang (Lebih Awal)</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadCsv(
+                        `logistik-gudang-${new Date().toISOString().slice(0, 10)}.csv`,
+                        ['Komoditas / Item', 'Jadwal Distribusi', 'Kebutuhan', 'Stok Gudang', 'Selisih Belanja'],
+                        warehouseRecap.rows.map((r) => [
+                          r.item,
+                          r.jadwal,
+                          r.qty,
+                          r.stokTersedia ?? '-',
+                          r.selisihBelanja ?? '-',
+                        ])
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    CSV
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={warehouseScheduleFilter}
-                  onChange={(e) => setWarehouseScheduleFilter(e.target.value)}
-                  className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800"
+
+              {warehouseRecap.rows.length === 0 ? (
+                <p className="mt-6 rounded-xl bg-stone-50 p-6 text-center text-sm text-stone-500">
+                  Belum ada kontrak aktif sesuai filter jadwal untuk direkap ke daftar kebutuhan gudang.
+                </p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-stone-200 text-xs text-stone-500">
+                        <th className="py-2.5 pr-4 font-semibold">Nama Item / Komoditas</th>
+                        <th className="py-2.5 pr-4 font-semibold">Jadwal</th>
+                        <th className="py-2.5 pr-4 text-right font-semibold">Butuh</th>
+                        <th className="py-2.5 pr-4 text-right font-semibold">Stok Gudang</th>
+                        <th className="py-2.5 text-right font-semibold">Kurang / Beli</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {warehouseRecap.rows.map((r, i) => (
+                        <tr key={i} className="hover:bg-stone-50">
+                          <td className="py-2.5 pr-4 font-medium text-stone-900">{r.item}</td>
+                          <td className="py-2.5 pr-4 text-xs text-stone-600">{r.jadwal}</td>
+                          <td className="py-2.5 pr-4 text-right font-mono-nums font-bold text-emerald-900">
+                            {r.qty}x
+                          </td>
+                          <td className="py-2.5 pr-4 text-right font-mono-nums text-xs text-stone-700">
+                            {r.stokTersedia !== null ? `${r.stokTersedia}` : '—'}
+                          </td>
+                          <td className="py-2.5 text-right font-mono-nums text-xs font-bold">
+                            {r.selisihBelanja === null ? (
+                              <span className="text-stone-400">—</span>
+                            ) : r.selisihBelanja === 0 ? (
+                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-900">
+                                Aman
+                              </span>
+                            ) : (
+                              <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-800">
+                                Kurang {r.selisihBelanja}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-6 lg:col-span-4">
+              <form
+                onSubmit={handleMarkQrPickedUp}
+                className="rounded-2xl border border-stone-200 bg-white p-6"
+              >
+                <div className="flex items-center gap-2">
+                  <QrCode className="h-5 w-5 text-emerald-900" />
+                  <h3 className="font-display text-lg font-bold text-stone-900">
+                    Verifikasi Tiket QR Pengambilan
+                  </h3>
+                </div>
+                <p className="mt-1 text-xs text-stone-600">
+                  Scan kamera atau masukkan kode token QR dari HP member berstatus Lunas untuk menandai paket telah diambil.
+                </p>
+
+                <QrCameraScanner
+                  onScan={(code) => {
+                    setQrInput(code.toUpperCase());
+                    setStatusMessage(
+                      `QR terdeteksi: ${code.toUpperCase()}. Klik "Konfirmasi Pengambilan Paket" untuk menyelesaikan serah terima.`
+                    );
+                  }}
+                />
+
+                <input
+                  type="text"
+                  required
+                  value={qrInput}
+                  onChange={(e) => setQrInput(e.target.value)}
+                  placeholder="Contoh: SGT-CIA-M2X9A"
+                  className="mt-3 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900 uppercase"
+                />
+                <button
+                  type="submit"
+                  className="mt-3 w-full rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
                 >
-                  <option value="all">Semua Jadwal</option>
-                  <option value="15 Ramadhan">15 Ramadhan</option>
-                  <option value="H-7">H-7 Lebaran</option>
-                  <option value="H-2">H-2 Idul Fitri (Daging/Telur)</option>
-                  <option value="Lebih Awal">Paket Uang (Lebih Awal)</option>
+                  Konfirmasi Pengambilan Paket
+                </button>
+
+                <div className="mt-5 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4 text-xs">
+                  <div>
+                    <p className="text-stone-500">Siap Diambil (Lunas)</p>
+                    <p className="mt-0.5 font-mono-nums text-lg font-bold text-emerald-900">
+                      {warehouseRecap.readyToPickSubs.length}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-stone-500">Sudah Diambil</p>
+                    <p className="mt-0.5 font-mono-nums text-lg font-bold text-stone-900">
+                      {warehouseRecap.pickedUpCount}
+                    </p>
+                  </div>
+                </div>
+              </form>
+
+              {warehouseRecap.readyToPickSubs.length > 0 && (
+                <div className="rounded-2xl border border-stone-200 bg-white p-5">
+                  <h4 className="text-xs font-bold uppercase tracking-wide text-stone-700">
+                    Antrean Paket Lunas Siap Ambil
+                  </h4>
+                  <div className="mt-3 divide-y divide-stone-100">
+                    {warehouseRecap.readyToPickSubs.slice(0, 8).map((s) => (
+                      <div key={s.id} className="flex items-center justify-between gap-2 py-2.5 text-xs">
+                        <div>
+                          <p className="font-semibold text-stone-900">{s.member_nama}</p>
+                          <p className="font-mono-nums text-[11px] text-emerald-800">
+                            {s.qr_code_token}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setQrInput(s.qr_code_token)}
+                          className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer"
+                        >
+                          Pilih Token
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Surat Jalan & Manifest Pengiriman per Wilayah / Agen */}
+          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 space-y-4">
+            <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <Truck className="h-5 w-5 text-[#381E5A]" />
+                <div>
+                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                    Surat Jalan &amp; Manifest Pengiriman
+                  </h2>
+                  <p className="text-xs text-stone-600">
+                    Kelompokkan distribusi parcel berdasarkan Wilayah Korwil atau Agen penanggung jawab, lalu perbarui tahap pengiriman secara massal.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={manifestGroupBy}
+                  onChange={(e) => setManifestGroupBy(e.target.value as 'wilayah' | 'agen')}
+                  className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
+                >
+                  <option value="wilayah">Kelompok: Per Wilayah</option>
+                  <option value="agen">Kelompok: Per Agen</option>
                 </select>
+                <label className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-[#FAF7F2] px-3 py-1.5 text-xs font-semibold text-stone-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={manifestOnlyPending}
+                    onChange={(e) => setManifestOnlyPending(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded text-[#0C3328]"
+                  />
+                  <span>Hanya Belum Selesai</span>
+                </label>
                 <button
                   type="button"
-                  onClick={() =>
-                    downloadCsv(
-                      `logistik-gudang-${new Date().toISOString().slice(0, 10)}.csv`,
-                      ['Komoditas / Item', 'Jadwal Distribusi', 'Total Unit'],
-                      warehouseRecap.rows.map((r) => [r.item, r.jadwal, r.qty])
-                    )
-                  }
-                  className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer no-print"
                 >
-                  <Download className="h-3.5 w-3.5" />
-                  CSV
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Cetak Manifest</span>
                 </button>
               </div>
             </div>
 
-            {warehouseRecap.rows.length === 0 ? (
-              <p className="mt-6 rounded-xl bg-stone-50 p-6 text-center text-sm text-stone-500">
-                Belum ada kontrak aktif sesuai filter jadwal untuk direkap ke daftar kebutuhan gudang.
+            {manifestGroups.length === 0 ? (
+              <p className="rounded-xl bg-[#FAF7F2] p-6 text-center text-xs text-stone-500">
+                Tidak ada daftar paket yang perlu dimanifest saat ini.
               </p>
             ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-stone-200 text-xs text-stone-500">
-                      <th className="py-2.5 pr-4 font-semibold">Nama Item / Komoditas</th>
-                      <th className="py-2.5 pr-4 font-semibold">Jadwal Distribusi</th>
-                      <th className="py-2.5 text-right font-semibold">Total Unit Paket</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {warehouseRecap.rows.map((r, i) => (
-                      <tr key={i} className="hover:bg-stone-50">
-                        <td className="py-2.5 pr-4 font-medium text-stone-900">{r.item}</td>
-                        <td className="py-2.5 pr-4 text-xs text-stone-600">{r.jadwal}</td>
-                        <td className="py-2.5 text-right font-mono-nums font-bold text-emerald-900">
-                          {r.qty}x
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="grid gap-4 md:grid-cols-2">
+                {manifestGroups.map((grp) => (
+                  <div
+                    key={grp.label}
+                    className="flex flex-col justify-between rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-bold text-[#381E5A]">{grp.label}</h3>
+                          <p className="font-mono-nums text-[11px] text-stone-600">
+                            {grp.subs.length} Parcel · Nilai {formatRupiah(grp.totalNilai)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            downloadCsv(
+                              `surat-jalan-${grp.label.replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase()}.csv`,
+                              ['Token QR', 'Member', 'Paket', 'Agen', 'Wilayah', 'Jadwal', 'Status Pengiriman'],
+                              grp.subs.map((s) => [
+                                s.qr_code_token,
+                                s.member_nama,
+                                s.package_nama,
+                                s.agen_nama || s.agen_kode || '-',
+                                s.wilayah,
+                                s.jadwal_ambil || '-',
+                                s.status_pengiriman || 'menunggu_lunas',
+                              ])
+                            )
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 cursor-pointer"
+                        >
+                          <Download className="h-3 w-3" />
+                          <span>CSV</span>
+                        </button>
+                      </div>
+
+                      <div className="mt-3 max-h-40 space-y-1.5 overflow-y-auto pr-1 text-xs">
+                        {grp.subs.map((s) => (
+                          <div
+                            key={s.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border border-[#E4DCCB]/80 bg-white px-2.5 py-1.5"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-stone-900">
+                                {s.member_nama}
+                              </p>
+                              <p className="truncate font-mono-nums text-[10px] text-stone-500">
+                                {s.qr_code_token} · {s.package_nama}
+                              </p>
+                            </div>
+                            <span className="shrink-0 rounded bg-[#0C3328]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#0C3328]">
+                              {DELIVERY_STAGE_OPTIONS.find(
+                                (o) => o.value === (s.status_pengiriman || 'menunggu_lunas')
+                              )?.label || 'Menunggu'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[#E4DCCB] pt-3 no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleBatchAdvanceDelivery(grp.subs, 'dikemas_gudang')}
+                        className="rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[10px] font-bold text-stone-800 hover:bg-stone-100 cursor-pointer"
+                      >
+                        Set: Dikemas Gudang
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchAdvanceDelivery(grp.subs, 'kirim_korwil')}
+                        className="rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[10px] font-bold text-[#381E5A] hover:bg-stone-100 cursor-pointer"
+                      >
+                        Set: Kirim Korwil/Agen
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchAdvanceDelivery(grp.subs, 'siap_diambil')}
+                        className="rounded-lg bg-[#0C3328] px-2.5 py-1 text-[10px] font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                      >
+                        Set: Siap Diambil
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
-          <div className="space-y-6 lg:col-span-4">
-            <form
-              onSubmit={handleMarkQrPickedUp}
-              className="rounded-2xl border border-stone-200 bg-white p-6"
-            >
+          {/* Stok Gudang HPP & Pengumuman Substitusi Produk Resmi */}
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Stok Gudang & HPP (Admin CRUD) */}
+            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-6 space-y-4">
               <div className="flex items-center gap-2">
-                <QrCode className="h-5 w-5 text-emerald-900" />
-                <h3 className="font-display text-lg font-bold text-stone-900">
-                  Verifikasi Tiket QR Pengambilan
-                </h3>
-              </div>
-              <p className="mt-1 text-xs text-stone-600">
-                Scan kamera atau masukkan kode token QR dari HP member berstatus Lunas untuk menandai paket telah diambil.
-              </p>
-
-              <QrCameraScanner
-                onScan={(code) => {
-                  setQrInput(code.toUpperCase());
-                  setStatusMessage(
-                    `QR terdeteksi: ${code.toUpperCase()}. Klik "Konfirmasi Pengambilan Paket" untuk menyelesaikan serah terima.`
-                  );
-                }}
-              />
-
-              <input
-                type="text"
-                required
-                value={qrInput}
-                onChange={(e) => setQrInput(e.target.value)}
-                placeholder="Contoh: SGT-CIA-M2X9A"
-                className="mt-3 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900 uppercase"
-              />
-              <button
-                type="submit"
-                className="mt-3 w-full rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
-              >
-                Konfirmasi Pengambilan Paket
-              </button>
-
-              <div className="mt-5 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4 text-xs">
+                <Warehouse className="h-5 w-5 text-[#0C3328]" />
                 <div>
-                  <p className="text-stone-500">Siap Diambil (Lunas)</p>
-                  <p className="mt-0.5 font-mono-nums text-lg font-bold text-emerald-900">
-                    {warehouseRecap.readyToPickSubs.length}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-stone-500">Sudah Diambil</p>
-                  <p className="mt-0.5 font-mono-nums text-lg font-bold text-stone-900">
-                    {warehouseRecap.pickedUpCount}
+                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                    Stok Gudang &amp; Harga Beli (HPP) ({warehouseInventory.length})
+                  </h2>
+                  <p className="text-xs text-stone-600">
+                    Dipakai otomatis untuk menghitung kekurangan belanja gudang dan margin bersih paket di tab Analitik.
                   </p>
                 </div>
               </div>
-            </form>
 
-            {warehouseRecap.readyToPickSubs.length > 0 && (
-              <div className="rounded-2xl border border-stone-200 bg-white p-5">
-                <h4 className="text-xs font-bold uppercase tracking-wide text-stone-700">
-                  Antrean Paket Lunas Siap Ambil
-                </h4>
-                <div className="mt-3 divide-y divide-stone-100">
-                  {warehouseRecap.readyToPickSubs.slice(0, 8).map((s) => (
-                    <div key={s.id} className="flex items-center justify-between gap-2 py-2.5 text-xs">
-                      <div>
-                        <p className="font-semibold text-stone-900">{s.member_nama}</p>
-                        <p className="font-mono-nums text-[11px] text-emerald-800">
-                          {s.qr_code_token}
-                        </p>
-                      </div>
+              {isAdmin && (
+                <form
+                  onSubmit={handleSaveInventoryItem}
+                  className="grid gap-2.5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4 sm:grid-cols-2"
+                >
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    value={invNama}
+                    onChange={(e) => setInvNama(e.target.value)}
+                    placeholder="Nama Komoditas (mis: Beras Premium 5Kg)"
+                    className="sm:col-span-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={invStok}
+                    onChange={(e) => setInvStok(e.target.value)}
+                    placeholder="Stok Tersedia"
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 font-mono-nums text-xs text-stone-900"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    required
+                    value={invHarga}
+                    onChange={(e) => setInvHarga(e.target.value)}
+                    placeholder="Harga Beli Satuan (Rp)"
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 font-mono-nums text-xs text-stone-900"
+                  />
+                  <input
+                    type="text"
+                    required
+                    maxLength={30}
+                    value={invSatuan}
+                    onChange={(e) => setInvSatuan(e.target.value)}
+                    placeholder="Satuan (unit/dus/sak)"
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  />
+                  <input
+                    type="text"
+                    maxLength={200}
+                    value={invCatatan}
+                    onChange={(e) => setInvCatatan(e.target.value)}
+                    placeholder="Catatan supplier (opsional)"
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  />
+                  <div className="flex gap-2 sm:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={savingInv}
+                      className="flex-1 rounded-lg bg-[#0C3328] py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
+                    >
+                      {savingInv
+                        ? 'Menyimpan...'
+                        : invEditId
+                          ? 'Simpan Perubahan Stok'
+                          : 'Tambah / Catat Stok Gudang'}
+                    </button>
+                    {invEditId && (
                       <button
                         type="button"
-                        onClick={() => setQrInput(s.qr_code_token)}
-                        className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer"
+                        onClick={() => {
+                          setInvEditId(null);
+                          setInvNama('');
+                          setInvStok('100');
+                          setInvHarga('45000');
+                          setInvSatuan('unit');
+                          setInvCatatan('');
+                        }}
+                        className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 cursor-pointer"
                       >
-                        Pilih Token
+                        Batal
                       </button>
+                    )}
+                  </div>
+                </form>
+              )}
+
+              {warehouseInventory.length === 0 ? (
+                <p className="rounded-xl bg-[#FAF7F2] p-5 text-center text-xs text-stone-500">
+                  Belum ada data stok &amp; harga beli modal gudang yang dicatat.
+                </p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto divide-y divide-stone-100 text-xs">
+                  {warehouseInventory.map((w) => (
+                    <div key={w.id} className="flex items-center justify-between gap-2 py-2.5">
+                      <div>
+                        <p className="font-bold text-stone-900">{w.item_nama}</p>
+                        <p className="font-mono-nums text-[11px] text-stone-600">
+                          Stok: <strong className="text-[#0C3328]">{w.stok_tersedia}</strong>{' '}
+                          {w.satuan} · Beli: {formatRupiah(w.harga_beli_satuan)}
+                        </p>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInvEditId(w.id);
+                              setInvNama(w.item_nama);
+                              setInvStok(String(w.stok_tersedia));
+                              setInvHarga(String(w.harga_beli_satuan));
+                              setInvSatuan(w.satuan);
+                              setInvCatatan(w.catatan || '');
+                            }}
+                            className="rounded border border-stone-200 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          {confirmDeleteInvId === w.id ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteInventoryItem(w.id)}
+                                className="rounded bg-rose-700 px-2 py-1 text-[11px] font-bold text-white cursor-pointer"
+                              >
+                                Hapus
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteInvId(null)}
+                                className="text-[11px] text-stone-500 cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteInvId(w.id)}
+                              className="p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* Pengumuman Substitusi Produk Resmi */}
+            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <Replace className="h-5 w-5 text-[#B98E3A]" />
+                <div>
+                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                    Info Substitusi Produk Resmi ({productSubstitutions.length})
+                  </h2>
+                  <p className="text-xs text-stone-600">
+                    Jika stok merek barang tertentu kosong di pasar, umumkan penggantian bernilai setara agar langsung tampil transparan di Dashboard Member.
+                  </p>
+                </div>
               </div>
-            )}
+
+              {isAdmin && (
+                <form
+                  onSubmit={handleCreateSubstitutionNotice}
+                  className="grid gap-2.5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4 sm:grid-cols-2"
+                >
+                  <select
+                    value={subNoticePkgId}
+                    onChange={(e) => setSubNoticePkgId(e.target.value)}
+                    className="sm:col-span-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-900"
+                  >
+                    <option value="all">Semua Paket yang Memuat Produk Ini</option>
+                    {packages.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nama_paket}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    value={subNoticeLama}
+                    onChange={(e) => setSubNoticeLama(e.target.value)}
+                    placeholder="Produk Lama (mis: Sirup ABC Squash)"
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  />
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={120}
+                    value={subNoticeBaru}
+                    onChange={(e) => setSubNoticeBaru(e.target.value)}
+                    placeholder="Pengganti Setara (mis: Sirup Marjan 460ml)"
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  />
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={250}
+                    value={subNoticeAlasan}
+                    onChange={(e) => setSubNoticeAlasan(e.target.value)}
+                    placeholder="Alasan resmi (mis: Kelangkaan stok pabrik, kualitas ditingkatkan)"
+                    className="sm:col-span-2 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingSubNotice}
+                    className="sm:col-span-2 rounded-lg bg-[#381E5A] py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#492975] disabled:opacity-60 cursor-pointer"
+                  >
+                    {savingSubNotice ? 'Mempublikasikan...' : 'Publikasikan Info Substitusi ke Member'}
+                  </button>
+                </form>
+              )}
+
+              {productSubstitutions.length === 0 ? (
+                <p className="rounded-xl bg-[#FAF7F2] p-5 text-center text-xs text-stone-500">
+                  Belum ada pengumuman substitusi merek produk saat ini.
+                </p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto divide-y divide-stone-100 text-xs">
+                  {productSubstitutions.map((subNote) => (
+                    <div key={subNote.id} className="flex items-start justify-between gap-2 py-2.5">
+                      <div>
+                        <p className="font-bold text-[#381E5A]">
+                          {subNote.package_nama}{' '}
+                          <span className="font-mono-nums font-normal text-stone-500">
+                            · {subNote.tanggal}
+                          </span>
+                        </p>
+                        <p className="mt-0.5 text-stone-800">
+                          <span className="line-through text-rose-700">{subNote.produk_lama}</span>{' '}
+                          →{' '}
+                          <strong className="text-[#0C3328]">{subNote.produk_pengganti}</strong>
+                        </p>
+                        <p className="text-[11px] text-stone-600">{subNote.alasan}</p>
+                      </div>
+                      {isAdmin && (
+                        <div className="shrink-0">
+                          {confirmDeleteSubNoticeId === subNote.id ? (
+                            <span className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSubstitutionNotice(subNote.id)}
+                                className="rounded bg-rose-700 px-2 py-1 text-[10px] font-bold text-white cursor-pointer"
+                              >
+                                Hapus
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteSubNoticeId(null)}
+                                className="text-[10px] text-stone-500 cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteSubNoticeId(subNote.id)}
+                              className="p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -3561,13 +4845,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         </div>
       )}
 
-      {/* TAB: ANALITIK & GRAFIK VISUAL (ADMIN ONLY) */}
+      {/* TAB: ANALITIK & GRAFIK VISUAL + HPP + LOG AUDIT (ADMIN ONLY) */}
       {activeTab === 'analitik' && isAdmin && (
         <AdminAnalyticsTab
           korwilRecap={korwilRecap}
           subscriptions={subscriptions}
           deposits={deposits}
           packages={packages}
+          warehouseInventory={warehouseInventory}
+          auditLogs={auditLogs}
         />
       )}
 
@@ -3844,6 +5130,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                   </select>
                 </div>
               )}
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">
+                  Nama Grup / Arisan / Majelis (Opsional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={80}
+                  value={offGrupArisan}
+                  onChange={(e) => setOffGrupArisan(e.target.value)}
+                  placeholder="Contoh: Majelis Al-Hidayah / Arisan RT 04"
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                />
+              </div>
             </div>
 
             <div className="mt-6 flex justify-end gap-3">
@@ -4233,6 +5533,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
         </div>
       )}
+
+      <ReceiptGeneratorModal
+        deposit={receiptDeposit}
+        subscription={
+          subscriptions.find((s) => s.id === receiptDeposit?.subscription_id) || null
+        }
+        onClose={() => setReceiptDeposit(null)}
+      />
     </div>
   );
 };

@@ -13,6 +13,7 @@ import {
   Copy,
   FileImage,
   Gift,
+  Layers,
   Lock,
   Megaphone,
   MessageCircle,
@@ -21,9 +22,12 @@ import {
   Printer,
   QrCode,
   RefreshCw,
+  Replace,
   Ticket,
   Trash2,
+  Truck,
   Upload,
+  Users,
   X,
   XCircle,
 } from 'lucide-react';
@@ -41,10 +45,12 @@ import { formatRupiah, formatWhatsAppUrl } from '../data/catalogData';
 import {
   AgentDirectoryItem,
   AppPublicSettings,
+  DeliveryStage,
   Deposit,
   DepositMethod,
   DoorPrizeDraw,
   ParcelPackage,
+  ProductSubstitution,
   SimulationLock,
   Subscription,
   TransactionType,
@@ -52,6 +58,7 @@ import {
   WILAYAH_LIST,
   WilayahPriangan,
 } from '../types';
+import { ReceiptGeneratorModal } from './ReceiptGeneratorModal';
 import { RiwayatTransaksi } from './RiwayatTransaksi';
 
 interface MemberDashboardProps {
@@ -62,6 +69,8 @@ interface MemberDashboardProps {
   deposits: Deposit[];
   appSettings: AppPublicSettings;
   doorPrizeDraws: DoorPrizeDraw[];
+  productSubstitutions?: ProductSubstitution[];
+  referralAgent?: AgentDirectoryItem | null;
   lockedSimulation: SimulationLock | null;
   onClearLockedSimulation: () => void;
   onNeedLogin: () => void;
@@ -109,6 +118,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   deposits,
   appSettings,
   doorPrizeDraws,
+  productSubstitutions = [],
+  referralAgent = null,
   lockedSimulation,
   onClearLockedSimulation,
   onNeedLogin,
@@ -121,10 +132,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     lockedSimulation?.packageItem.id || packages[0]?.id || 'pkg_bunda_reguler'
   );
   const [agentId, setAgentId] = useState<string>(
-    lockedSimulation?.selectedAgentId || agents[0]?.id || 'agt_tsm_01'
+    lockedSimulation?.selectedAgentId || referralAgent?.id || agents[0]?.id || 'agt_tsm_01'
   );
   const [wilayah, setWilayah] = useState<WilayahPriangan>(
-    userProfile?.wilayah || 'Tasikmalaya'
+    referralAgent?.wilayah || userProfile?.wilayah || 'Tasikmalaya'
   );
   const [durasiMinggu, setDurasiMinggu] = useState<number>(
     lockedSimulation?.durasiMinggu || 45
@@ -132,6 +143,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [frekuensi, setFrekuensi] = useState<'harian' | 'mingguan'>(
     lockedSimulation?.frekuensi || 'mingguan'
   );
+  const [newGrupArisan, setNewGrupArisan] = useState<string>('');
   const [submittingContract, setSubmittingContract] = useState(false);
 
   // Deposit & Withdrawal Request State
@@ -139,18 +151,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [depositNominal, setDepositNominal] = useState<string>('25000');
   const [depositNote, setDepositNote] = useState<string>('');
   const [proofDataUrl, setProofDataUrl] = useState<string>('');
+  const [useUniqueInvoice, setUseUniqueInvoice] = useState<boolean>(false);
+  const [uniqueCodeSuffix, setUniqueCodeSuffix] = useState<number>(() =>
+    101 + Math.floor(Math.random() * 398)
+  );
+  const [copiedExactAmount, setCopiedExactAmount] = useState<boolean>(false);
   const [withdrawMethod, setWithdrawMethod] = useState<'pencairan_tunai' | 'transfer_keluar'>(
     'pencairan_tunai'
   );
   const [uploadingDeposit, setUploadingDeposit] = useState(false);
   const [previewProofUrl, setPreviewProofUrl] = useState<string | null>(null);
+  const [receiptDeposit, setReceiptDeposit] = useState<Deposit | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string>('');
   const [copiedBank, setCopiedBank] = useState(false);
 
-  // Contract Controls: Expand Package Items / Change Agent / Cancel Contract
+  // Contract Controls: Expand Package Items / Change Agent / Grup Arisan / Cancel Contract
   const [showPackageContents, setShowPackageContents] = useState(false);
   const [showAgentSwitch, setShowAgentSwitch] = useState(false);
   const [switchAgentId, setSwitchAgentId] = useState('');
+  const [showGrupEdit, setShowGrupEdit] = useState(false);
+  const [editGrupValue, setEditGrupValue] = useState('');
   const [updatingAgent, setUpdatingAgent] = useState(false);
   const [confirmCancelContract, setConfirmCancelContract] = useState(false);
 
@@ -269,6 +289,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           : Math.ceil(targetNominal / durasiMinggu / 500) * 500;
       const qrToken = `SGT-${selectedAgentForNew.wilayah.slice(0, 3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
+      const cleanGrup = newGrupArisan.trim().slice(0, 80);
+      const effectiveRefCode = (
+        referralAgent?.kode_agen ||
+        selectedAgentForNew.kode_agen ||
+        ''
+      ).slice(0, 32);
+
       const payload = {
         member_id: userProfile.uid,
         member_nama: userProfile.nama,
@@ -285,6 +312,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         frekuensi,
         durasi_minggu: durasiMinggu,
         status: 'aktif',
+        status_pengiriman: 'menunggu_lunas' as DeliveryStage,
+        ...(cleanGrup ? { grup_arisan: cleanGrup } : {}),
+        ...(effectiveRefCode ? { kode_referral_agen: effectiveRefCode } : {}),
         qr_code_token: qrToken,
         jadwal_ambil: selectedPkgForNew.jadwal_ambil,
         daftar_isi: selectedPkgForNew.daftar_isi.slice(0, 25),
@@ -294,6 +324,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
       const docRef = await addDoc(collection(db, 'subscriptions'), payload);
       setSelectedSubId(docRef.id);
+      setNewGrupArisan('');
       setShowNewContractForm(false);
       onClearLockedSimulation();
       setFeedbackMsg('Kontrak tabungan berhasil dibuat dan terdaftar di agen pilihan Anda.');
@@ -301,6 +332,29 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       handleFirestoreError(err, OperationType.CREATE, 'subscriptions');
     } finally {
       setSubmittingContract(false);
+    }
+  };
+
+  const handleSaveGrupArisan = async () => {
+    if (!activeSub || activeSub.status !== 'aktif') return;
+    setUpdatingAgent(true);
+    setFeedbackMsg('');
+    try {
+      const cleaned = editGrupValue.trim().slice(0, 80);
+      await updateDoc(doc(db, 'subscriptions', activeSub.id), {
+        grup_arisan: cleaned,
+        updatedAt: serverTimestamp(),
+      });
+      setShowGrupEdit(false);
+      setFeedbackMsg(
+        cleaned
+          ? `Kontrak ${activeSub.package_nama} ditautkan ke Grup/Arisan "${cleaned}".`
+          : `Label Grup/Arisan pada kontrak ${activeSub.package_nama} dihapus.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${activeSub.id}`);
+    } finally {
+      setUpdatingAgent(false);
     }
   };
 
@@ -392,6 +446,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             : 'Pengajuan Penarikan Transfer Bank'
           : 'Transfer Tabungan Member';
 
+      const finalNominal =
+        txMode === 'setoran' && useUniqueInvoice ? nominalNum + uniqueCodeSuffix : nominalNum;
+      const invoiceRef = `INV-SGT-${activeSub.qr_code_token.slice(-4)}-${uniqueCodeSuffix}`;
+      const baseNoteText = depositNote.trim() || defaultNote;
+      const finalCatatan =
+        txMode === 'setoran' && useUniqueInvoice
+          ? `[${invoiceRef} · Kode Unik +${uniqueCodeSuffix}] ${baseNoteText}`.slice(0, 250)
+          : baseNoteText.slice(0, 250);
+
       await addDoc(collection(db, 'deposits'), {
         subscription_id: activeSub.id,
         member_id: userProfile.uid,
@@ -399,10 +462,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         agen_id: activeSub.agen_id,
         wilayah: activeSub.wilayah,
         jenis_transaksi: txMode,
-        nominal: nominalNum,
+        nominal: finalNominal,
         metode,
         ...(txMode === 'setoran' && proofDataUrl ? { bukti_foto_url: proofDataUrl } : {}),
-        catatan: depositNote.trim() || defaultNote,
+        catatan: finalCatatan,
         status_verifikasi: 'pending',
         tanggal: new Date().toISOString().slice(0, 10),
         createdAt: serverTimestamp(),
@@ -410,10 +473,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       });
       setDepositNote('');
       setProofDataUrl('');
+      setUniqueCodeSuffix(101 + Math.floor(Math.random() * 398));
       setFeedbackMsg(
         txMode === 'penarikan'
           ? 'Pengajuan penarikan saldo berhasil dikirim. Menunggu validasi & pencairan dari Agen/Admin.'
-          : 'Bukti transfer setoran berhasil diunggah. Status saat ini: Menunggu Verifikasi Agen/Admin.'
+          : useUniqueInvoice
+            ? `Invoice ${invoiceRef} (${formatRupiah(finalNominal)}) berhasil dicatat! Menunggu verifikasi mutasi oleh Agen/Admin.`
+            : 'Bukti transfer setoran berhasil diunggah. Status saat ini: Menunggu Verifikasi Agen/Admin.'
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'deposits');
@@ -467,6 +533,52 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     : [];
   const activePackageItems = activeSub?.daftar_isi || activePackageMeta?.daftar_isi || [];
   const activeBonusThr = activePackageMeta?.bonus_thr || 0;
+
+  const effectiveDeliveryStage: DeliveryStage = activeSub
+    ? activeSub.status === 'diambil'
+      ? 'selesai'
+      : activeSub.status_pengiriman ||
+        (activeSub.status === 'lunas' ? 'siap_diambil' : 'menunggu_lunas')
+    : 'menunggu_lunas';
+
+  const matchingSubstitutions = useMemo(() => {
+    if (!activeSub) return [];
+    return productSubstitutions.filter(
+      (s) => s.package_id === 'all' || s.package_id === activeSub.package_id
+    );
+  }, [productSubstitutions, activeSub]);
+
+  const groupArisanSummaries = useMemo(() => {
+    const map = new Map<
+      string,
+      { groupName: string; contracts: Subscription[]; collected: number; target: number }
+    >();
+    mySubscriptions.forEach((s) => {
+      const name = (s.grup_arisan || '').trim();
+      if (!name) return;
+      const existing = map.get(name);
+      if (existing) {
+        existing.contracts.push(s);
+        existing.collected += s.total_terkumpul || 0;
+        existing.target += s.target_nominal || 0;
+      } else {
+        map.set(name, {
+          groupName: name,
+          contracts: [s],
+          collected: s.total_terkumpul || 0,
+          target: s.target_nominal || 0,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [mySubscriptions]);
+
+  const baseDepositNum = Number(depositNominal) || 0;
+  const exactTransferTotal =
+    baseDepositNum + (useUniqueInvoice && baseDepositNum >= 1000 ? uniqueCodeSuffix : 0);
+  const currentInvoiceCode = activeSub
+    ? `INV-SGT-${activeSub.qr_code_token.slice(-4)}-${uniqueCodeSuffix}`
+    : `INV-SGT-${uniqueCodeSuffix}`;
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -625,6 +737,30 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">
+                Nama Grup / Arisan Keluarga atau Kantor (Opsional)
+              </label>
+              <input
+                type="text"
+                maxLength={80}
+                value={newGrupArisan}
+                onChange={(e) => setNewGrupArisan(e.target.value)}
+                placeholder="Contoh: Arisan Keluarga Besar Ibu Hj. Siti"
+                className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
+              />
+            </div>
+            {referralAgent && (
+              <div className="flex items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs text-emerald-950">
+                <span>
+                  Terhubung via Link Referral Agen <strong>{referralAgent.nama}</strong> (
+                  {referralAgent.kode_agen}).
+                </span>
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#EFE8D8] pt-4">
@@ -860,6 +996,77 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </div>
                 )}
 
+                {/* 5-Stage Delivery & Packing Stepper */}
+                <div className="mt-5 rounded-xl border border-[#E4DCCB] bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#381E5A]">
+                      <Truck className="h-4 w-4 text-[#0C3328]" />
+                      Status Pengepakan &amp; Pengiriman Paket
+                    </span>
+                    {activeSub.grup_arisan && (
+                      <span className="inline-flex items-center gap-1 rounded bg-[#381E5A]/10 px-2 py-0.5 text-[11px] font-bold text-[#381E5A]">
+                        <Users className="h-3 w-3" />
+                        Grup: {activeSub.grup_arisan}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {(
+                      [
+                        { id: 'menunggu_lunas', label: '1. Tabungan Aktif' },
+                        { id: 'dikemas_gudang', label: '2. Dikemas Gudang' },
+                        { id: 'kirim_korwil', label: '3. Kirim Korwil/Agen' },
+                        { id: 'siap_diambil', label: '4. Siap Diambil' },
+                        { id: 'selesai', label: '5. Diterima Member' },
+                      ] as Array<{ id: DeliveryStage; label: string }>
+                    ).map((step, idx, arr) => {
+                      const currentIdx = arr.findIndex((s) => s.id === effectiveDeliveryStage);
+                      const isDone = idx <= currentIdx;
+                      const isCurrent = idx === currentIdx;
+                      return (
+                        <div
+                          key={step.id}
+                          className={`rounded-lg border px-2.5 py-2 text-[11px] font-semibold transition ${
+                            isCurrent
+                              ? 'border-[#0C3328] bg-[#0C3328] text-[#E8CA82]'
+                              : isDone
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                                : 'border-stone-200 bg-stone-50 text-stone-400'
+                          }`}
+                        >
+                          {step.label}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Official Product Substitution Notice (if any applies) */}
+                {matchingSubstitutions.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-xs">
+                    <p className="inline-flex items-center gap-1.5 font-bold text-amber-950">
+                      <Replace className="h-4 w-4 text-amber-800" />
+                      Pemberitahuan Resmi Penyesuaian / Substitusi Produk Setara
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {matchingSubstitutions.map((subNote) => (
+                        <div
+                          key={subNote.id}
+                          className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-stone-800"
+                        >
+                          <p className="font-semibold text-[#381E5A]">
+                            {subNote.produk_lama} &rarr;{' '}
+                            <span className="text-[#0C3328]">{subNote.produk_pengganti}</span>
+                          </p>
+                          <p className="text-[11px] text-stone-600">
+                            {subNote.alasan} ({subNote.tanggal})
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Package Contents & THR Breakdown Toggle */}
                 {(activePackageItems.length > 0 || activeBonusThr > 0) && (
                   <div className="mt-4 rounded-xl border border-[#E4DCCB] bg-white">
@@ -928,17 +1135,30 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
                   {activeSub.status === 'aktif' && (
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSwitchAgentId(activeSub.agen_id);
-                          setShowAgentSwitch((v) => !v);
-                        }}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        <span>Ganti Agen Wilayah</span>
-                      </button>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSwitchAgentId(activeSub.agen_id);
+                            setShowAgentSwitch((v) => !v);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                          <span>Ganti Agen Wilayah</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditGrupValue(activeSub.grup_arisan || '');
+                            setShowGrupEdit((v) => !v);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 font-semibold text-[#0C3328] hover:bg-[#FAF7F2] cursor-pointer"
+                        >
+                          <Layers className="h-3.5 w-3.5" />
+                          <span>{activeSub.grup_arisan ? 'Ubah Label Grup/Arisan' : 'Tautkan Grup/Arisan'}</span>
+                        </button>
+                      </div>
 
                       {activeSub.total_terkumpul === 0 && (
                         <>
@@ -999,8 +1219,90 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       </button>
                     </div>
                   )}
+
+                  {showGrupEdit && activeSub.status === 'aktif' && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3 sm:flex-row sm:items-center">
+                      <input
+                        type="text"
+                        maxLength={80}
+                        value={editGrupValue}
+                        onChange={(e) => setEditGrupValue(e.target.value)}
+                        placeholder="Nama Grup/Arisan Keluarga atau Kantor..."
+                        className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
+                      />
+                      <button
+                        type="button"
+                        disabled={updatingAgent}
+                        onClick={() => void handleSaveGrupArisan()}
+                        className="rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
+                      >
+                        {updatingAgent ? 'Menyimpan...' : 'Simpan Grup'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* Ringkasan Program Grup / Arisan Keluarga & Kantor */}
+              {groupArisanSummaries.length > 0 && (
+                <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-[#381E5A]" />
+                    <h3 className="font-display text-lg font-bold text-[#381E5A]">
+                      Ringkasan Grup &amp; Arisan Terhubung
+                    </h3>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {groupArisanSummaries.map((grp) => {
+                      const gPct =
+                        grp.target > 0
+                          ? Math.min(100, Math.round((grp.collected / grp.target) * 100))
+                          : 0;
+                      const shareText = `Rekap Grup "${grp.groupName}" (${grp.contracts.length} kontrak Sagitarius Parcel): Terkumpul ${formatRupiah(
+                        grp.collected
+                      )} dari target ${formatRupiah(grp.target)} (${gPct}%).`;
+                      return (
+                        <div
+                          key={grp.groupName}
+                          className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4 text-xs"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-bold text-[#381E5A]">{grp.groupName}</p>
+                              <p className="text-[11px] text-stone-500">
+                                {grp.contracts.length} Kontrak Terdaftar
+                              </p>
+                            </div>
+                            <span className="font-mono-nums font-bold text-[#0C3328]">
+                              {gPct}%
+                            </span>
+                          </div>
+                          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white">
+                            <div
+                              className="h-full rounded-full bg-[#0C3328]"
+                              style={{ width: `${gPct}%` }}
+                            />
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="font-mono-nums font-semibold text-stone-700">
+                              {formatRupiah(grp.collected)} / {formatRupiah(grp.target)}
+                            </span>
+                            <a
+                              href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 font-semibold text-[#15803D] hover:underline"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              Bagikan WA
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Upload Setoran Transfer atau Ajukan Penarikan */}
               {activeSub.status !== 'diambil' && (!isPaidOff || activeSub.total_terkumpul > 0) && (
@@ -1062,9 +1364,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* Official Company Bank Account & QRIS Box */}
+                  {/* Official Company Bank Account & Unique 3-Digit Invoice / QRIS Box */}
                   {txMode === 'setoran' && (
-                    <div className="mt-4 rounded-xl border border-[#C8A053]/40 bg-[#FAF7F2] p-4">
+                    <div className="mt-4 space-y-3 rounded-xl border border-[#C8A053]/40 bg-[#FAF7F2] p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-xs font-bold text-[#381E5A]">
                           <Building2 className="h-4 w-4 text-[#C8A053]" />
@@ -1074,7 +1376,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           {appSettings.bank_nama}
                         </span>
                       </div>
-                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <p className="font-mono-nums text-base font-bold text-[#381E5A]">
                             {appSettings.bank_rekening}
@@ -1101,8 +1403,60 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           )}
                         </button>
                       </div>
+
+                      <div className="border-t border-[#EFE8D8] pt-3">
+                        <label className="inline-flex items-center gap-2 text-xs font-semibold text-[#381E5A] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={useUniqueInvoice}
+                            onChange={(e) => setUseUniqueInvoice(e.target.checked)}
+                            className="h-4 w-4 rounded border-stone-300 text-[#0C3328]"
+                          />
+                          <span>
+                            Aktifkan Invoice Kode Unik 3-Digit (+{uniqueCodeSuffix}) &amp; QRIS Nominal Eksak
+                          </span>
+                        </label>
+
+                        {useUniqueInvoice && baseDepositNum >= 1000 && (
+                          <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[#C8A053]/60 bg-white p-3 sm:flex-row sm:items-center">
+                            <div className="shrink-0 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-2">
+                              <QRCodeSVG
+                                value={`QRIS-SAGITARIUS|${currentInvoiceCode}|NOMINAL:${exactTransferTotal}|REK:${appSettings.bank_rekening}|MEMBER:${userProfile.nama}`}
+                                size={88}
+                                level="M"
+                              />
+                            </div>
+                            <div className="flex-1 space-y-1 text-xs">
+                              <p className="font-mono-nums font-bold text-[#381E5A]">
+                                {currentInvoiceCode}
+                              </p>
+                              <p className="text-stone-600">
+                                Transfer nominal persis agar mudah dicocokkan oleh Agen/Admin:
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono-nums text-base font-bold text-[#0C3328]">
+                                  {formatRupiah(exactTransferTotal)}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void navigator.clipboard.writeText(String(exactTransferTotal));
+                                    setCopiedExactAmount(true);
+                                    setTimeout(() => setCopiedExactAmount(false), 1800);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-0.5 text-[11px] font-semibold text-[#381E5A] cursor-pointer"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                  {copiedExactAmount ? 'Nominal Disalin' : 'Salin Nominal'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
                       {appSettings.qris_catatan && (
-                        <p className="mt-2 border-t border-[#EFE8D8] pt-2 text-[11px] text-stone-600">
+                        <p className="border-t border-[#EFE8D8] pt-2 text-[11px] text-stone-600">
                           {appSettings.qris_catatan}
                         </p>
                       )}
@@ -1237,6 +1591,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 subscriptions={mySubscriptions}
                 activeContract={activeSub}
                 onPreviewProof={(url) => setPreviewProofUrl(url)}
+                onOpenReceipt={(dep) => setReceiptDeposit(dep)}
               />
 
               {/* Antrean Pengajuan Pending / Ditolak */}
@@ -1483,6 +1838,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           </div>
         </div>
       )}
+      <ReceiptGeneratorModal
+        deposit={receiptDeposit}
+        subscription={
+          receiptDeposit
+            ? mySubscriptions.find((s) => s.id === receiptDeposit.subscription_id) || activeSub
+            : activeSub
+        }
+        onClose={() => setReceiptDeposit(null)}
+      />
     </div>
   );
 };

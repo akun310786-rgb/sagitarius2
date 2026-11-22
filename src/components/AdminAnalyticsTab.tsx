@@ -1,7 +1,22 @@
-import React, { useMemo } from 'react';
-import { BarChart3, Package as PackageIcon, TrendingUp, Wallet } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import {
+  BarChart3,
+  Calculator,
+  Download,
+  Package as PackageIcon,
+  ShieldAlert,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react';
 import { formatRupiah } from '../data/catalogData';
-import { Deposit, ParcelPackage, Subscription, WilayahPriangan } from '../types';
+import {
+  AuditLogEntry,
+  Deposit,
+  ParcelPackage,
+  Subscription,
+  WarehouseInventoryItem,
+  WilayahPriangan,
+} from '../types';
 
 interface WilayahRecapRow {
   wilayah: WilayahPriangan;
@@ -19,6 +34,31 @@ interface AdminAnalyticsTabProps {
   subscriptions: Subscription[];
   deposits: Deposit[];
   packages: ParcelPackage[];
+  warehouseInventory?: WarehouseInventoryItem[];
+  auditLogs?: AuditLogEntry[];
+}
+
+function formatAuditTime(ts: unknown): string {
+  const obj = ts as { seconds?: number; toDate?: () => Date } | undefined;
+  if (obj && typeof obj.toDate === 'function') {
+    return obj.toDate().toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+  if (obj && typeof obj.seconds === 'number') {
+    return new Date(obj.seconds * 1000).toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
+  return 'Baru saja';
 }
 
 export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
@@ -26,7 +66,11 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
   subscriptions,
   deposits,
   packages,
+  warehouseInventory = [],
+  auditLogs = [],
 }) => {
+  const [hppCategoryFilter, setHppCategoryFilter] = useState<string>('all');
+
   const cashflow = useMemo(() => {
     let totalIn = 0;
     let totalOut = 0;
@@ -92,6 +136,90 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
     const maxCount = Math.max(1, ...list.map((i) => i.count));
     return { list, maxCount };
   }, [subscriptions, packages]);
+
+  // HPP & Margin Calculator backed by Warehouse Inventory prices (when present) + 78% standard fallback
+  const hppRows = useMemo(() => {
+    const activeCountByPkg = new Map<string, number>();
+    subscriptions.forEach((s) => {
+      activeCountByPkg.set(s.package_id, (activeCountByPkg.get(s.package_id) || 0) + 1);
+    });
+
+    return packages
+      .filter((p) => hppCategoryFilter === 'all' || p.kategori === hppCategoryFilter)
+      .slice(0, 24)
+      .map((pkg) => {
+        const kontrakCount = activeCountByPkg.get(pkg.id) || 0;
+        const maxKomisi = Math.round(pkg.harga_total * 0.07);
+        const bonusThr = pkg.bonus_thr || 0;
+
+        // Calculate matched items from warehouseInventory
+        let matchedItemCost = 0;
+        let matchedCount = 0;
+        pkg.daftar_isi.forEach((line) => {
+          const lower = line.toLowerCase();
+          const match = warehouseInventory.find((inv) =>
+            lower.includes(inv.item_nama.toLowerCase()) ||
+            inv.item_nama.toLowerCase().includes(lower.split(' ')[0])
+          );
+          if (match && match.harga_beli_satuan > 0) {
+            matchedItemCost += match.harga_beli_satuan;
+            matchedCount += 1;
+          }
+        });
+
+        // Estimate remaining unpriced items proportionally so partial warehouse entry stays realistic
+        const isExactWarehouse = matchedCount === pkg.daftar_isi.length && pkg.daftar_isi.length > 0;
+        const standardHppRatio = pkg.kategori === 'uang' ? 0.9 : 0.72;
+        const standardNetBudget = Math.max(0, pkg.harga_total - bonusThr - maxKomisi);
+        const estimatedHpp = isExactWarehouse
+          ? matchedItemCost
+          : matchedCount > 0 && pkg.daftar_isi.length > 0
+            ? Math.round(
+                matchedItemCost +
+                  ((pkg.daftar_isi.length - matchedCount) / pkg.daftar_isi.length) *
+                    (standardNetBudget * standardHppRatio)
+              )
+            : Math.round(standardNetBudget * standardHppRatio);
+
+        const marginBersih = pkg.harga_total - estimatedHpp - bonusThr - maxKomisi;
+        const marginPct =
+          pkg.harga_total > 0 ? Math.round((marginBersih / pkg.harga_total) * 100) : 0;
+
+        return {
+          pkg,
+          kontrakCount,
+          estimatedHpp,
+          bonusThr,
+          maxKomisi,
+          marginBersih,
+          marginPct,
+          matchedCount,
+          totalItems: pkg.daftar_isi.length,
+        };
+      });
+  }, [packages, subscriptions, warehouseInventory, hppCategoryFilter]);
+
+  const handleExportAuditCsv = () => {
+    if (auditLogs.length === 0) return;
+    const headers = ['Waktu', 'Aktor', 'Aksi', 'Target', 'Detail'];
+    const rows = auditLogs.map((l) => [
+      `"${formatAuditTime(l.createdAt)}"`,
+      `"${(l.actor_nama || '').replace(/"/g, '""')}"`,
+      `"${(l.aksi || '').replace(/"/g, '""')}"`,
+      `"${(l.target_label || '').replace(/"/g, '""')}"`,
+      `"${(l.detail || '').replace(/"/g, '""')}"`,
+    ]);
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `audit-log-admin-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -281,6 +409,157 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* Row 3: Kalkulator HPP & Margin Paket */}
+      <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+        <div className="flex flex-col gap-3 border-b border-[#E4DCCB]/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <Calculator className="h-5 w-5 text-[#381E5A]" />
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                Kalkulator HPP &amp; Margin Bersih Paket
+              </h2>
+              <p className="text-xs text-stone-600">
+                Menghitung estimasi HPP dari harga beli stok Gudang (atau proyeksi standar 72% jika stok item belum diinput), Bonus THR, dan komisi maksimal agen 7%.
+              </p>
+            </div>
+          </div>
+
+          <select
+            value={hppCategoryFilter}
+            onChange={(e) => setHppCategoryFilter(e.target.value)}
+            className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
+          >
+            <option value="all">Semua Kategori</option>
+            <option value="bunda">Paket Bunda</option>
+            <option value="anak">Paket Anak</option>
+            <option value="pilihan">Paket Pilihan</option>
+            <option value="uang">Paket Uang</option>
+            <option value="satuan">Barang Satuan</option>
+          </select>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-stone-200 text-stone-500">
+                <th className="py-2.5 pr-3 font-semibold">Nama Paket</th>
+                <th className="py-2.5 pr-3 text-right font-semibold">Harga Jual</th>
+                <th className="py-2.5 pr-3 text-right font-semibold">Est. HPP Barang</th>
+                <th className="py-2.5 pr-3 text-right font-semibold">Bonus THR</th>
+                <th className="py-2.5 pr-3 text-right font-semibold">Komisi Maks 7%</th>
+                <th className="py-2.5 pr-3 text-right font-semibold">Est. Margin Bersih</th>
+                <th className="py-2.5 text-right font-semibold">Proyeksi Kontrak</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {hppRows.map((r) => (
+                <tr key={r.pkg.id} className="hover:bg-[#FAF7F2]/70">
+                  <td className="py-2.5 pr-3">
+                    <p className="font-bold text-[#381E5A]">{r.pkg.nama_paket}</p>
+                    <p className="text-[10px] text-stone-500">
+                      {r.matchedCount > 0
+                        ? `${r.matchedCount}/${r.totalItems} item pakai harga beli gudang`
+                        : 'Menggunakan patokan HPP standar'}
+                    </p>
+                  </td>
+                  <td className="py-2.5 pr-3 text-right font-mono-nums font-semibold text-stone-900">
+                    {formatRupiah(r.pkg.harga_total)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right font-mono-nums text-stone-700">
+                    {formatRupiah(r.estimatedHpp)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right font-mono-nums text-amber-800">
+                    {r.bonusThr > 0 ? formatRupiah(r.bonusThr) : '—'}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right font-mono-nums text-stone-700">
+                    {formatRupiah(r.maxKomisi)}
+                  </td>
+                  <td className="py-2.5 pr-3 text-right font-mono-nums font-bold text-[#0C3328]">
+                    {formatRupiah(r.marginBersih)}{' '}
+                    <span className="text-[10px] font-medium text-stone-500">
+                      ({r.marginPct}%)
+                    </span>
+                  </td>
+                  <td className="py-2.5 text-right font-mono-nums font-semibold text-[#381E5A]">
+                    {r.kontrakCount > 0
+                      ? `${r.kontrakCount}x (${formatRupiah(r.marginBersih * r.kontrakCount)})`
+                      : '0x'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Row 4: Immutable Admin Audit Log */}
+      <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E4DCCB]/70 pb-4">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-[#381E5A]" />
+            <div>
+              <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                Log Audit Perubahan Sensitif Admin ({auditLogs.length})
+              </h2>
+              <p className="text-xs text-stone-600">
+                Catatan permanen (append-only) setiap koreksi saldo, perubahan peran RBAC, hapus kontrak/transaksi, validasi kas, undian Door Prize, &amp; pengaturan rekening.
+              </p>
+            </div>
+          </div>
+          {auditLogs.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportAuditCsv}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Export CSV Audit</span>
+            </button>
+          )}
+        </div>
+
+        {auditLogs.length === 0 ? (
+          <p className="mt-5 rounded-xl bg-[#FAF7F2] p-6 text-center text-xs text-stone-500">
+            Belum ada aktivitas perubahan sensitif yang tercatat setelah pembaruan ini.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-stone-200 text-stone-500">
+                  <th className="py-2.5 pr-3 font-semibold">Waktu</th>
+                  <th className="py-2.5 pr-3 font-semibold">Aktor Admin</th>
+                  <th className="py-2.5 pr-3 font-semibold">Jenis Aksi</th>
+                  <th className="py-2.5 pr-3 font-semibold">Target</th>
+                  <th className="py-2.5 font-semibold">Rincian Perubahan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {auditLogs.slice(0, 60).map((log) => (
+                  <tr key={log.id} className="hover:bg-[#FAF7F2]/60">
+                    <td className="py-2.5 pr-3 font-mono-nums text-[11px] text-stone-600 whitespace-nowrap">
+                      {formatAuditTime(log.createdAt)}
+                    </td>
+                    <td className="py-2.5 pr-3 font-semibold text-stone-900 whitespace-nowrap">
+                      {log.actor_nama}
+                    </td>
+                    <td className="py-2.5 pr-3 whitespace-nowrap">
+                      <span className="rounded bg-[#381E5A]/10 px-2 py-0.5 text-[10px] font-bold uppercase text-[#381E5A]">
+                        {log.aksi}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-3 font-semibold text-[#0C3328]">
+                      {log.target_label}
+                    </td>
+                    <td className="py-2.5 text-stone-600">{log.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

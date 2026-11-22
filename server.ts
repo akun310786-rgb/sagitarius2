@@ -132,6 +132,15 @@ async function startServer() {
         return { status, code, message: msg };
       };
 
+      const rawMemberContext =
+        typeof req.body?.memberContext === 'string'
+          ? req.body.memberContext.trim().slice(0, 2500)
+          : '';
+
+      const effectiveSystemInstruction = rawMemberContext
+        ? `${CS_SYSTEM_INSTRUCTION}\n\nKONTEKS AKUN MEMBER YANG SEDANG LOGIN (Gunakan hanya untuk membantu menjawab pertanyaan pribadi member ini terkait saldo, progres pelunasan, status pengiriman, kupon Door Prize, atau kontrak aktifnya):\n${rawMemberContext}`
+        : CS_SYSTEM_INSTRUCTION;
+
       const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
       const attemptGenerate = async (model: string, thinkingLevel: ThinkingLevel) => {
@@ -139,7 +148,8 @@ async function startServer() {
           model,
           contents: alternating,
           config: {
-            systemInstruction: CS_SYSTEM_INSTRUCTION,
+            abortSignal: AbortSignal.timeout(12000),
+            systemInstruction: effectiveSystemInstruction,
             thinkingConfig: {
               thinkingLevel,
             },
@@ -167,13 +177,21 @@ async function startServer() {
           } catch (err) {
             lastErr = err;
             const info = extractErrorInfo(err);
+            const isTimeout =
+              (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) ||
+              info.message.toLowerCase().includes('timeout') ||
+              info.message.toLowerCase().includes('aborted');
             const isTransient =
+              isTimeout ||
               info.status === 503 ||
               info.status === 502 ||
               info.status === 504 ||
               info.code === 'UNAVAILABLE';
             if (!isTransient) {
               throw err;
+            }
+            if (isTimeout) {
+              break; // Immediately fall back to next model candidate on timeout
             }
             if (attempt === 0) {
               await sleep(600);

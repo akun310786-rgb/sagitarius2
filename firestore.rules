@@ -123,7 +123,7 @@ service cloud.firestore {
 
     function isValidSubscription(data) {
       return data.keys().hasAll(['member_id', 'member_nama', 'agen_id', 'wilayah', 'package_id', 'package_nama', 'target_nominal', 'total_terkumpul', 'status', 'qr_code_token', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['member_id', 'member_nama', 'agen_id', 'korwil_id', 'agen_kode', 'agen_nama', 'wilayah', 'package_id', 'package_nama', 'kategori', 'target_nominal', 'total_terkumpul', 'setoran_nominal', 'frekuensi', 'durasi_minggu', 'status', 'qr_code_token', 'jadwal_ambil', 'daftar_isi', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['member_id', 'member_nama', 'agen_id', 'korwil_id', 'agen_kode', 'agen_nama', 'wilayah', 'package_id', 'package_nama', 'kategori', 'target_nominal', 'total_terkumpul', 'setoran_nominal', 'frekuensi', 'durasi_minggu', 'status', 'status_pengiriman', 'grup_arisan', 'kode_referral_agen', 'qr_code_token', 'jadwal_ambil', 'daftar_isi', 'createdAt', 'updatedAt']) &&
         isValidId(data.member_id) &&
         data.member_nama is string && data.member_nama.size() >= 2 && data.member_nama.size() <= 100 &&
         isValidId(data.agen_id) &&
@@ -140,6 +140,9 @@ service cloud.firestore {
         (!('frekuensi' in data) || (data.frekuensi in ['harian', 'mingguan'])) &&
         (!('durasi_minggu' in data) || (data.durasi_minggu is number && data.durasi_minggu >= 1 && data.durasi_minggu <= 60)) &&
         data.status in ['aktif', 'lunas', 'diambil'] &&
+        (!('status_pengiriman' in data) || (data.status_pengiriman in ['menunggu_lunas', 'dikemas_gudang', 'kirim_korwil', 'siap_diambil', 'selesai'])) &&
+        (!('grup_arisan' in data) || (data.grup_arisan is string && data.grup_arisan.size() <= 80)) &&
+        (!('kode_referral_agen' in data) || (data.kode_referral_agen is string && data.kode_referral_agen.size() <= 32)) &&
         data.qr_code_token is string && data.qr_code_token.size() >= 6 && data.qr_code_token.size() <= 120 &&
         (!('jadwal_ambil' in data) || (data.jadwal_ambil is string && data.jadwal_ambil.size() <= 40)) &&
         (!('daftar_isi' in data) || (data.daftar_isi is list && data.daftar_isi.size() <= 30)) &&
@@ -222,6 +225,45 @@ service cloud.firestore {
         (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 250)) &&
         data.tanggal is string && data.tanggal.size() >= 4 && data.tanggal.size() <= 40 &&
         (!('validated_by' in data) || (data.validated_by is string && data.validated_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWarehouseInventory(data) {
+      return data.keys().hasAll(['item_nama', 'stok_tersedia', 'harga_beli_satuan', 'satuan', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['item_nama', 'stok_tersedia', 'harga_beli_satuan', 'satuan', 'catatan', 'updated_by', 'createdAt', 'updatedAt']) &&
+        data.item_nama is string && data.item_nama.size() >= 2 && data.item_nama.size() <= 120 &&
+        data.stok_tersedia is number && data.stok_tersedia >= 0 &&
+        data.harga_beli_satuan is number && data.harga_beli_satuan >= 0 &&
+        data.satuan is string && data.satuan.size() >= 1 && data.satuan.size() <= 30 &&
+        (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 200)) &&
+        (!('updated_by' in data) || (data.updated_by is string && data.updated_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProductSubstitution(data) {
+      return data.keys().hasAll(['package_id', 'package_nama', 'produk_lama', 'produk_pengganti', 'alasan', 'tanggal', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['package_id', 'package_nama', 'produk_lama', 'produk_pengganti', 'alasan', 'tanggal', 'created_by', 'createdAt', 'updatedAt']) &&
+        isValidId(data.package_id) &&
+        data.package_nama is string && data.package_nama.size() >= 2 && data.package_nama.size() <= 120 &&
+        data.produk_lama is string && data.produk_lama.size() >= 2 && data.produk_lama.size() <= 120 &&
+        data.produk_pengganti is string && data.produk_pengganti.size() >= 2 && data.produk_pengganti.size() <= 120 &&
+        data.alasan is string && data.alasan.size() >= 2 && data.alasan.size() <= 250 &&
+        data.tanggal is string && data.tanggal.size() >= 4 && data.tanggal.size() <= 40 &&
+        (!('created_by' in data) || (data.created_by is string && data.created_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['aksi', 'target_label', 'detail', 'actor_uid', 'actor_nama', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['aksi', 'target_label', 'detail', 'actor_uid', 'actor_nama', 'createdAt', 'updatedAt']) &&
+        data.aksi is string && data.aksi.size() >= 2 && data.aksi.size() <= 60 &&
+        data.target_label is string && data.target_label.size() >= 2 && data.target_label.size() <= 120 &&
+        data.detail is string && data.detail.size() >= 2 && data.detail.size() <= 400 &&
+        isValidId(data.actor_uid) &&
+        data.actor_nama is string && data.actor_nama.size() >= 2 && data.actor_nama.size() <= 100 &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -343,12 +385,12 @@ service cloud.firestore {
           (
             existing().status != 'diambil' &&
             ((isAgen() && existing().agen_id == request.auth.uid) || isKorwil()) &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['total_terkumpul', 'status', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['total_terkumpul', 'status', 'status_pengiriman', 'updatedAt'])
           ) ||
           (
             existing().member_id == request.auth.uid &&
             existing().status == 'aktif' &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'grup_arisan', 'updatedAt'])
           )
         );
       allow delete: if isSignedIn() && isValidId(subscriptionId) && (
@@ -487,6 +529,45 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time;
       allow delete: if isAdmin() && isValidId(settlementId);
+    }
+
+    match /warehouse_inventory/{itemId} {
+      allow get: if isAdmin() && isValidId(itemId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isAdmin() && isValidId(itemId) &&
+        isValidWarehouseInventory(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(itemId) &&
+        isValidWarehouseInventory(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(itemId);
+    }
+
+    match /product_substitutions/{subId} {
+      allow get: if isValidId(subId);
+      allow list: if true;
+      allow create: if isAdmin() && isValidId(subId) &&
+        isValidProductSubstitution(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(subId) &&
+        isValidProductSubstitution(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(subId);
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isAdmin() && isValidId(logId);
+      allow list: if isBootstrappedAdmin();
+      allow create: if isAdmin() && isValidId(logId) &&
+        isValidAuditLog(incoming()) &&
+        incoming().actor_uid == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update, delete: if false;
     }
   }
 }

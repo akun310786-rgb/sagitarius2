@@ -11,6 +11,13 @@ export type PackageCategory = 'bunda' | 'anak' | 'pilihan' | 'uang' | 'satuan';
 
 export type SubscriptionStatus = 'aktif' | 'lunas' | 'diambil';
 
+export type DeliveryStage =
+  | 'menunggu_lunas'
+  | 'dikemas_gudang'
+  | 'kirim_korwil'
+  | 'siap_diambil'
+  | 'selesai';
+
 export type TransactionType = 'setoran' | 'penarikan';
 
 export type DepositMethod =
@@ -84,6 +91,9 @@ export interface Subscription {
   frekuensi?: 'harian' | 'mingguan';
   durasi_minggu?: number;
   status: SubscriptionStatus;
+  status_pengiriman?: DeliveryStage;
+  grup_arisan?: string;
+  kode_referral_agen?: string;
   qr_code_token: string;
   jadwal_ambil?: string;
   daftar_isi?: string[];
@@ -171,6 +181,42 @@ export interface AgentSettlement {
   catatan?: string;
   tanggal: string;
   validated_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface WarehouseInventoryItem {
+  id: string;
+  item_nama: string;
+  stok_tersedia: number;
+  harga_beli_satuan: number;
+  satuan: string;
+  catatan?: string;
+  updated_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface ProductSubstitution {
+  id: string;
+  package_id: string;
+  package_nama: string;
+  produk_lama: string;
+  produk_pengganti: string;
+  alasan: string;
+  tanggal: string;
+  created_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  aksi: string;
+  target_label: string;
+  detail: string;
+  actor_uid: string;
+  actor_nama: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 }

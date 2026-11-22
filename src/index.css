@@ -56,4 +56,24 @@
   .no-print {
     display: none !important;
   }
+
+  body.printing-thermal-receipt * {
+    visibility: hidden !important;
+  }
+
+  body.printing-thermal-receipt .thermal-receipt-sheet,
+  body.printing-thermal-receipt .thermal-receipt-sheet * {
+    visibility: visible !important;
+  }
+
+  body.printing-thermal-receipt .thermal-receipt-sheet {
+    display: block !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 58mm !important;
+    margin: 0 !important;
+    padding: 4mm !important;
+    background: #ffffff !important;
+  }
 }

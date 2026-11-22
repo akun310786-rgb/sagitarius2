@@ -14,6 +14,11 @@ const QUICK_PROMPTS = [
   'Alamat kantor & nomor WA CS resmi?',
 ];
 
+const MEMBER_QUICK_PROMPTS = [
+  'Berapa sisa pelunasan tabungan saya?',
+  'Cek status paket & kupon Door Prize saya',
+];
+
 const WELCOME_MESSAGE: ChatMessage = {
   role: 'model',
   text: 'Assalamu’alaikum! Saya CS Online Sagitarius Parcel. Silakan tanyakan detail Paket Bunda, Paket Anak, Diamond/Sultan, Paket Uang, 50 Barang Satuan, atau cara daftar tabungan Lebaran.',
@@ -22,11 +27,15 @@ const WELCOME_MESSAGE: ChatMessage = {
 interface GeminiCSChatProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  memberContext?: string;
+  memberLabel?: string;
 }
 
 export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
   isOpen: controlledOpen,
   onOpenChange,
+  memberContext,
+  memberLabel,
 }) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen;
@@ -67,7 +76,10 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
       const res = await fetch('/api/cs-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: nextMessages,
+          ...(memberContext ? { memberContext } : {}),
+        }),
       });
 
       const data = (await res.json()) as { reply?: string; error?: string };
@@ -97,6 +109,10 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
     void sendMessage(input);
   };
 
+  const activeQuickPrompts = memberContext
+    ? [...MEMBER_QUICK_PROMPTS, ...QUICK_PROMPTS.slice(0, 2)]
+    : QUICK_PROMPTS;
+
   return (
     <div className="fixed right-4 bottom-4 z-50 no-print">
       {!isOpen ? (
@@ -125,7 +141,7 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
               <div>
                 <p className="text-sm font-bold leading-tight text-[#E8CA82]">CS Online Sagitarius</p>
                 <p className="text-[11px] text-stone-200">
-                  PT. Sagitarius Trinunggal Karya
+                  {memberLabel ? `Mode Personal: ${memberLabel}` : 'PT. Sagitarius Trinunggal Karya'}
                 </p>
               </div>
             </div>
@@ -149,6 +165,12 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
               </button>
             </div>
           </div>
+
+          {memberContext && (
+            <div className="border-b border-[#E4DCCB] bg-emerald-50 px-3.5 py-1.5 text-[11px] font-medium text-emerald-900">
+              Terhubung dengan data tabungan &amp; kupon Door Prize Anda.
+            </div>
+          )}
 
           {/* Messages */}
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-[#FAF7F2] p-4">
@@ -196,7 +218,7 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
               <div className="space-y-1.5 pt-2">
                 <p className="text-[11px] font-semibold text-stone-500">Pertanyaan Cepat:</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {QUICK_PROMPTS.map((prompt) => (
+                  {activeQuickPrompts.map((prompt) => (
                     <button
                       key={prompt}
                       type="button"

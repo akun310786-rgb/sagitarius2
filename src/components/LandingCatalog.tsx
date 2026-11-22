@@ -67,6 +67,7 @@ interface LandingCatalogProps {
   onToggleWishlist: (pkgId: string) => void;
   onOpenChat: () => void;
   focusSearchTrigger?: number;
+  referralAgent?: AgentDirectoryItem | null;
 }
 
 const BROCHURE_GALLERY = [
@@ -123,6 +124,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   onToggleWishlist,
   onOpenChat,
   focusSearchTrigger,
+  referralAgent,
 }) => {
   // Katalog Filters
   const [activeCategory, setActiveCategory] = useState<'all' | PackageCategory>('all');
@@ -1193,6 +1195,32 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
 
   return (
     <div className="space-y-10 pb-12">
+      {referralAgent && (
+        <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#0C3328] to-[#164A3B] px-5 py-3.5 text-white shadow-sm">
+            <div className="flex items-center gap-3">
+              <ShieldCheck className="h-5 w-5 shrink-0 text-[#E8CA82]" />
+              <div className="text-xs">
+                <p className="font-bold text-[#E8CA82]">
+                  Tautan Pendaftaran Resmi Agen ({referralAgent.kode_agen})
+                </p>
+                <p className="text-stone-200">
+                  Pendamping Anda: <strong>{referralAgent.nama}</strong> — Wilayah{' '}
+                  {referralAgent.wilayah} ({referralAgent.kecamatan}). Agen otomatis terpilih saat Anda mendaftar paket.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openCategoryCatalog('all')}
+              className="rounded-lg bg-[#E8CA82] px-3.5 py-1.5 text-xs font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
+            >
+              Pilih Paket Sekarang
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Split Hero Section */}
       <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         <div className="grid items-center gap-8 lg:grid-cols-12">

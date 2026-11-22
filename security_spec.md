@@ -11,6 +11,9 @@
 8. **Official Settings Integrity**: `/app_settings/public` stores official company bank transfer info and broadcast announcements, readable publicly (`get` on `public` doc ID) and writable strictly by Admin.
 9. **Door Prize Transparency & Control**: `/door_prize_draws/{drawId}` may only be created, updated, or deleted by Admin referencing an existing `subscription_id`.
 10. **Agent Settlements & Commission Claims**: `/agent_settlements/{settlementId}` may only be created by the authenticated `agen_id` (or Korwil/Admin) in `status == "pending"`, and only Admin may validate (`verified` / `rejected`).
+11. **Warehouse Inventory & HPP Isolation**: `/warehouse_inventory/{itemId}` holds internal unit purchase costs and warehouse stock counts, readable and writable strictly by Admin.
+12. **Official Product Substitutions**: `/product_substitutions/{subId}` publishes brochure-compliant equivalent-value item replacements (`allow list: if true`), modifiable strictly by Admin.
+13. **Immutable Audit Logs**: `/audit_logs/{logId}` is append-only (`create` strictly by Admin with `actor_uid == request.auth.uid`), with `update` and `delete` strictly denied.
 
 ## Dirty Dozen Payloads (Must Return PERMISSION_DENIED)
 1. Unauthenticated `create` on `/users/attacker`

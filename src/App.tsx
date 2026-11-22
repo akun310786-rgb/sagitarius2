@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Globe,
@@ -60,14 +60,17 @@ import {
   AgentDirectoryItem,
   AgentSettlement,
   AppPublicSettings,
+  AuditLogEntry,
   ContactMessage,
   Deposit,
   DoorPrizeDraw,
   ParcelPackage,
+  ProductSubstitution,
   PublicPage,
   SimulationLock,
   Subscription,
   UserProfile,
+  WarehouseInventoryItem,
   WILAYAH_LIST,
   WilayahPriangan,
 } from './types';
@@ -123,6 +126,7 @@ export default function App() {
   const [agents, setAgents] = useState<AgentDirectoryItem[]>(DEFAULT_AGENTS);
   const [appSettings, setAppSettings] = useState<AppPublicSettings>(DEFAULT_APP_SETTINGS);
   const [doorPrizeDraws, setDoorPrizeDraws] = useState<DoorPrizeDraw[]>([]);
+  const [productSubstitutions, setProductSubstitutions] = useState<ProductSubstitution[]>([]);
 
   // Live Firestore User Data
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -130,10 +134,33 @@ export default function App() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
   const [agentSettlements, setAgentSettlements] = useState<AgentSettlement[]>([]);
+  const [warehouseInventory, setWarehouseInventory] = useState<WarehouseInventoryItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
-  // Simulation Lock & Agent Selection across views
+  // Simulation Lock & Agent Selection + URL Referral (?agen= / ?ref=)
   const [lockedSimulation, setLockedSimulation] = useState<SimulationLock | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string>(DEFAULT_AGENTS[0].id);
+  const [referralCodeParam] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('agen') || params.get('ref') || '').trim();
+  });
+
+  const referralAgent = useMemo(() => {
+    if (!referralCodeParam) return null;
+    const target = referralCodeParam.toLowerCase();
+    return (
+      agents.find((a) => a.aktif && a.kode_agen.toLowerCase() === target) ||
+      agents.find((a) => a.kode_agen.toLowerCase() === target) ||
+      null
+    );
+  }, [agents, referralCodeParam]);
+
+  useEffect(() => {
+    if (referralAgent) {
+      setSelectedAgentId(referralAgent.id);
+    }
+  }, [referralAgent]);
 
   // Listen to public Firestore packages & agents (fallback gracefully to defaults)
   useEffect(() => {
@@ -213,11 +240,27 @@ export default function App() {
       }
     );
 
+    const unsubSubstitutions = onSnapshot(
+      query(collection(db, 'product_substitutions'), orderBy('createdAt', 'desc')),
+      (snap) => {
+        setProductSubstitutions(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<ProductSubstitution, 'id'>),
+          }))
+        );
+      },
+      () => {
+        // Retain empty list if offline or uninitialized
+      }
+    );
+
     return () => {
       unsubPkg();
       unsubAgents();
       unsubSettings();
       unsubDoorPrize();
+      unsubSubstitutions();
     };
   }, []);
 
@@ -232,6 +275,8 @@ export default function App() {
         setAllUsers([]);
         setContactMessages([]);
         setAgentSettlements([]);
+        setWarehouseInventory([]);
+        setAuditLogs([]);
         setAuthReady(true);
         return;
       }
@@ -332,6 +377,8 @@ export default function App() {
 
     let unsubUsers: (() => void) | undefined;
     let unsubMessages: (() => void) | undefined;
+    let unsubInventory: (() => void) | undefined;
+    let unsubAuditLogs: (() => void) | undefined;
     if (isBootAdmin) {
       unsubUsers = onSnapshot(
         collection(db, 'users'),
@@ -351,6 +398,30 @@ export default function App() {
           );
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'contact_messages')
+      );
+      unsubInventory = onSnapshot(
+        collection(db, 'warehouse_inventory'),
+        (snap) => {
+          setWarehouseInventory(
+            snap.docs.map((d) => ({
+              id: d.id,
+              ...(d.data() as Omit<WarehouseInventoryItem, 'id'>),
+            }))
+          );
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'warehouse_inventory')
+      );
+      unsubAuditLogs = onSnapshot(
+        query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc')),
+        (snap) => {
+          setAuditLogs(
+            snap.docs.map((d) => ({
+              id: d.id,
+              ...(d.data() as Omit<AuditLogEntry, 'id'>),
+            }))
+          );
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'audit_logs')
       );
     }
 
@@ -383,6 +454,8 @@ export default function App() {
       unsubDeps();
       if (unsubUsers) unsubUsers();
       if (unsubMessages) unsubMessages();
+      if (unsubInventory) unsubInventory();
+      if (unsubAuditLogs) unsubAuditLogs();
       if (unsubSettlements) unsubSettlements();
     };
   }, [authReady, firebaseUser, userProfile?.role]);
@@ -636,6 +709,40 @@ export default function App() {
   };
 
   const wishlistPackages = packages.filter((p) => wishlistIds.includes(p.id));
+
+  const memberContext = useMemo(() => {
+    if (!userProfile) return undefined;
+    const mySubs = subscriptions.filter((s) => s.member_id === userProfile.uid);
+    const pendingCount = deposits.filter(
+      (d) => d.member_id === userProfile.uid && d.status_verifikasi === 'pending'
+    ).length;
+    const myWins = doorPrizeDraws.filter((dp) => dp.member_id === userProfile.uid);
+    const subSummaries =
+      mySubs.length === 0
+        ? 'Belum memiliki kontrak paket aktif.'
+        : mySubs
+            .slice(0, 5)
+            .map((s) => {
+              const sisa = Math.max(0, s.target_nominal - (s.total_terkumpul || 0));
+              const kupon = `DP-${s.qr_code_token}`.slice(0, 32);
+              return `${s.package_nama} (Status: ${s.status}, Pengiriman: ${
+                s.status_pengiriman || 'menunggu_lunas'
+              }, Terkumpul: ${formatRupiah(s.total_terkumpul)} dari ${formatRupiah(
+                s.target_nominal
+              )}, Sisa pelunasan: ${formatRupiah(sisa)}, Agen: ${
+                s.agen_nama || s.agen_kode || '-'
+              }, Kupon Door Prize: ${kupon}${s.grup_arisan ? `, Grup: ${s.grup_arisan}` : ''})`;
+            })
+            .join(' | ');
+    const winText =
+      myWins.length > 0
+        ? ` | Pemenang Door Prize: ${myWins.map((w) => `${w.hadiah} (${w.kupon_kode})`).join(', ')}`
+        : '';
+    return `Nama: ${userProfile.nama} | Peran: ${userProfile.role} | Wilayah: ${userProfile.wilayah} | Transfer Pending: ${pendingCount} | Kontrak: ${subSummaries}${winText}`.slice(
+      0,
+      2200
+    );
+  }, [userProfile, subscriptions, deposits, doorPrizeDraws]);
 
   const navLinkClass = (isActive: boolean) =>
     `relative py-1 text-xs lg:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
@@ -1009,6 +1116,7 @@ export default function App() {
               onToggleWishlist={handleToggleWishlist}
               onOpenChat={() => setChatOpen(true)}
               focusSearchTrigger={focusSearchTrigger}
+              referralAgent={referralAgent}
             />
           )}
 
@@ -1021,6 +1129,8 @@ export default function App() {
               deposits={deposits}
               appSettings={appSettings}
               doorPrizeDraws={doorPrizeDraws}
+              productSubstitutions={productSubstitutions}
+              referralAgent={referralAgent}
               lockedSimulation={lockedSimulation}
               onClearLockedSimulation={() => setLockedSimulation(null)}
               onNeedLogin={openAuthModal}
@@ -1039,6 +1149,9 @@ export default function App() {
               appSettings={appSettings}
               doorPrizeDraws={doorPrizeDraws}
               agentSettlements={agentSettlements}
+              warehouseInventory={warehouseInventory}
+              productSubstitutions={productSubstitutions}
+              auditLogs={auditLogs}
               onNeedLogin={openAuthModal}
             />
           )}
@@ -1440,7 +1553,12 @@ export default function App() {
         />
 
         <OfflineIndicator />
-        <GeminiCSChat isOpen={chatOpen} onOpenChange={setChatOpen} />
+        <GeminiCSChat
+          isOpen={chatOpen}
+          onOpenChange={setChatOpen}
+          memberContext={memberContext}
+          memberLabel={userProfile?.nama}
+        />
       </div>
     </ErrorBoundary>
   );
