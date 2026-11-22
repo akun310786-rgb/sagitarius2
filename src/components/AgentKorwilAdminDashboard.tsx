@@ -1,0 +1,1 @@
+type AdminTab = 'agen' | 'kontrak' | 'master' | 'gudang' | 'users' | 'pesan' | 'pengaturan';
