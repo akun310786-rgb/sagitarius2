@@ -399,6 +399,169 @@
         }
       },
       "required": ["nama", "no_wa", "pesan", "status", "createdAt", "updatedAt"]
+    },
+    "AppPublicSettings": {
+      "title": "AppPublicSettings",
+      "description": "Pengaturan resmi rekening transfer bank, catatan QRIS, dan broadcast pengumuman untuk member.",
+      "type": "object",
+      "properties": {
+        "bank_nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "bank_rekening": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 50
+        },
+        "bank_atas_nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "qris_catatan": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "pengumuman_judul": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "pengumuman_isi": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "pengumuman_aktif": {
+          "type": "boolean"
+        },
+        "updated_by": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["bank_nama", "bank_rekening", "bank_atas_nama", "qris_catatan", "pengumuman_judul", "pengumuman_isi", "pengumuman_aktif", "createdAt", "updatedAt"]
+    },
+    "DoorPrizeDraw": {
+      "title": "DoorPrizeDraw",
+      "description": "Catatan pemenang undian kupon Door Prize Sagitarius Parcel.",
+      "type": "object",
+      "properties": {
+        "hadiah": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "kupon_kode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 60
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "member_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "member_nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "wilayah": {
+          "type": "string",
+          "enum": ["Ciamis", "Tasikmalaya", "Banjar", "Pangandaran", "Garut"]
+        },
+        "tanggal_undi": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "drawn_by": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["hadiah", "kupon_kode", "subscription_id", "member_id", "member_nama", "wilayah", "tanggal_undi", "createdAt", "updatedAt"]
+    },
+    "AgentSettlement": {
+      "title": "AgentSettlement",
+      "description": "Pengajuan setor tunai agen ke pusat dan klaim pencairan komisi agen.",
+      "type": "object",
+      "properties": {
+        "agen_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "agen_kode": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "agen_nama": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "wilayah": {
+          "type": "string",
+          "enum": ["Ciamis", "Tasikmalaya", "Banjar", "Pangandaran", "Garut"]
+        },
+        "jenis": {
+          "type": "string",
+          "enum": ["setor_tunai_pusat", "pencairan_komisi"]
+        },
+        "nominal": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "verified", "rejected"]
+        },
+        "catatan": {
+          "type": "string",
+          "maxLength": 250
+        },
+        "tanggal": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "validated_by": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["agen_id", "agen_nama", "wilayah", "jenis", "nominal", "status", "tanggal", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -429,6 +592,18 @@
     "/contact_messages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },
       "description": "Kotak pesan konsultasi dari pengunjung dan member."
+    },
+    "/app_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/AppPublicSettings" },
+      "description": "Pengaturan resmi rekening bank, QRIS, dan pengumuman broadcast."
+    },
+    "/door_prize_draws/{drawId}": {
+      "schema": { "$ref": "#/entities/DoorPrizeDraw" },
+      "description": "Daftar pemenang undian kupon Door Prize member."
+    },
+    "/agent_settlements/{settlementId}": {
+      "schema": { "$ref": "#/entities/AgentSettlement" },
+      "description": "Rekap setor tunai harian agen ke pusat dan pencairan komisi agen."
     }
   }
 }

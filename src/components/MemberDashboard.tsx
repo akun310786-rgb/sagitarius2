@@ -2,14 +2,27 @@ import React, { useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Award,
+  Building2,
+  CalendarClock,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
+  Copy,
   FileImage,
+  Gift,
   Lock,
+  Megaphone,
   MessageCircle,
+  PackageCheck,
   Plus,
   Printer,
   QrCode,
+  RefreshCw,
+  Ticket,
+  Trash2,
   Upload,
   X,
   XCircle,
@@ -18,14 +31,19 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   serverTimestamp,
+  updateDoc,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { formatRupiah, formatWhatsAppUrl } from '../data/catalogData';
 import {
   AgentDirectoryItem,
+  AppPublicSettings,
   Deposit,
   DepositMethod,
+  DoorPrizeDraw,
   ParcelPackage,
   SimulationLock,
   Subscription,
@@ -42,9 +60,18 @@ interface MemberDashboardProps {
   agents: AgentDirectoryItem[];
   subscriptions: Subscription[];
   deposits: Deposit[];
+  appSettings: AppPublicSettings;
+  doorPrizeDraws: DoorPrizeDraw[];
   lockedSimulation: SimulationLock | null;
   onClearLockedSimulation: () => void;
   onNeedLogin: () => void;
+}
+
+function getCreatedMillis(ts: unknown): number {
+  const obj = ts as { seconds?: number; toMillis?: () => number } | undefined;
+  if (obj && typeof obj.toMillis === 'function') return obj.toMillis();
+  if (obj && typeof obj.seconds === 'number') return obj.seconds * 1000;
+  return Date.now();
 }
 
 async function compressImageToDataUrl(file: File): Promise<string> {
@@ -80,6 +107,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   agents,
   subscriptions,
   deposits,
+  appSettings,
+  doorPrizeDraws,
   lockedSimulation,
   onClearLockedSimulation,
   onNeedLogin,
@@ -98,7 +127,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     userProfile?.wilayah || 'Tasikmalaya'
   );
   const [durasiMinggu, setDurasiMinggu] = useState<number>(
-    lockedSimulation?.durasiMinggu || 30
+    lockedSimulation?.durasiMinggu || 45
   );
   const [frekuensi, setFrekuensi] = useState<'harian' | 'mingguan'>(
     lockedSimulation?.frekuensi || 'mingguan'
@@ -110,10 +139,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [depositNominal, setDepositNominal] = useState<string>('25000');
   const [depositNote, setDepositNote] = useState<string>('');
   const [proofDataUrl, setProofDataUrl] = useState<string>('');
-  const [withdrawMethod, setWithdrawMethod] = useState<'pencairan_tunai' | 'transfer_keluar'>('pencairan_tunai');
+  const [withdrawMethod, setWithdrawMethod] = useState<'pencairan_tunai' | 'transfer_keluar'>(
+    'pencairan_tunai'
+  );
   const [uploadingDeposit, setUploadingDeposit] = useState(false);
   const [previewProofUrl, setPreviewProofUrl] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string>('');
+  const [copiedBank, setCopiedBank] = useState(false);
+
+  // Contract Controls: Expand Package Items / Change Agent / Cancel Contract
+  const [showPackageContents, setShowPackageContents] = useState(false);
+  const [showAgentSwitch, setShowAgentSwitch] = useState(false);
+  const [switchAgentId, setSwitchAgentId] = useState('');
+  const [updatingAgent, setUpdatingAgent] = useState(false);
+  const [confirmCancelContract, setConfirmCancelContract] = useState(false);
 
   const mySubscriptions = useMemo(() => {
     if (!userProfile) return [];
@@ -125,6 +164,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     return mySubscriptions.find((s) => s.id === selectedSubId) || mySubscriptions[0];
   }, [mySubscriptions, selectedSubId]);
 
+  const activePackageMeta = useMemo(() => {
+    if (!activeSub) return null;
+    return packages.find((p) => p.id === activeSub.package_id) || null;
+  }, [packages, activeSub]);
+
   const myAllDeposits = useMemo(() => {
     if (!userProfile) return [];
     return deposits.filter((d) => d.member_id === userProfile.uid);
@@ -134,6 +178,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     if (!activeSub) return [];
     return deposits.filter((d) => d.subscription_id === activeSub.id);
   }, [deposits, activeSub]);
+
+  const verifiedActiveDeposits = useMemo(() => {
+    return activeDeposits.filter((d) => d.status_verifikasi === 'verified');
+  }, [activeDeposits]);
 
   const pendingOrRejectedDeposits = useMemo(() => {
     return activeDeposits.filter((d) => d.status_verifikasi !== 'verified');
@@ -148,6 +196,61 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     () => agents.find((a) => a.id === agentId) || agents[0],
     [agents, agentId]
   );
+
+  const installmentSchedule = useMemo(() => {
+    if (!activeSub) return null;
+    const totalWeeks = activeSub.durasi_minggu || Math.max(12, Math.round((activePackageMeta?.durasi_hari || 325) / 7));
+    const startMs = getCreatedMillis(activeSub.createdAt);
+    const elapsedDays = Math.max(1, Math.floor((Date.now() - startMs) / (1000 * 60 * 60 * 24)) + 1);
+    const currentWeek = Math.min(totalWeeks, Math.max(1, Math.ceil(elapsedDays / 7)));
+    const expectedByNow = Math.min(
+      activeSub.target_nominal,
+      Math.round((activeSub.target_nominal / totalWeeks) * currentWeek)
+    );
+    const actual = activeSub.total_terkumpul || 0;
+    const diff = actual - expectedByNow;
+    const estEndDate = new Date(startMs + totalWeeks * 7 * 24 * 60 * 60 * 1000);
+    const estEndStr = estEndDate.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    let paceLabel = 'Sesuai Jadwal';
+    let paceTone = 'bg-emerald-50 text-emerald-900 border-emerald-200';
+    if (activeSub.status === 'lunas' || activeSub.status === 'diambil' || actual >= activeSub.target_nominal) {
+      paceLabel = 'Sudah Lunas';
+      paceTone = 'bg-emerald-100 text-emerald-950 border-emerald-300';
+    } else if (diff >= (activeSub.setoran_nominal || 20000)) {
+      paceLabel = 'Lebih Cepat dari Jadwal';
+      paceTone = 'bg-emerald-50 text-emerald-900 border-emerald-200';
+    } else if (diff < -(activeSub.setoran_nominal || 20000)) {
+      paceLabel = 'Perlu Tambah Setoran';
+      paceTone = 'bg-amber-50 text-amber-900 border-amber-200';
+    }
+
+    return {
+      totalWeeks,
+      currentWeek,
+      expectedByNow,
+      diff,
+      estEndStr,
+      paceLabel,
+      paceTone,
+      totalDays: activePackageMeta?.durasi_hari || totalWeeks * 7,
+      elapsedDays,
+    };
+  }, [activeSub, activePackageMeta]);
+
+  const handleCopyRekening = async () => {
+    try {
+      await navigator.clipboard.writeText(appSettings.bank_rekening);
+      setCopiedBank(true);
+      setTimeout(() => setCopiedBank(false), 2200);
+    } catch {
+      setFeedbackMsg(`Nomor Rekening Resmi: ${appSettings.bank_rekening}`);
+    }
+  };
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +287,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         status: 'aktif',
         qr_code_token: qrToken,
         jadwal_ambil: selectedPkgForNew.jadwal_ambil,
-        daftar_isi: selectedPkgForNew.daftar_isi.slice(0, 20),
+        daftar_isi: selectedPkgForNew.daftar_isi.slice(0, 25),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -198,6 +301,47 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       handleFirestoreError(err, OperationType.CREATE, 'subscriptions');
     } finally {
       setSubmittingContract(false);
+    }
+  };
+
+  const handleSwitchAgent = async () => {
+    if (!activeSub || !switchAgentId) return;
+    const targetAgent = agents.find((a) => a.id === switchAgentId);
+    if (!targetAgent) return;
+    setUpdatingAgent(true);
+    setFeedbackMsg('');
+    try {
+      await updateDoc(doc(db, 'subscriptions', activeSub.id), {
+        agen_id: targetAgent.id,
+        agen_kode: targetAgent.kode_agen,
+        agen_nama: targetAgent.nama,
+        wilayah: targetAgent.wilayah,
+        updatedAt: serverTimestamp(),
+      });
+      setShowAgentSwitch(false);
+      setFeedbackMsg(
+        `Agen pendamping untuk kontrak ${activeSub.package_nama} berhasil dialihkan ke ${targetAgent.nama} (${targetAgent.wilayah}).`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${activeSub.id}`);
+    } finally {
+      setUpdatingAgent(false);
+    }
+  };
+
+  const handleCancelContract = async () => {
+    if (!activeSub || activeSub.total_terkumpul > 0 || activeSub.status !== 'aktif') return;
+    setUpdatingAgent(true);
+    setFeedbackMsg('');
+    try {
+      await deleteDoc(doc(db, 'subscriptions', activeSub.id));
+      setConfirmCancelContract(false);
+      setSelectedSubId('');
+      setFeedbackMsg(`Kontrak ${activeSub.package_nama} berhasil dibatalkan sebelum setoran pertama.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `subscriptions/${activeSub.id}`);
+    } finally {
+      setUpdatingAgent(false);
     }
   };
 
@@ -281,17 +425,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   if (!userProfile) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
-        <div className="rounded-2xl border border-stone-200 bg-white p-8 sm:p-12">
-          <h2 className="font-display text-2xl font-bold text-stone-900 sm:text-3xl">
+        <div className="rounded-2xl border border-[#E4DCCB] bg-white p-8 sm:p-12 shadow-sm">
+          <h2 className="font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
             Masuk ke Buku Tabungan Member
           </h2>
           <p className="mt-3 text-sm text-stone-600">
-            Masuk menggunakan Nomor WhatsApp, Username, Gmail, atau akun Google Anda untuk mengunci simulasi paket, memantau riwayat setoran digital, mengunggah bukti transfer, dan mengunduh Tiket QR Pengambilan.
+            Masuk menggunakan Nomor WhatsApp, Username, Gmail, atau akun Google Anda untuk mengunci simulasi paket, memantau riwayat setoran digital, mengunggah bukti transfer, mengecek kupon Door Prize, dan mengunduh Tiket QR Pengambilan.
           </p>
           <button
             type="button"
             onClick={onNeedLogin}
-            className="mt-6 rounded-lg bg-[#26124A] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#341A63] cursor-pointer"
+            className="mt-6 rounded-xl bg-[#381E5A] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#492974] cursor-pointer"
           >
             Masuk / Daftar Member
           </button>
@@ -306,33 +450,73 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const remainingAmount = activeSub
     ? Math.max(0, activeSub.target_nominal - activeSub.total_terkumpul)
     : 0;
-  const isPaidOff = activeSub ? activeSub.status === 'lunas' || activeSub.status === 'diambil' || activeSub.total_terkumpul >= activeSub.target_nominal : false;
+  const isPaidOff = activeSub
+    ? activeSub.status === 'lunas' ||
+      activeSub.status === 'diambil' ||
+      activeSub.total_terkumpul >= activeSub.target_nominal
+    : false;
   const activeAgentInfo = activeSub ? agents.find((a) => a.id === activeSub.agen_id) : undefined;
+  const couponCode = activeSub ? `DP-${activeSub.qr_code_token.replace(/^SGT-/, '')}` : '';
+  const isCouponEligible = Boolean(
+    activeSub && (activeSub.total_terkumpul > 0 || verifiedActiveDeposits.length > 0)
+  );
+  const myWinningDraws = activeSub
+    ? doorPrizeDraws.filter(
+        (d) => d.member_id === userProfile.uid || d.subscription_id === activeSub.id
+      )
+    : [];
+  const activePackageItems = activeSub?.daftar_isi || activePackageMeta?.daftar_isi || [];
+  const activeBonusThr = activePackageMeta?.bonus_thr || 0;
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+      {/* Broadcast Announcement Banner from Admin */}
+      {appSettings.pengumuman_aktif && appSettings.pengumuman_isi && (
+        <div className="no-print flex items-start gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#381E5A] to-[#281443] px-5 py-4 text-white shadow-sm">
+          <Megaphone className="mt-0.5 h-5 w-5 shrink-0 text-[#E8CA82]" />
+          <div className="text-xs leading-relaxed">
+            <p className="font-bold text-[#E8CA82]">
+              {appSettings.pengumuman_judul || 'Pengumuman Resmi Sagitarius Parcel'}
+            </p>
+            <p className="mt-0.5 text-stone-100 whitespace-pre-line">{appSettings.pengumuman_isi}</p>
+          </div>
+        </div>
+      )}
+
       {/* Header Bar */}
-      <div className="flex flex-col gap-4 border-b border-stone-200 pb-6 sm:flex-row sm:items-center sm:justify-between">
+      <div className="no-print flex flex-col gap-4 border-b border-[#E4DCCB] pb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold text-emerald-800">
-            Dashboard Member · {userProfile.wilayah}
+          <p className="text-xs font-semibold text-[#0C3328]">
+            Dashboard Member · Wilayah {userProfile.wilayah}
           </p>
-          <h1 className="mt-1 font-display text-2xl font-bold text-stone-900 sm:text-3xl">
+          <h1 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
             Buku Tabungan Digital — {userProfile.nama}
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowNewContractForm((v) => !v)}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-900 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-emerald-800 whitespace-nowrap shrink-0 cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          <span>{showNewContractForm ? 'Tutup Form Daftar' : 'Tambah Kontrak Paket'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {activeSub && (
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-2 rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 text-xs font-semibold text-[#381E5A] transition hover:bg-[#FAF7F2] whitespace-nowrap cursor-pointer"
+            >
+              <Printer className="h-4 w-4 text-[#C8A053]" />
+              <span>Cetak Kartu Tabungan</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowNewContractForm((v) => !v)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2.5 text-xs font-semibold text-[#E8CA82] transition hover:bg-[#144738] whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>{showNewContractForm ? 'Tutup Form Daftar' : 'Tambah Kontrak Paket'}</span>
+          </button>
+        </div>
       </div>
 
       {feedbackMsg && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
+        <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
           {feedbackMsg}
         </div>
       )}
@@ -341,14 +525,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       {(showNewContractForm || lockedSimulation || mySubscriptions.length === 0) && (
         <form
           onSubmit={handleCreateContract}
-          className="rounded-2xl border border-stone-200 bg-white p-6 sm:p-8"
+          className="no-print rounded-2xl border border-[#E4DCCB] bg-white p-6 sm:p-8 shadow-xs"
         >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold text-amber-800">
+              <p className="text-xs font-semibold text-[#B98E3A]">
                 {lockedSimulation ? 'Simulasi Terkunci Siap Didaftarkan' : 'Pendaftaran Paket Baru'}
               </p>
-              <h2 className="mt-1 font-display text-xl font-bold text-stone-900">
+              <h2 className="mt-1 font-display text-xl font-bold text-[#381E5A]">
                 Pilih Paket Tabungan &amp; Agen Penyetor
               </h2>
             </div>
@@ -372,7 +556,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   if (lockedSimulation) onClearLockedSimulation();
                   setPkgId(e.target.value);
                 }}
-                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-emerald-800 focus:outline-none"
+                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
               >
                 {packages.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -393,7 +577,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   const found = agents.find((a) => a.id === e.target.value);
                   if (found) setWilayah(found.wilayah);
                 }}
-                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-emerald-800 focus:outline-none"
+                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
               >
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -408,7 +592,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               <select
                 value={wilayah}
                 onChange={(e) => setWilayah(e.target.value as WilayahPriangan)}
-                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-emerald-800 focus:outline-none"
+                className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
               >
                 {WILAYAH_LIST.map((w) => (
                   <option key={w} value={w}>
@@ -420,7 +604,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
             <div>
               <label className="block text-xs font-semibold text-stone-700">
-                Jadwal &amp; Durasi
+                Jadwal &amp; Durasi (Minggu)
               </label>
               <div className="mt-1.5 flex gap-2">
                 <select
@@ -434,7 +618,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <input
                   type="number"
                   min={12}
-                  max={48}
+                  max={52}
                   value={durasiMinggu}
                   onChange={(e) => setDurasiMinggu(Number(e.target.value))}
                   className="w-1/2 rounded-lg border border-stone-300 bg-white px-2.5 py-2 font-mono-nums text-sm text-stone-900"
@@ -443,18 +627,27 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-stone-100 pt-4">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#EFE8D8] pt-4">
             <div className="text-xs text-stone-600">
               Target Paket:{' '}
-              <strong className="font-mono-nums text-stone-900">
+              <strong className="font-mono-nums text-[#381E5A]">
                 {formatRupiah(selectedPkgForNew?.harga_total || 0)}
               </strong>{' '}
               · Pengambilan: <strong>{selectedPkgForNew?.jadwal_ambil}</strong>
+              {selectedPkgForNew && selectedPkgForNew.bonus_thr > 0 && (
+                <>
+                  {' '}
+                  · Bonus THR:{' '}
+                  <strong className="text-[#0C3328]">
+                    {formatRupiah(selectedPkgForNew.bonus_thr)}
+                  </strong>
+                </>
+              )}
             </div>
             <button
               type="submit"
               disabled={submittingContract}
-              className="rounded-lg bg-emerald-900 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-60 cursor-pointer"
+              className="rounded-xl bg-[#0C3328] px-6 py-2.5 text-sm font-semibold text-[#E8CA82] transition hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
             >
               {submittingContract ? 'Menyimpan Kontrak...' : 'Aktifkan Kontrak Tabungan'}
             </button>
@@ -466,42 +659,110 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       {mySubscriptions.length > 0 && activeSub && (
         <>
           {mySubscriptions.length > 1 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="no-print flex flex-wrap gap-2">
               {mySubscriptions.map((sub) => (
                 <button
                   key={sub.id}
                   type="button"
-                  onClick={() => setSelectedSubId(sub.id)}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+                  onClick={() => {
+                    setSelectedSubId(sub.id);
+                    setShowAgentSwitch(false);
+                    setConfirmCancelContract(false);
+                  }}
+                  className={`rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer ${
                     sub.id === activeSub.id
-                      ? 'bg-emerald-900 text-white'
-                      : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                      ? 'bg-[#381E5A] text-[#E8CA82]'
+                      : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
                   }`}
                 >
-                  {sub.package_nama} ({Math.min(100, Math.round((sub.total_terkumpul / sub.target_nominal) * 100))}%)
+                  {sub.package_nama} (
+                  {Math.min(100, Math.round((sub.total_terkumpul / sub.target_nominal) * 100))}%)
                 </button>
               ))}
             </div>
           )}
 
+          {/* Print-Only Formal Passbook Sheet */}
+          <div className="hidden print:block rounded-xl border border-stone-300 bg-white p-6 text-stone-900">
+            <div className="flex items-center justify-between border-b border-stone-300 pb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider">PT. SAGITARIUS TRINUNGGAL KARYA</p>
+                <h2 className="text-xl font-bold">KARTU BUKU TABUNGAN PARCEL LEBARAN</h2>
+                <p className="text-xs text-stone-600">
+                  Member: {userProfile.nama} · WA: {userProfile.no_wa} · Wilayah: {activeSub.wilayah}
+                </p>
+              </div>
+              <div className="text-right text-xs">
+                <p className="font-mono font-bold">{activeSub.qr_code_token}</p>
+                <p>Kupon Door Prize: {couponCode}</p>
+                <p>Dicetak: {new Date().toLocaleDateString('id-ID')}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-4 gap-3 text-xs">
+              <div>
+                <p className="text-stone-500">Paket</p>
+                <p className="font-bold">{activeSub.package_nama}</p>
+              </div>
+              <div>
+                <p className="text-stone-500">Total Terkumpul</p>
+                <p className="font-bold">{formatRupiah(activeSub.total_terkumpul)}</p>
+              </div>
+              <div>
+                <p className="text-stone-500">Target Paket</p>
+                <p className="font-bold">{formatRupiah(activeSub.target_nominal)}</p>
+              </div>
+              <div>
+                <p className="text-stone-500">Status &amp; Agen</p>
+                <p className="font-bold">
+                  {activeSub.status.toUpperCase()} ({activeSub.agen_nama || activeSub.agen_kode})
+                </p>
+              </div>
+            </div>
+            {verifiedActiveDeposits.length > 0 && (
+              <table className="mt-4 w-full border-t border-stone-300 text-left text-xs">
+                <thead>
+                  <tr className="border-b border-stone-200">
+                    <th className="py-1.5">Tanggal</th>
+                    <th className="py-1.5">Metode</th>
+                    <th className="py-1.5">Catatan</th>
+                    <th className="py-1.5 text-right">Nominal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {verifiedActiveDeposits.map((d) => (
+                    <tr key={d.id} className="border-b border-stone-100">
+                      <td className="py-1">{d.tanggal}</td>
+                      <td className="py-1">{d.metode}</td>
+                      <td className="py-1">{d.catatan || '-'}</td>
+                      <td className="py-1 text-right font-mono">
+                        {d.jenis_transaksi === 'penarikan' ? '-' : '+'}
+                        {formatRupiah(d.nominal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
           {/* Main Passbook + QR Grid */}
-          <div className="grid gap-6 lg:grid-cols-12">
-            {/* Left 8 cols: Passbook Summary & Upload Transfer */}
+          <div className="no-print grid gap-6 lg:grid-cols-12">
+            {/* Left 8 cols: Passbook Summary, Tracker, Contents & Upload Transfer */}
             <div className="space-y-6 lg:col-span-8">
-              <div className="rounded-2xl border border-stone-200 bg-white p-6">
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-semibold text-emerald-800">
+                    <p className="text-xs font-semibold text-[#0C3328]">
                       {activeSub.wilayah} · Agen: {activeSub.agen_nama || activeSub.agen_kode}
                     </p>
-                    <h2 className="mt-1 font-display text-2xl font-bold text-stone-900">
+                    <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A]">
                       {activeSub.package_nama}
                     </h2>
                   </div>
                   <span
                     className={`rounded-md px-3 py-1 text-xs font-semibold ${
                       activeSub.status === 'diambil'
-                        ? 'bg-stone-900 text-white'
+                        ? 'bg-[#381E5A] text-white'
                         : isPaidOff
                           ? 'bg-emerald-100 text-emerald-900'
                           : 'bg-amber-100 text-amber-900'
@@ -519,35 +780,35 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 <div className="mt-6">
                   <div className="flex items-baseline justify-between text-xs">
                     <span className="font-medium text-stone-600">Progres Pelunasan</span>
-                    <span className="font-mono-nums text-base font-bold text-emerald-900">
+                    <span className="font-mono-nums text-base font-bold text-[#0C3328]">
                       {progressPct}%
                     </span>
                   </div>
-                  <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-stone-100">
+                  <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-[#EFE8D8]">
                     <div
-                      className="h-full rounded-full bg-emerald-800 transition-all duration-300"
+                      className="h-full rounded-full bg-gradient-to-r from-[#0C3328] to-[#1A634D] transition-all duration-300"
                       style={{ width: `${progressPct}%` }}
                     />
                   </div>
                 </div>
 
                 {/* Financial Stats */}
-                <div className="mt-6 grid grid-cols-2 gap-4 border-t border-stone-100 pt-5 sm:grid-cols-4">
+                <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#EFE8D8] pt-5 sm:grid-cols-4">
                   <div>
                     <p className="text-xs text-stone-500">Total Terkumpul</p>
-                    <p className="mt-1 font-mono-nums text-base font-bold text-emerald-900">
+                    <p className="mt-1 font-mono-nums text-base font-bold text-[#0C3328]">
                       {formatRupiah(activeSub.total_terkumpul)}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500">Target Paket</p>
-                    <p className="mt-1 font-mono-nums text-base font-bold text-stone-900">
+                    <p className="mt-1 font-mono-nums text-base font-bold text-[#381E5A]">
                       {formatRupiah(activeSub.target_nominal)}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-stone-500">Sisa Pelunasan</p>
-                    <p className="mt-1 font-mono-nums text-base font-bold text-amber-800">
+                    <p className="mt-1 font-mono-nums text-base font-bold text-[#B98E3A]">
                       {formatRupiah(remainingAmount)}
                     </p>
                   </div>
@@ -559,38 +820,197 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </div>
                 </div>
 
-                {activeAgentInfo && (
-                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-stone-50 px-4 py-3 text-xs">
-                    <span className="text-stone-600">
-                      Butuh setoran tunai jemput bola? Hubungi Agen{' '}
-                      <strong className="text-stone-900">{activeAgentInfo.nama}</strong> (
-                      {activeAgentInfo.kode_agen}).
-                    </span>
-                    <a
-                      href={formatWhatsAppUrl(
-                        activeAgentInfo.no_wa,
-                        `Halo ${activeAgentInfo.nama}, saya ${userProfile.nama} ingin konfirmasi setoran paket ${activeSub.package_nama} (Token: ${activeSub.qr_code_token}).`
-                      )}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 font-semibold text-[#15803D] hover:underline"
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      <span>Chat Agen via WhatsApp</span>
-                    </a>
+                {/* Installment Tracker Card */}
+                {installmentSchedule && (
+                  <div className="mt-5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-[#381E5A]">
+                        <CalendarClock className="h-4 w-4 text-[#C8A053]" />
+                        <span>
+                          Tracker Cicilan: Minggu ke-{installmentSchedule.currentWeek} dari{' '}
+                          {installmentSchedule.totalWeeks} Minggu ({installmentSchedule.totalDays}{' '}
+                          Hari)
+                        </span>
+                      </div>
+                      <span
+                        className={`rounded-md border px-2.5 py-0.5 text-[11px] font-semibold ${installmentSchedule.paceTone}`}
+                      >
+                        {installmentSchedule.paceLabel}
+                      </span>
+                    </div>
+                    <div className="mt-2.5 grid gap-2 text-xs text-stone-600 sm:grid-cols-3">
+                      <div>
+                        Cicilan Ideal:{' '}
+                        <strong className="font-mono-nums text-stone-900">
+                          {formatRupiah(activeSub.setoran_nominal || 20000)}
+                        </strong>{' '}
+                        ({activeSub.frekuensi === 'harian' ? 'Harian' : 'Mingguan'})
+                      </div>
+                      <div>
+                        Target s.d. Minggu Ini:{' '}
+                        <strong className="font-mono-nums text-stone-900">
+                          {formatRupiah(installmentSchedule.expectedByNow)}
+                        </strong>
+                      </div>
+                      <div>
+                        Estimasi Lunas:{' '}
+                        <strong className="text-stone-900">{installmentSchedule.estEndStr}</strong>
+                      </div>
+                    </div>
                   </div>
                 )}
+
+                {/* Package Contents & THR Breakdown Toggle */}
+                {(activePackageItems.length > 0 || activeBonusThr > 0) && (
+                  <div className="mt-4 rounded-xl border border-[#E4DCCB] bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setShowPackageContents((v) => !v)}
+                      className="flex w-full items-center justify-between px-4 py-3 text-left text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] rounded-xl cursor-pointer"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <PackageCheck className="h-4 w-4 text-[#0C3328]" />
+                        <span>
+                          Rincian Isi Paket ({activePackageItems.length} item)
+                          {activeBonusThr > 0 && ` + THR Tunai ${formatRupiah(activeBonusThr)}`}
+                        </span>
+                      </span>
+                      {showPackageContents ? (
+                        <ChevronUp className="h-4 w-4 text-stone-500" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-stone-500" />
+                      )}
+                    </button>
+                    {showPackageContents && (
+                      <div className="border-t border-[#EFE8D8] px-4 py-3 text-xs">
+                        {activeBonusThr > 0 && (
+                          <div className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 font-semibold text-amber-900">
+                            <Gift className="h-3.5 w-3.5 text-[#B98E3A]" />
+                            <span>Bonus Uang THR Tunai: {formatRupiah(activeBonusThr)}</span>
+                          </div>
+                        )}
+                        <div className="grid gap-1.5 sm:grid-cols-2">
+                          {activePackageItems.map((item, idx) => (
+                            <div key={idx} className="flex items-start gap-1.5 text-stone-700">
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#0C3328]" />
+                              <span>{item}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Agent Contact + Switch Agent / Cancel Contract (only if balance == 0 && aktif) */}
+                <div className="mt-5 space-y-3">
+                  {activeAgentInfo && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FAF7F2] border border-[#E4DCCB] px-4 py-3 text-xs">
+                      <span className="text-stone-600">
+                        Setoran tunai jemput bola? Hubungi Agen{' '}
+                        <strong className="text-[#381E5A]">{activeAgentInfo.nama}</strong> (
+                        {activeAgentInfo.kode_agen}).
+                      </span>
+                      <a
+                        href={formatWhatsAppUrl(
+                          activeAgentInfo.no_wa,
+                          `Halo ${activeAgentInfo.nama}, saya ${userProfile.nama} ingin konfirmasi setoran paket ${activeSub.package_nama} (Token: ${activeSub.qr_code_token}).`
+                        )}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 font-semibold text-[#15803D] hover:underline"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        <span>Chat Agen via WhatsApp</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {activeSub.status === 'aktif' && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSwitchAgentId(activeSub.agen_id);
+                          setShowAgentSwitch((v) => !v);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span>Ganti Agen Wilayah</span>
+                      </button>
+
+                      {activeSub.total_terkumpul === 0 && (
+                        <>
+                          {confirmCancelContract ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-rose-700 font-semibold">Yakin batalkan?</span>
+                              <button
+                                type="button"
+                                disabled={updatingAgent}
+                                onClick={() => void handleCancelContract()}
+                                className="rounded-lg bg-rose-700 px-3 py-1.5 font-semibold text-white hover:bg-rose-800 cursor-pointer"
+                              >
+                                Ya, Batalkan Kontrak
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmCancelContract(false)}
+                                className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-stone-600 cursor-pointer"
+                              >
+                                Batal
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmCancelContract(true)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Batalkan Kontrak (Saldo Rp 0)</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {showAgentSwitch && activeSub.status === 'aktif' && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3 sm:flex-row sm:items-center">
+                      <select
+                        value={switchAgentId}
+                        onChange={(e) => setSwitchAgentId(e.target.value)}
+                        className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
+                      >
+                        {agents.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.wilayah} — {a.nama} ({a.kode_agen})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={updatingAgent}
+                        onClick={() => void handleSwitchAgent()}
+                        className="rounded-lg bg-[#381E5A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#492974] disabled:opacity-60 cursor-pointer"
+                      >
+                        {updatingAgent ? 'Menyimpan...' : 'Simpan Agen Baru'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Upload Setoran Transfer atau Ajukan Penarikan */}
               {activeSub.status !== 'diambil' && (!isPaidOff || activeSub.total_terkumpul > 0) && (
                 <form
                   onSubmit={handleSubmitTransactionRequest}
-                  className="rounded-2xl border border-stone-200 bg-white p-6"
+                  className="rounded-2xl border border-[#E4DCCB] bg-white p-6"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EFE8D8] pb-4">
                     <div>
-                      <h3 className="font-display text-lg font-bold text-stone-900">
+                      <h3 className="font-display text-lg font-bold text-[#381E5A]">
                         {txMode === 'setoran'
                           ? 'Kirim Setoran Transfer & Unggah Bukti'
                           : 'Ajukan Penarikan Saldo Tabungan'}
@@ -602,7 +1022,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       </p>
                     </div>
 
-                    <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-xs">
+                    <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
                       {!isPaidOff && (
                         <button
                           type="button"
@@ -612,7 +1032,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           }}
                           className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 font-semibold transition cursor-pointer ${
                             txMode === 'setoran'
-                              ? 'bg-emerald-900 text-white'
+                              ? 'bg-[#0C3328] text-[#E8CA82]'
                               : 'text-stone-600 hover:text-stone-900'
                           }`}
                         >
@@ -642,6 +1062,53 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     </div>
                   </div>
 
+                  {/* Official Company Bank Account & QRIS Box */}
+                  {txMode === 'setoran' && (
+                    <div className="mt-4 rounded-xl border border-[#C8A053]/40 bg-[#FAF7F2] p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-[#381E5A]">
+                          <Building2 className="h-4 w-4 text-[#C8A053]" />
+                          <span>Rekening Resmi Transfer Setoran</span>
+                        </div>
+                        <span className="rounded bg-[#0C3328] px-2 py-0.5 text-[10px] font-semibold text-[#E8CA82]">
+                          {appSettings.bank_nama}
+                        </span>
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-mono-nums text-base font-bold text-[#381E5A]">
+                            {appSettings.bank_rekening}
+                          </p>
+                          <p className="text-xs text-stone-600">
+                            a.n. <strong>{appSettings.bank_atas_nama}</strong>
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyRekening()}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-stone-50 cursor-pointer"
+                        >
+                          {copiedBank ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 text-emerald-700" />
+                              <span>Tersalin</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" />
+                              <span>Salin No. Rekening</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                      {appSettings.qris_catatan && (
+                        <p className="mt-2 border-t border-[#EFE8D8] pt-2 text-[11px] text-stone-600">
+                          {appSettings.qris_catatan}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-semibold text-stone-700">
@@ -657,7 +1124,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         required
                         value={depositNominal}
                         onChange={(e) => setDepositNominal(e.target.value)}
-                        className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900 focus:border-emerald-800 focus:outline-none"
+                        className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
                       />
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {(txMode === 'setoran'
@@ -679,7 +1146,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                               key={preset}
                               type="button"
                               onClick={() => setDepositNominal(String(preset))}
-                              className="rounded-md border border-stone-200 bg-stone-50 px-2 py-1 font-mono-nums text-[11px] font-medium text-stone-700 hover:bg-stone-100 cursor-pointer"
+                              className="rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 font-mono-nums text-[11px] font-medium text-[#381E5A] hover:bg-[#EFE8D8] cursor-pointer"
                             >
                               {formatRupiah(preset)}
                             </button>
@@ -692,8 +1159,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         <label className="block text-xs font-semibold text-stone-700">
                           Foto Bukti Transfer (JPG/PNG)
                         </label>
-                        <label className="mt-1.5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-stone-300 bg-stone-50 px-4 py-2.5 text-xs font-medium text-stone-700 hover:bg-stone-100">
-                          <Upload className="h-4 w-4 text-emerald-800" />
+                        <label className="mt-1.5 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-[#C8A053] bg-[#FAF7F2] px-4 py-2.5 text-xs font-medium text-[#381E5A] hover:bg-[#EFE8D8]">
+                          <Upload className="h-4 w-4 text-[#0C3328]" />
                           <span>
                             {proofDataUrl ? 'Bukti Siap Diunggah (Ganti)' : 'Pilih Foto Struk'}
                           </span>
@@ -723,7 +1190,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                               e.target.value as 'pencairan_tunai' | 'transfer_keluar'
                             )
                           }
-                          className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-emerald-800 focus:outline-none"
+                          className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
                         >
                           <option value="pencairan_tunai">Pencairan Tunai via Agen</option>
                           <option value="transfer_keluar">Transfer ke Rekening Member</option>
@@ -739,18 +1206,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       onChange={(e) => setDepositNote(e.target.value)}
                       placeholder={
                         txMode === 'setoran'
-                          ? 'Catatan transfer (mis. Setoran minggu ke-4 via BCA)'
+                          ? 'Catatan transfer (mis. Setoran minggu ke-4 via BRI/BCA)'
                           : 'Keterangan penarikan / no. rekening tujuan jika transfer'
                       }
-                      className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-emerald-800 focus:outline-none"
+                      className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
                     />
                     <button
                       type="submit"
                       disabled={uploadingDeposit}
-                      className={`rounded-lg px-5 py-2.5 text-xs font-semibold text-white transition disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer ${
+                      className={`rounded-xl px-5 py-2.5 text-xs font-semibold transition disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer ${
                         txMode === 'penarikan'
-                          ? 'bg-rose-800 hover:bg-rose-700'
-                          : 'bg-emerald-900 hover:bg-emerald-800'
+                          ? 'bg-rose-800 text-white hover:bg-rose-700'
+                          : 'bg-[#0C3328] text-[#E8CA82] hover:bg-[#144738]'
                       }`}
                     >
                       {uploadingDeposit
@@ -774,21 +1241,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
               {/* Antrean Pengajuan Pending / Ditolak */}
               {pendingOrRejectedDeposits.length > 0 && (
-                <div className="rounded-2xl border border-stone-200 bg-white p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-display text-base font-bold text-stone-900">
-                        Pengajuan Menunggu Validasi / Ditolak ({pendingOrRejectedDeposits.length})
-                      </h3>
-                      <p className="mt-0.5 text-xs text-stone-500">
-                        Transaksi di bawah ini akan otomatis masuk ke tabel Riwayat Transaksi setelah divalidasi oleh Agen.
-                      </p>
-                    </div>
+                <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+                  <div>
+                    <h3 className="font-display text-base font-bold text-[#381E5A]">
+                      Pengajuan Menunggu Validasi / Ditolak ({pendingOrRejectedDeposits.length})
+                    </h3>
+                    <p className="mt-0.5 text-xs text-stone-500">
+                      Transaksi di bawah ini otomatis masuk ke tabel Riwayat Transaksi setelah divalidasi oleh Agen.
+                    </p>
                   </div>
                   <div className="mt-4 overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead>
-                        <tr className="border-b border-stone-200 text-xs text-stone-500">
+                        <tr className="border-b border-[#EFE8D8] text-xs text-stone-500">
                           <th className="py-2 pr-4 font-semibold">Tanggal</th>
                           <th className="py-2 pr-4 font-semibold">Jenis &amp; Catatan</th>
                           <th className="py-2 pr-4 text-right font-semibold">Nominal</th>
@@ -803,7 +1268,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                             dep.metode === 'pencairan_tunai' ||
                             dep.metode === 'transfer_keluar';
                           return (
-                            <tr key={dep.id} className="hover:bg-stone-50">
+                            <tr key={dep.id} className="hover:bg-[#FAF7F2]">
                               <td className="py-2.5 pr-4 font-mono-nums text-xs text-stone-700 whitespace-nowrap">
                                 {dep.tanggal}
                               </td>
@@ -837,7 +1302,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => setPreviewProofUrl(dep.bukti_foto_url || null)}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-[#0C3328] hover:underline cursor-pointer"
                                   >
                                     <FileImage className="h-3.5 w-3.5" />
                                     Lihat
@@ -856,20 +1321,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               )}
             </div>
 
-            {/* Right 4 cols: Tiket QR Pengambilan */}
-            <div className="lg:col-span-4">
-              <div className="rounded-2xl border border-stone-200 bg-white p-6">
+            {/* Right 4 cols: Tiket QR Pengambilan & Kupon Undian Door Prize */}
+            <div className="space-y-6 lg:col-span-4">
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-emerald-800">Tiket Pengambilan Paket</p>
-                  <QrCode className="h-4 w-4 text-emerald-800" />
+                  <p className="text-xs font-semibold text-[#0C3328]">Tiket Pengambilan Paket</p>
+                  <QrCode className="h-4 w-4 text-[#0C3328]" />
                 </div>
-                <h3 className="mt-1 font-display text-xl font-bold text-stone-900">
+                <h3 className="mt-1 font-display text-xl font-bold text-[#381E5A]">
                   E-Tiket QR Gudang
                 </h3>
 
                 {isPaidOff ? (
                   <div className="mt-5 space-y-4">
-                    <div className="flex flex-col items-center rounded-xl border border-stone-200 bg-[#FAF8F4] p-5">
+                    <div className="flex flex-col items-center rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-5">
                       <QRCodeSVG
                         value={JSON.stringify({
                           token: activeSub.qr_code_token,
@@ -881,7 +1346,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         level="M"
                         includeMargin
                       />
-                      <p className="mt-3 font-mono-nums text-xs font-bold text-stone-900">
+                      <p className="mt-3 font-mono-nums text-xs font-bold text-[#381E5A]">
                         {activeSub.qr_code_token}
                       </p>
                       <p className="mt-1 text-xs text-stone-600">
@@ -890,31 +1355,100 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     </div>
 
                     <p className="text-xs leading-relaxed text-stone-600">
-                      Tunjukkan QR Code ini kepada petugas gudang atau agen wilayah <strong>{activeSub.wilayah}</strong> pada jadwal pengambilan (H-7 untuk sembako/kue atau H-2 untuk daging &amp; telur segar).
+                      Tunjukkan QR Code ini kepada petugas gudang atau agen wilayah{' '}
+                      <strong>{activeSub.wilayah}</strong> pada jadwal pengambilan (H-7 untuk sembako/kue atau H-2 untuk daging &amp; telur segar).
                     </p>
 
                     <button
                       type="button"
                       onClick={() => window.print()}
-                      className="no-print flex w-full items-center justify-center gap-2 rounded-lg border border-stone-300 py-2.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
+                      className="no-print flex w-full items-center justify-center gap-2 rounded-xl border border-[#E4DCCB] py-2.5 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
                     >
                       <Printer className="h-4 w-4" />
                       <span>Cetak / Simpan Tiket QR</span>
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-5 rounded-xl border border-stone-200 bg-stone-50 p-6 text-center">
-                    <Lock className="mx-auto h-8 w-8 text-stone-400" />
-                    <p className="mt-3 text-sm font-semibold text-stone-800">
+                  <div className="mt-5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-6 text-center">
+                    <Lock className="mx-auto h-8 w-8 text-[#C8A053]" />
+                    <p className="mt-3 text-sm font-semibold text-[#381E5A]">
                       Tiket QR Terkunci
                     </p>
                     <p className="mt-1.5 text-xs leading-relaxed text-stone-600">
-                      Tiket QR Pengambilan akan diterbitkan secara otomatis setelah tabungan mencapai 100% (kurang{' '}
+                      Tiket QR Pengambilan diterbitkan otomatis setelah tabungan mencapai 100% (kurang{' '}
                       <strong className="font-mono-nums text-stone-900">
                         {formatRupiah(remainingAmount)}
                       </strong>
                       ).
                     </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Kupon Undian Door Prize Digital */}
+              <div className="rounded-2xl border border-[#C8A053]/60 bg-gradient-to-br from-[#381E5A] to-[#241140] p-6 text-white shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#E8CA82]">
+                    <Ticket className="h-4 w-4" />
+                    KUPON DOOR PRIZE LIVE
+                  </span>
+                  <span
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      isCouponEligible
+                        ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/40'
+                        : 'bg-white/10 text-stone-300 border border-white/20'
+                    }`}
+                  >
+                    {isCouponEligible ? 'Kupon Aktif' : 'Belum Aktif'}
+                  </span>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-[#C8A053]/50 bg-black/25 p-4 text-center">
+                  <p className="text-[11px] text-stone-300">Nomor Kupon Undian Anda</p>
+                  <p className="mt-1 font-mono-nums text-lg font-bold tracking-wider text-[#E8CA82]">
+                    {couponCode}
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-stone-300">
+                    {isCouponEligible
+                      ? 'Terdaftar otomatis untuk pengundian LIVE HP Android, Rice Cooker, Kipas Angin, & Kompor Gas.'
+                      : 'Lakukan minimal 1x setoran tervalidasi untuk mengaktifkan nomor kupon undian ini.'}
+                  </p>
+                </div>
+
+                {myWinningDraws.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-emerald-400/40 bg-emerald-950/70 p-3 text-xs">
+                    <p className="inline-flex items-center gap-1.5 font-bold text-[#E8CA82]">
+                      <Award className="h-4 w-4" />
+                      Selamat! Kupon Anda Memenangkan Hadiah:
+                    </p>
+                    {myWinningDraws.map((w) => (
+                      <p key={w.id} className="mt-1 text-emerald-100">
+                        {w.hadiah} ({w.tanggal_undi}) — Kupon {w.kupon_kode}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                {doorPrizeDraws.length > 0 && (
+                  <div className="mt-4 border-t border-white/15 pt-3">
+                    <p className="text-[11px] font-semibold text-[#E8CA82]">
+                      Pemenang Undian Terbaru
+                    </p>
+                    <div className="mt-2 space-y-1.5 text-[11px]">
+                      {doorPrizeDraws.slice(0, 4).map((d) => (
+                        <div
+                          key={d.id}
+                          className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5"
+                        >
+                          <span className="truncate font-medium text-white">
+                            {d.member_nama} ({d.wilayah})
+                          </span>
+                          <span className="ml-2 shrink-0 font-semibold text-[#E8CA82]">
+                            {d.hadiah}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

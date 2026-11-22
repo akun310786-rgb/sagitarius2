@@ -63,22 +63,38 @@ async function startServer() {
 
   app.post('/api/cs-chat', async (req, res) => {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey || apiKey.includes('MY_GEMINI_API_KEY')) {
         return res.status(500).json({
-          error: 'GEMINI_API_KEY belum dikonfigurasi pada environment server.',
+          error:
+            'API key Gemini belum aktif pada environment server. Periksa panel Settings > Secrets untuk memastikan GEMINI_API_KEY sudah terpasang.',
         });
       }
 
       const rawMessages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-      if (rawMessages.length === 0) {
+      const mapped = rawMessages
+        .slice(-14)
+        .map((m: { role?: string; text?: string }) => ({
+          role: (m.role === 'model' ? 'model' : 'user') as 'user' | 'model',
+          text: String(m.text || '').trim().slice(0, 2000),
+        }))
+        .filter((m: { text: string }) => m.text.length > 0);
+
+      // Gemini generateContent requires conversation history to start with a 'user' turn
+      const firstUserIdx = mapped.findIndex((m: { role: string }) => m.role === 'user');
+      if (firstUserIdx === -1) {
         return res.status(400).json({ error: 'Pesan chat tidak boleh kosong.' });
       }
 
-      const contents = rawMessages.slice(-12).map((m: { role?: string; text?: string }) => ({
-        role: m.role === 'model' ? 'model' : 'user',
-        parts: [{ text: String(m.text || '').slice(0, 2000) }],
-      }));
+      const alternating: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+      for (const item of mapped.slice(firstUserIdx)) {
+        const last = alternating[alternating.length - 1];
+        if (last && last.role === item.role) {
+          last.parts[0].text = `${last.parts[0].text}\n${item.text}`;
+        } else {
+          alternating.push({ role: item.role, parts: [{ text: item.text }] });
+        }
+      }
 
       const ai = new GoogleGenAI({
         apiKey,
@@ -89,19 +105,86 @@ async function startServer() {
         },
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents,
-        config: {
-          systemInstruction: CS_SYSTEM_INSTRUCTION,
-          thinkingConfig: {
-            thinkingLevel: ThinkingLevel.LOW,
-          },
-        },
-      });
+      const extractErrorInfo = (err: unknown): { status: number; code: string; message: string } => {
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        let status = 500;
+        let code = '';
+        let msg = rawMsg;
 
-      const replyText = response.text?.trim();
+        if (typeof err === 'object' && err !== null && 'status' in err) {
+          const s = Number((err as { status?: unknown }).status);
+          if (s >= 400 && s < 600) status = s;
+        }
+
+        try {
+          const parsed = JSON.parse(rawMsg) as {
+            error?: { code?: number; message?: string; status?: string };
+          };
+          if (parsed?.error) {
+            if (parsed.error.code) status = parsed.error.code;
+            if (parsed.error.status) code = parsed.error.status;
+            if (parsed.error.message) msg = parsed.error.message;
+          }
+        } catch {
+          // Raw text message
+        }
+
+        return { status, code, message: msg };
+      };
+
+      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      const attemptGenerate = async (model: string, thinkingLevel: ThinkingLevel) => {
+        return ai.models.generateContent({
+          model,
+          contents: alternating,
+          config: {
+            systemInstruction: CS_SYSTEM_INSTRUCTION,
+            thinkingConfig: {
+              thinkingLevel,
+            },
+          },
+        });
+      };
+
+      const modelCandidates: Array<{ model: string; thinkingLevel: ThinkingLevel }> = [
+        { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW },
+        { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
+      ];
+
+      let lastErr: unknown = null;
+      let replyText = '';
+
+      for (const candidate of modelCandidates) {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await attemptGenerate(candidate.model, candidate.thinkingLevel);
+            const txt = response.text?.trim();
+            if (txt) {
+              replyText = txt;
+              break;
+            }
+          } catch (err) {
+            lastErr = err;
+            const info = extractErrorInfo(err);
+            const isTransient =
+              info.status === 503 ||
+              info.status === 502 ||
+              info.status === 504 ||
+              info.code === 'UNAVAILABLE';
+            if (!isTransient) {
+              throw err;
+            }
+            if (attempt === 0) {
+              await sleep(600);
+            }
+          }
+        }
+        if (replyText) break;
+      }
+
       if (!replyText) {
+        if (lastErr) throw lastErr;
         return res.status(502).json({
           error: 'Respon dari asisten Gemini kosong. Silakan coba beberapa saat lagi.',
         });
@@ -110,9 +193,35 @@ async function startServer() {
       return res.json({ reply: replyText });
     } catch (error) {
       console.error('Error /api/cs-chat:', error);
-      const message =
-        error instanceof Error ? error.message : 'Gagal menghubungi layanan CS Online Gemini.';
-      return res.status(500).json({ error: message });
+      const rawMsg = error instanceof Error ? error.message : String(error);
+      let status = 500;
+      let friendlyMsg = 'Gagal menghubungi layanan CS Online Gemini.';
+
+      try {
+        const parsed = JSON.parse(rawMsg) as {
+          error?: { code?: number; message?: string; status?: string };
+        };
+        if (parsed?.error?.code) status = parsed.error.code;
+        if (parsed?.error?.status === 'API_KEY_INVALID' || status === 400) {
+          friendlyMsg =
+            'API key Gemini tidak valid atau permintaan bermasalah. Silakan periksa API key di panel Settings > Secrets.';
+        } else if (parsed?.error?.status === 'PERMISSION_DENIED' || status === 403) {
+          friendlyMsg =
+            'Akses API Gemini ditolak (PERMISSION_DENIED). Pastikan API key di panel Settings > Secrets memiliki izin yang aktif.';
+        } else if (parsed?.error?.status === 'RESOURCE_EXHAUSTED' || status === 429) {
+          friendlyMsg =
+            'Kuota permintaan Gemini sedang penuh (429). Silakan coba beberapa saat lagi atau cek kuota API key di Settings > Secrets.';
+        } else if (parsed?.error?.status === 'UNAVAILABLE' || status === 503) {
+          friendlyMsg =
+            'Server model Gemini sedang mengalami lonjakan permintaan sementara (503). Silakan kirim ulang sesaat lagi atau hubungi WA CS 0813 2438 3479.';
+        } else if (parsed?.error?.message) {
+          friendlyMsg = parsed.error.message;
+        }
+      } catch {
+        if (rawMsg) friendlyMsg = rawMsg;
+      }
+
+      return res.status(status >= 400 && status < 600 ? status : 500).json({ error: friendlyMsg });
     }
   });
 

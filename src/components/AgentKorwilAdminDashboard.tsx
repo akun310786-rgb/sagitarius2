@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  BarChart3,
   Boxes,
   CheckCircle2,
   ClipboardCheck,
@@ -10,20 +11,26 @@ import {
   Edit3,
   FileImage,
   FileSpreadsheet,
+  Gift,
+  Megaphone,
   MessageCircle,
   Package as PackageIcon,
   Plus,
   QrCode,
   Search,
+  Settings,
   ShieldCheck,
+  Sparkles,
   Trash2,
   UserCheck,
+  UserPlus,
   Users,
   Wallet,
   X,
   XCircle,
 } from 'lucide-react';
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -44,9 +51,13 @@ import {
 } from '../data/catalogData';
 import {
   AgentDirectoryItem,
+  AgentSettlement,
+  AgentSettlementType,
+  AppPublicSettings,
   ContactMessage,
   Deposit,
   DepositMethod,
+  DoorPrizeDraw,
   PackageCategory,
   ParcelPackage,
   Subscription,
@@ -57,6 +68,8 @@ import {
   WILAYAH_LIST,
   WilayahPriangan,
 } from '../types';
+import { AdminAnalyticsTab } from './AdminAnalyticsTab';
+import { QrCameraScanner } from './QrCameraScanner';
 
 interface AgentKorwilAdminDashboardProps {
   userProfile: UserProfile | null;
@@ -66,10 +79,23 @@ interface AgentKorwilAdminDashboardProps {
   subscriptions: Subscription[];
   deposits: Deposit[];
   contactMessages?: ContactMessage[];
+  appSettings: AppPublicSettings;
+  doorPrizeDraws?: DoorPrizeDraw[];
+  agentSettlements?: AgentSettlement[];
   onNeedLogin: () => void;
 }
 
-type AdminTab = 'agen' | 'kontrak' | 'master' | 'korwil' | 'gudang' | 'users' | 'pesan';
+type AdminTab =
+  | 'agen'
+  | 'kontrak'
+  | 'master'
+  | 'korwil'
+  | 'gudang'
+  | 'doorprize'
+  | 'analitik'
+  | 'pengaturan'
+  | 'users'
+  | 'pesan';
 type MasterSubTab = 'packages' | 'agents';
 
 function getTxType(dep: Deposit): TransactionType {
@@ -93,6 +119,10 @@ function getMethodLabel(dep: Deposit): string {
     default:
       return dep.metode;
   }
+}
+
+function getCouponCode(sub: Subscription): string {
+  return `DP-${sub.qr_code_token}`.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 60);
 }
 
 function downloadCsv(filename: string, headers: string[], rows: Array<Array<string | number>>) {
@@ -120,14 +150,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   subscriptions,
   deposits,
   contactMessages = [],
+  appSettings,
+  doorPrizeDraws = [],
+  agentSettlements = [],
   onNeedLogin,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('agen');
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
+  const cashFormRef = useRef<HTMLFormElement | null>(null);
 
-  // Tab 1: Transaksi (Setoran & Penarikan) & Verifikasi
+  // Tab 1: Transaksi (Setoran & Penarikan) & Verifikasi & Checklist Jemput Bola
   const [selectedSubId, setSelectedSubId] = useState<string>(subscriptions[0]?.id || '');
   const [cashTxType, setCashTxType] = useState<TransactionType>('setoran');
+  const [checklistFilter, setChecklistFilter] = useState<'all' | 'overdue' | 'near_lunas'>('all');
   const [withdrawMethod, setWithdrawMethod] = useState<'pencairan_tunai' | 'transfer_keluar'>(
     'pencairan_tunai'
   );
@@ -195,6 +230,51 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | UserRole>('all');
   const [userWilayahFilter, setUserWilayahFilter] = useState<'all' | WilayahPriangan>('all');
+
+  // Offline Member Contract Registration Modal State
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [offNama, setOffNama] = useState('');
+  const [offWa, setOffWa] = useState('');
+  const [offPackageId, setOffPackageId] = useState<string>(packages[0]?.id || '');
+  const [offFrekuensi, setOffFrekuensi] = useState<'harian' | 'mingguan'>('mingguan');
+  const [offDurasiMinggu, setOffDurasiMinggu] = useState('46');
+  const [offWilayah, setOffWilayah] = useState<WilayahPriangan>(
+    userProfile?.wilayah || 'Tasikmalaya'
+  );
+  const [offAgentId, setOffAgentId] = useState<string>(agents[0]?.id || '');
+  const [savingOffline, setSavingOffline] = useState(false);
+
+  // Tab 4: Tutup Kas Setor Tunai Pusat & Klaim Komisi (agent_settlements)
+  const [settleJenis, setSettleJenis] = useState<AgentSettlementType>('setor_tunai_pusat');
+  const [settleNominal, setSettleNominal] = useState('250000');
+  const [settleCatatan, setSettleCatatan] = useState('Setoran tunai kolektif member binaan');
+  const [savingSettlement, setSavingSettlement] = useState(false);
+  const [confirmDeleteSettleId, setConfirmDeleteSettleId] = useState<string | null>(null);
+
+  // Tab Door Prize State
+  const [prizeName, setPrizeName] = useState('Rice Cooker Digital');
+  const [drawingPrize, setDrawingPrize] = useState(false);
+  const [confirmDeletePrizeId, setConfirmDeletePrizeId] = useState<string | null>(null);
+
+  // Tab Pengaturan Rekening & Pengumuman (app_settings/public)
+  const [setBankNama, setSetBankNama] = useState(appSettings.bank_nama);
+  const [setBankRekening, setSetBankRekening] = useState(appSettings.bank_rekening);
+  const [setBankAtasNama, setSetBankAtasNama] = useState(appSettings.bank_atas_nama);
+  const [setQrisCatatan, setSetQrisCatatan] = useState(appSettings.qris_catatan);
+  const [setPengJudul, setSetPengJudul] = useState(appSettings.pengumuman_judul);
+  const [setPengIsi, setSetPengIsi] = useState(appSettings.pengumuman_isi);
+  const [setPengAktif, setSetPengAktif] = useState(appSettings.pengumuman_aktif);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  useEffect(() => {
+    setSetBankNama(appSettings.bank_nama);
+    setSetBankRekening(appSettings.bank_rekening);
+    setSetBankAtasNama(appSettings.bank_atas_nama);
+    setSetQrisCatatan(appSettings.qris_catatan);
+    setSetPengJudul(appSettings.pengumuman_judul);
+    setSetPengIsi(appSettings.pengumuman_isi);
+    setSetPengAktif(appSettings.pengumuman_aktif);
+  }, [appSettings]);
 
   // General UI Feedback
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -423,6 +503,57 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       admin: allUsers.filter((u) => u.role === 'admin').length,
     };
   }, [allUsers]);
+
+  // Checklist Jemput Bola Member Binaan
+  const checklistItems = useMemo(() => {
+    const todayMs = Date.now();
+    const rows = managedSubscriptions
+      .filter((s) => s.status === 'aktif')
+      .map((s) => {
+        const verifiedSets = deposits
+          .filter(
+            (d) =>
+              d.subscription_id === s.id &&
+              d.status_verifikasi === 'verified' &&
+              getTxType(d) === 'setoran'
+          )
+          .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+        const lastDate = verifiedSets[0]?.tanggal || '';
+        const daysSince = lastDate
+          ? Math.floor((todayMs - new Date(lastDate).getTime()) / 86400000)
+          : 999;
+        const pct = Math.min(
+          100,
+          Math.round(((s.total_terkumpul || 0) / Math.max(1, s.target_nominal)) * 100)
+        );
+        const memberUser = allUsers.find((u) => u.uid === s.member_id);
+        return {
+          sub: s,
+          lastDate,
+          daysSince,
+          pct,
+          memberWa: memberUser?.no_wa || '',
+        };
+      });
+
+    return rows.filter((r) => {
+      if (checklistFilter === 'overdue') return r.daysSince > 6;
+      if (checklistFilter === 'near_lunas') return r.pct >= 80;
+      return true;
+    });
+  }, [managedSubscriptions, deposits, checklistFilter, allUsers]);
+
+  // Door Prize Eligible Coupons
+  const doorPrizeEligible = useMemo(() => {
+    const wonIds = new Set(doorPrizeDraws.map((d) => d.subscription_id));
+    return subscriptions
+      .filter((s) => (s.total_terkumpul || 0) > 0 && s.status !== 'diambil')
+      .map((s) => ({
+        sub: s,
+        kuponKode: getCouponCode(s),
+        alreadyWon: wonIds.has(s.id),
+      }));
+  }, [subscriptions, doorPrizeDraws]);
 
   // --- Handlers: Cash Deposit or Withdrawal ---
   const handleRecordCashTransaction = async (e: React.FormEvent) => {
@@ -1017,6 +1148,245 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
+  // --- Handler: Open & Save Offline Member Contract ---
+  const openOfflineRegistration = () => {
+    setOffNama('');
+    setOffWa('');
+    const firstPkg = packages[0];
+    setOffPackageId(firstPkg?.id || '');
+    setOffFrekuensi('mingguan');
+    setOffDurasiMinggu(
+      String(firstPkg ? Math.min(60, Math.max(12, Math.round(firstPkg.durasi_hari / 7))) : 46)
+    );
+    setOffWilayah(userProfile?.wilayah || 'Tasikmalaya');
+    setOffAgentId(agents[0]?.id || '');
+    setShowOfflineModal(true);
+  };
+
+  const handleCreateOfflineContract = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile) return;
+    const pkg = packages.find((p) => p.id === offPackageId) || packages[0];
+    if (!pkg) {
+      setStatusMessage('Pilih paket katalog terlebih dahulu.');
+      return;
+    }
+    const cleanName = offNama.trim();
+    if (cleanName.length < 2) {
+      setStatusMessage('Nama lengkap member minimal 2 karakter.');
+      return;
+    }
+
+    const durasi = Math.min(60, Math.max(1, Number(offDurasiMinggu) || 46));
+    const totalPeriods = offFrekuensi === 'harian' ? durasi * 7 : durasi;
+    const setoranNominal = Math.max(500, Math.ceil(pkg.harga_total / totalPeriods / 500) * 500);
+
+    const chosenAgent = agents.find((a) => a.id === offAgentId) || agents[0];
+    const assignedAgenId =
+      userProfile.role === 'agen' ? userProfile.uid : chosenAgent?.id || userProfile.uid;
+    const assignedAgenKode =
+      userProfile.role === 'agen'
+        ? userProfile.kode_agen || chosenAgent?.kode_agen || 'AGT-RESMI'
+        : chosenAgent?.kode_agen || 'AGT-PUSAT';
+    const assignedAgenNama =
+      userProfile.role === 'agen' ? userProfile.nama : chosenAgent?.nama || userProfile.nama;
+
+    const cleanWaNote = offWa.trim();
+    const memberLabel = cleanWaNote ? `${cleanName} (${cleanWaNote})` : cleanName;
+    const qrToken = `SGT-${offWilayah.slice(0, 3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+
+    setSavingOffline(true);
+    try {
+      const createdRef = await addDoc(collection(db, 'subscriptions'), {
+        member_id: `offline_${Date.now().toString(36)}`,
+        member_nama: memberLabel.slice(0, 100),
+        agen_id: assignedAgenId,
+        korwil_id: userProfile.role === 'korwil' ? userProfile.uid : '',
+        agen_kode: assignedAgenKode.slice(0, 32),
+        agen_nama: assignedAgenNama.slice(0, 100),
+        wilayah: offWilayah,
+        package_id: pkg.id,
+        package_nama: pkg.nama_paket.slice(0, 120),
+        kategori: pkg.kategori,
+        target_nominal: pkg.harga_total,
+        total_terkumpul: 0,
+        setoran_nominal: setoranNominal,
+        frekuensi: offFrekuensi,
+        durasi_minggu: durasi,
+        status: 'aktif',
+        qr_code_token: qrToken,
+        jadwal_ambil: (pkg.jadwal_ambil || 'Selambatnya 15 Ramadhan').slice(0, 40),
+        daftar_isi: (pkg.daftar_isi || [pkg.nama_paket]).slice(0, 30),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setSelectedSubId(createdRef.id);
+      setShowOfflineModal(false);
+      setStatusMessage(
+        `Kontrak offline untuk ${cleanName} (${pkg.nama_paket}) berhasil didaftarkan! Token QR: ${qrToken}.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'subscriptions');
+    } finally {
+      setSavingOffline(false);
+    }
+  };
+
+  // --- Handlers: Agent Settlement (Setor Tunai Pusat & Klaim Komisi) ---
+  const handleCreateSettlement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile) return;
+    const nominal = Math.round(Number(settleNominal));
+    if (!Number.isFinite(nominal) || nominal < 1000) {
+      setStatusMessage('Nominal pengajuan minimal Rp 1.000.');
+      return;
+    }
+
+    setSavingSettlement(true);
+    try {
+      await addDoc(collection(db, 'agent_settlements'), {
+        agen_id: userProfile.uid,
+        agen_kode: (userProfile.kode_agen || '').slice(0, 32),
+        agen_nama: userProfile.nama.slice(0, 100),
+        wilayah: userProfile.wilayah,
+        jenis: settleJenis,
+        nominal,
+        status: 'pending',
+        catatan: settleCatatan.trim().slice(0, 250),
+        tanggal: new Date().toISOString().slice(0, 10),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setStatusMessage(
+        `Pengajuan ${
+          settleJenis === 'setor_tunai_pusat' ? 'Setor Tunai Pusat' : 'Klaim Pencairan Komisi'
+        } sebesar ${formatRupiah(nominal)} berhasil dikirim ke Admin Pusat.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'agent_settlements');
+    } finally {
+      setSavingSettlement(false);
+    }
+  };
+
+  const handleVerifySettlement = async (
+    item: AgentSettlement,
+    decision: 'verified' | 'rejected'
+  ) => {
+    if (!userProfile) return;
+    try {
+      await updateDoc(doc(db, 'agent_settlements', item.id), {
+        status: decision,
+        validated_by: userProfile.nama.slice(0, 100),
+        updatedAt: serverTimestamp(),
+      });
+      setStatusMessage(
+        `Pengajuan ${item.agen_nama} (${formatRupiah(item.nominal)}) telah ${
+          decision === 'verified' ? 'DIVALIDASI' : 'DITOLAK'
+        }.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `agent_settlements/${item.id}`);
+    }
+  };
+
+  const handleDeleteSettlement = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'agent_settlements', id));
+      setConfirmDeleteSettleId(null);
+      setStatusMessage('Catatan tutup kas / komisi berhasil dihapus.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `agent_settlements/${id}`);
+    }
+  };
+
+  // --- Handlers: Door Prize Random Draw ---
+  const handleRunDoorPrizeDraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile || !isAdmin) return;
+    const cleanHadiah = prizeName.trim();
+    if (cleanHadiah.length < 2) {
+      setStatusMessage('Masukkan nama hadiah Door Prize terlebih dahulu.');
+      return;
+    }
+
+    const freshPool = doorPrizeEligible.filter((item) => !item.alreadyWon);
+    const pool = freshPool.length > 0 ? freshPool : doorPrizeEligible;
+    if (pool.length === 0) {
+      setStatusMessage('Belum ada peserta dengan kupon aktif (minimal 1 setoran tervalidasi).');
+      return;
+    }
+
+    setDrawingPrize(true);
+    try {
+      const winner = pool[Math.floor(Math.random() * pool.length)];
+      await addDoc(collection(db, 'door_prize_draws'), {
+        hadiah: cleanHadiah.slice(0, 100),
+        kupon_kode: winner.kuponKode,
+        subscription_id: winner.sub.id,
+        member_id: winner.sub.member_id,
+        member_nama: winner.sub.member_nama.slice(0, 100),
+        wilayah: winner.sub.wilayah,
+        tanggal_undi: new Date().toISOString().slice(0, 10),
+        drawn_by: userProfile.nama.slice(0, 100),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setStatusMessage(
+        `Selamat! Pemenang ${cleanHadiah}: ${winner.sub.member_nama} (${winner.kuponKode} · ${winner.sub.wilayah}).`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'door_prize_draws');
+    } finally {
+      setDrawingPrize(false);
+    }
+  };
+
+  const handleDeleteDoorPrize = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'door_prize_draws', id));
+      setConfirmDeletePrizeId(null);
+      setStatusMessage('Data pemenang Door Prize berhasil dihapus.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `door_prize_draws/${id}`);
+    }
+  };
+
+  // --- Handler: Save App Public Settings (Bank & Broadcast) ---
+  const handleSaveAppSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile || !isAdmin) return;
+    setSavingSettings(true);
+    try {
+      const ref = doc(db, 'app_settings', 'public');
+      const existingSnap = await getDoc(ref);
+      const createdAtVal = existingSnap.exists()
+        ? existingSnap.data().createdAt
+        : serverTimestamp();
+
+      await setDoc(ref, {
+        bank_nama: setBankNama.trim().slice(0, 60) || 'BRI / BCA Resmi',
+        bank_rekening: setBankRekening.trim().slice(0, 50) || '0100-01-002345-30-8',
+        bank_atas_nama:
+          setBankAtasNama.trim().slice(0, 100) || 'PT. SAGITARIUS TRINUNGGAL KARYA',
+        qris_catatan: setQrisCatatan.trim().slice(0, 250),
+        pengumuman_judul: setPengJudul.trim().slice(0, 120),
+        pengumuman_isi: setPengIsi.trim().slice(0, 600),
+        pengumuman_aktif: setPengAktif,
+        updated_by: userProfile.nama.slice(0, 100),
+        createdAt: createdAtVal,
+        updatedAt: serverTimestamp(),
+      });
+      setStatusMessage(
+        'Pengaturan rekening transfer resmi & papan pengumuman berhasil dipublikasikan ke seluruh dashboard member.'
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'app_settings/public');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   if (!userProfile) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
@@ -1058,13 +1428,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   }
 
   const unreadMessagesCount = contactMessages.filter((m) => m.status === 'baru').length;
+  const pendingSettlementsCount = agentSettlements.filter((s) => s.status === 'pending').length;
 
   const tabs: Array<{ id: AdminTab; label: string; badge?: number; adminOnly?: boolean }> = [
     { id: 'agen', label: 'Transaksi & Validasi', badge: pendingDeposits.length },
     { id: 'kontrak', label: 'Kontrak Member', badge: managedSubscriptions.length },
     { id: 'master', label: 'Katalog & Agen Master', adminOnly: true },
-    { id: 'korwil', label: 'Komisi 7% & Korwil' },
+    { id: 'korwil', label: 'Komisi 7% & Kas', badge: pendingSettlementsCount },
     { id: 'gudang', label: 'Gudang H-7/H-2 & QR' },
+    { id: 'doorprize', label: 'Door Prize', badge: doorPrizeDraws.length },
+    { id: 'analitik', label: 'Analitik & Grafik', adminOnly: true },
+    { id: 'pengaturan', label: 'Rekening & Info', adminOnly: true },
     { id: 'users', label: 'Pengguna & RBAC', badge: allUsers.length, adminOnly: true },
     { id: 'pesan', label: 'Pesan Masuk', badge: unreadMessagesCount, adminOnly: true },
   ];
@@ -1072,33 +1446,43 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       {/* Header & Navigation */}
-      <div className="flex flex-col gap-4 border-b border-stone-200 pb-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-[#E4DCCB] pb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold text-emerald-800">
+            <p className="text-xs font-semibold text-[#0C3328]">
               Pusat Kendali {userProfile.role.toUpperCase()} · Wilayah {userProfile.wilayah}
             </p>
-            <h1 className="mt-1 font-display text-2xl font-bold text-stone-900 sm:text-3xl">
+            <h1 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
               {isAdmin
                 ? 'Dashboard Admin Pusat Sagitarius Parcel'
                 : 'Panel Operasional Agen, Korwil & Gudang'}
             </h1>
           </div>
-          {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={handleSyncCatalogToFirestore}
-              disabled={syncingCatalog}
-              className="inline-flex items-center gap-2 rounded-lg border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-800 hover:bg-stone-50 disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={openOfflineRegistration}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <PackageIcon className="h-3.5 w-3.5 text-emerald-800" />
-              <span>
-                {syncingCatalog
-                  ? 'Menyinkronkan Master...'
-                  : `Sinkronkan ${DEFAULT_PACKAGES.length} Paket & ${DEFAULT_AGENTS.length} Agen`}
-              </span>
+              <UserPlus className="h-3.5 w-3.5" />
+              <span>Daftarkan Kontrak Member</span>
             </button>
-          )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={handleSyncCatalogToFirestore}
+                disabled={syncingCatalog}
+                className="inline-flex items-center gap-2 rounded-lg border border-[#E4DCCB] bg-white px-4 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <PackageIcon className="h-3.5 w-3.5 text-[#0C3328]" />
+                <span>
+                  {syncingCatalog
+                    ? 'Menyinkronkan Master...'
+                    : `Sinkronkan ${DEFAULT_PACKAGES.length} Paket & ${DEFAULT_AGENTS.length} Agen`}
+                </span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -1111,8 +1495,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 onClick={() => setActiveTab(t.id)}
                 className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
                   activeTab === t.id
-                    ? 'bg-emerald-900 text-white'
-                    : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                    ? 'bg-[#0C3328] text-[#E8CA82] shadow-xs'
+                    : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
                 }`}
               >
                 <span>{t.label}</span>
@@ -1120,10 +1504,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                   <span
                     className={`rounded px-1.5 py-0.5 font-mono-nums text-[10px] font-bold ${
                       activeTab === t.id
-                        ? 'bg-white/20 text-white'
-                        : t.id === 'agen'
+                        ? 'bg-white/15 text-[#E8CA82]'
+                        : t.id === 'agen' || t.id === 'korwil'
                           ? 'bg-amber-100 text-amber-900'
-                          : 'bg-stone-100 text-stone-700'
+                          : 'bg-[#FAF7F2] text-[#381E5A]'
                     }`}
                   >
                     {t.badge}
@@ -1225,14 +1609,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         </div>
       )}
 
-      {/* TAB 1: TRANSAKSI (SETORAN & PENARIKAN) + VERIFIKASI + LOG AUDIT */}
+      {/* TAB 1: TRANSAKSI (SETORAN & PENARIKAN) + VERIFIKASI + JEMPUT BOLA + LOG AUDIT */}
       {activeTab === 'agen' && (
         <div className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-12">
             {/* Input Setoran Tunai atau Penarikan */}
             <form
+              ref={cashFormRef}
               onSubmit={handleRecordCashTransaction}
-              className="space-y-4 rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-5"
+              className="space-y-4 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-emerald-900">
@@ -1458,8 +1843,142 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
           </div>
 
+          {/* Checklist Jemput Bola Member Binaan */}
+          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+            <div className="flex flex-col gap-3 border-b border-[#E4DCCB]/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  Checklist Jemput Bola Member Binaan ({checklistItems.length})
+                </h2>
+                <p className="text-xs text-stone-600">
+                  Pantau member aktif yang belum menyetor lebih dari 6 hari atau mendekati lunas, lalu catat setoran 1-klik atau kirim pengingat halus.
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setChecklistFilter('all')}
+                  className={`rounded-md px-3 py-1 font-semibold cursor-pointer ${
+                    checklistFilter === 'all'
+                      ? 'bg-[#0C3328] text-[#E8CA82]'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Semua Aktif
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChecklistFilter('overdue')}
+                  className={`rounded-md px-3 py-1 font-semibold cursor-pointer ${
+                    checklistFilter === 'overdue'
+                      ? 'bg-amber-700 text-white'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Perlu Setor (&gt;6 hari)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChecklistFilter('near_lunas')}
+                  className={`rounded-md px-3 py-1 font-semibold cursor-pointer ${
+                    checklistFilter === 'near_lunas'
+                      ? 'bg-[#381E5A] text-[#E8CA82]'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Dekat Lunas (&ge;80%)
+                </button>
+              </div>
+            </div>
+
+            {checklistItems.length === 0 ? (
+              <p className="mt-4 rounded-xl bg-[#FAF7F2] p-6 text-center text-xs text-stone-500">
+                Tidak ada member binaan pada kategori filter ini.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {checklistItems.slice(0, 12).map((row) => {
+                  const s = row.sub;
+                  const waMessage = `Assalamu'alaikum ${s.member_nama}, pengingat ramah dari Sagitarius Parcel mengenai tabungan ${s.package_nama}. Saldo saat ini ${formatRupiah(
+                    s.total_terkumpul
+                  )} (${row.pct}%). Setoran rutin dapat dititipkan ke agen atau transfer ke rekening resmi. Terima kasih.`;
+                  const waHref = row.memberWa
+                    ? formatWhatsAppUrl(row.memberWa, waMessage)
+                    : `https://wa.me/?text=${encodeURIComponent(waMessage)}`;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className="flex flex-col justify-between rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold text-[#381E5A]">{s.member_nama}</p>
+                            <p className="text-xs text-stone-600">{s.package_nama}</p>
+                          </div>
+                          <span
+                            className={`rounded px-2 py-0.5 font-mono-nums text-[10px] font-bold ${
+                              row.daysSince > 6
+                                ? 'bg-amber-100 text-amber-900'
+                                : 'bg-emerald-100 text-emerald-900'
+                            }`}
+                          >
+                            {row.lastDate ? `${row.daysSince} hr lalu` : 'Belum setor'}
+                          </span>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-xs">
+                          <span className="font-mono-nums font-bold text-[#0C3328]">
+                            {formatRupiah(s.total_terkumpul)}
+                          </span>
+                          <span className="font-mono-nums text-stone-500">
+                            / {formatRupiah(s.target_nominal)} ({row.pct}%)
+                          </span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white">
+                          <div
+                            className="h-full rounded-full bg-[#0C3328]"
+                            style={{ width: `${row.pct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSubId(s.id);
+                            setCashTxType('setoran');
+                            setCashNominal(String(s.setoran_nominal || 20000));
+                            setCashNote('Setoran Tunai Jemput Bola');
+                            cashFormRef.current?.scrollIntoView({
+                              behavior: 'smooth',
+                              block: 'center',
+                            });
+                          }}
+                          className="flex-1 rounded-lg bg-[#0C3328] py-1.5 text-[11px] font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                        >
+                          1-Klik Setor
+                        </button>
+                        <a
+                          href={waHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#E4DCCB] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#15803D] hover:bg-emerald-50"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          Tagih WA
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Log Audit Transaksi Tervalidasi (Admin & Staff) */}
-          <div className="rounded-2xl border border-stone-200 bg-white p-6">
+          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
             <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-lg font-bold text-stone-900">
@@ -1655,29 +2174,39 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 Pantau progres pelunasan, token QR pengambilan, ubah status kontrak, atau koreksi saldo member.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                downloadCsv(
-                  `kontrak-member-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`,
-                  ['Token QR', 'Member', 'Paket', 'Wilayah', 'Agen', 'Terkumpul', 'Target', 'Status'],
-                  filteredContracts.map((s) => [
-                    s.qr_code_token,
-                    s.member_nama,
-                    s.package_nama,
-                    s.wilayah,
-                    s.agen_nama || s.agen_kode || s.agen_id,
-                    s.total_terkumpul,
-                    s.target_nominal,
-                    s.status,
-                  ])
-                )
-              }
-              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-800" />
-              <span>Export CSV Kontrak</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={openOfflineRegistration}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>Daftarkan Kontrak Member</span>
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  downloadCsv(
+                    `kontrak-member-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`,
+                    ['Token QR', 'Member', 'Paket', 'Wilayah', 'Agen', 'Terkumpul', 'Target', 'Status'],
+                    filteredContracts.map((s) => [
+                      s.qr_code_token,
+                      s.member_nama,
+                      s.package_nama,
+                      s.wilayah,
+                      s.agen_nama || s.agen_kode || s.agen_id,
+                      s.total_terkumpul,
+                      s.target_nominal,
+                      s.status,
+                    ])
+                  )
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3.5 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-[#0C3328]" />
+                <span>Export CSV Kontrak</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -2262,6 +2791,201 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </table>
             </div>
           </div>
+
+          {/* Tutup Kas Setor Tunai Agen -> Pusat & Klaim Pencairan Komisi */}
+          <div className="grid gap-6 lg:grid-cols-12">
+            <form
+              onSubmit={handleCreateSettlement}
+              className="space-y-4 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5"
+            >
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-[#381E5A]" />
+                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  Tutup Kas Agen &amp; Klaim Komisi
+                </h2>
+              </div>
+              <p className="text-xs text-stone-600">
+                Laporkan penyetoran uang tunai kolektif ke kas pusat atau ajukan pencairan komisi agen untuk diverifikasi Admin Pusat.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">Jenis Pengajuan</label>
+                <select
+                  value={settleJenis}
+                  onChange={(e) => {
+                    const val = e.target.value as AgentSettlementType;
+                    setSettleJenis(val);
+                    setSettleCatatan(
+                      val === 'setor_tunai_pusat'
+                        ? 'Setoran tunai kolektif member binaan'
+                        : 'Klaim pencairan komisi agen wilayah'
+                    );
+                  }}
+                  className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                >
+                  <option value="setor_tunai_pusat">Setor Tunai Agen ke Pusat</option>
+                  <option value="pencairan_komisi">Klaim Pencairan Komisi Agen</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">Nominal (Rp)</label>
+                <input
+                  type="number"
+                  min={1000}
+                  step={1000}
+                  required
+                  value={settleNominal}
+                  onChange={(e) => setSettleNominal(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">Catatan / Ref Transfer</label>
+                <input
+                  type="text"
+                  maxLength={250}
+                  value={settleCatatan}
+                  onChange={(e) => setSettleCatatan(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingSettlement}
+                className="w-full rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
+              >
+                {savingSettlement ? 'Mengirim Pengajuan...' : 'Kirim Pengajuan Tutup Kas / Komisi'}
+              </button>
+            </form>
+
+            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-7">
+              <div className="flex items-center justify-between gap-2 border-b border-[#E4DCCB]/70 pb-3">
+                <div>
+                  <h3 className="font-display text-lg font-bold text-[#381E5A]">
+                    Riwayat Setor Kas &amp; Pencairan Komisi ({agentSettlements.length})
+                  </h3>
+                  <p className="text-xs text-stone-600">
+                    Validasi Admin Pusat atas setoran kas agen dan pencairan komisi resmi.
+                  </p>
+                </div>
+              </div>
+
+              {agentSettlements.length === 0 ? (
+                <p className="mt-6 rounded-xl bg-[#FAF7F2] p-6 text-center text-xs text-stone-500">
+                  Belum ada riwayat tutup kas atau klaim pencairan komisi.
+                </p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-[#E4DCCB] text-stone-500">
+                        <th className="py-2 pr-3 font-semibold">Tanggal &amp; Agen</th>
+                        <th className="py-2 pr-3 font-semibold">Jenis &amp; Catatan</th>
+                        <th className="py-2 pr-3 text-right font-semibold">Nominal</th>
+                        <th className="py-2 pr-3 font-semibold">Status</th>
+                        {isAdmin && <th className="py-2 text-right font-semibold">Validasi Admin</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100">
+                      {agentSettlements.map((st) => (
+                        <tr key={st.id} className="hover:bg-[#FAF7F2]/60">
+                          <td className="py-2.5 pr-3">
+                            <p className="font-mono-nums font-semibold text-stone-800">{st.tanggal}</p>
+                            <p className="text-[11px] text-stone-500">
+                              {st.agen_nama} ({st.wilayah})
+                            </p>
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            <p className="font-bold text-[#381E5A]">
+                              {st.jenis === 'setor_tunai_pusat'
+                                ? 'Setor Tunai Pusat'
+                                : 'Pencairan Komisi'}
+                            </p>
+                            {st.catatan && <p className="text-[11px] text-stone-500">{st.catatan}</p>}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right font-mono-nums font-bold text-[#0C3328] whitespace-nowrap">
+                            {formatRupiah(st.nominal)}
+                          </td>
+                          <td className="py-2.5 pr-3 whitespace-nowrap">
+                            <span
+                              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                st.status === 'verified'
+                                  ? 'bg-emerald-100 text-emerald-900'
+                                  : st.status === 'rejected'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-amber-100 text-amber-900'
+                              }`}
+                            >
+                              {st.status}
+                            </span>
+                            {st.validated_by && (
+                              <p className="mt-0.5 text-[10px] text-stone-500">
+                                oleh {st.validated_by}
+                              </p>
+                            )}
+                          </td>
+                          {isAdmin && (
+                            <td className="py-2.5 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1.5">
+                                {st.status === 'pending' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVerifySettlement(st, 'verified')}
+                                      className="rounded bg-[#0C3328] px-2 py-1 text-[10px] font-bold text-[#E8CA82] cursor-pointer"
+                                    >
+                                      Validasi
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVerifySettlement(st, 'rejected')}
+                                      className="rounded border border-rose-200 px-2 py-1 text-[10px] font-bold text-rose-700 cursor-pointer"
+                                    >
+                                      Tolak
+                                    </button>
+                                  </>
+                                )}
+                                {confirmDeleteSettleId === st.id ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSettlement(st.id)}
+                                      className="rounded bg-rose-700 px-2 py-1 text-[10px] font-bold text-white cursor-pointer"
+                                    >
+                                      Hapus
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmDeleteSettleId(null)}
+                                      className="text-[10px] text-stone-500 cursor-pointer"
+                                    >
+                                      Batal
+                                    </button>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteSettleId(st.id)}
+                                    className="p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
+                                    title="Hapus"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -2352,19 +3076,29 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 </h3>
               </div>
               <p className="mt-1 text-xs text-stone-600">
-                Masukkan kode token QR dari HP member yang berstatus Lunas untuk menandai paket telah diambil.
+                Scan kamera atau masukkan kode token QR dari HP member berstatus Lunas untuk menandai paket telah diambil.
               </p>
+
+              <QrCameraScanner
+                onScan={(code) => {
+                  setQrInput(code.toUpperCase());
+                  setStatusMessage(
+                    `QR terdeteksi: ${code.toUpperCase()}. Klik "Konfirmasi Pengambilan Paket" untuk menyelesaikan serah terima.`
+                  );
+                }}
+              />
+
               <input
                 type="text"
                 required
                 value={qrInput}
                 onChange={(e) => setQrInput(e.target.value)}
                 placeholder="Contoh: SGT-CIA-M2X9A"
-                className="mt-4 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900 uppercase"
+                className="mt-3 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900 uppercase"
               />
               <button
                 type="submit"
-                className="mt-3 w-full rounded-lg bg-emerald-900 py-2.5 text-xs font-semibold text-white hover:bg-emerald-800 cursor-pointer"
+                className="mt-3 w-full rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
               >
                 Konfirmasi Pengambilan Paket
               </button>
@@ -2657,6 +3391,478 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: DOOR PRIZE UNDIAN RESMI */}
+      {activeTab === 'doorprize' && (
+        <div className="grid gap-6 lg:grid-cols-12">
+          <div className="space-y-4 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5">
+            <div className="flex items-center gap-2">
+              <Gift className="h-5 w-5 text-[#381E5A]" />
+              <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                Undian Door Prize Member
+              </h2>
+            </div>
+            <p className="text-xs text-stone-600">
+              Setiap kontrak aktif dengan minimal 1 setoran tervalidasi berhak memperoleh nomor kupon undian resmi{' '}
+              <span className="font-mono-nums font-semibold">DP-...</span>.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4 text-xs">
+              <div>
+                <p className="text-stone-500">Kupon Memenuhi Syarat</p>
+                <p className="mt-1 font-mono-nums text-lg font-bold text-[#0C3328]">
+                  {doorPrizeEligible.length} Kupon
+                </p>
+              </div>
+              <div>
+                <p className="text-stone-500">Pemenang Tercatat</p>
+                <p className="mt-1 font-mono-nums text-lg font-bold text-[#381E5A]">
+                  {doorPrizeDraws.length} Pemenang
+                </p>
+              </div>
+            </div>
+
+            {isAdmin ? (
+              <form onSubmit={handleRunDoorPrizeDraw} className="space-y-3 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700">
+                    Pilih / Ketik Nama Hadiah
+                  </label>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {[
+                      'HP Android',
+                      'Rice Cooker',
+                      'Kompor Gas 2 Tungku',
+                      'Kipas Angin',
+                      'Dispenser',
+                      'Voucher Belanja',
+                    ].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setPrizeName(preset)}
+                        className={`rounded-md border px-2 py-1 text-[11px] font-semibold cursor-pointer ${
+                          prizeName === preset
+                            ? 'border-[#381E5A] bg-[#381E5A] text-[#E8CA82]'
+                            : 'border-[#E4DCCB] bg-[#FAF7F2] text-stone-700'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    maxLength={100}
+                    value={prizeName}
+                    onChange={(e) => setPrizeName(e.target.value)}
+                    placeholder="Nama hadiah Door Prize..."
+                    className="mt-2 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={drawingPrize || doorPrizeEligible.length === 0}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-50 cursor-pointer"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>
+                    {drawingPrize ? 'Mengundi Kupon...' : 'Putar Undian Acak Sekarang'}
+                  </span>
+                </button>
+              </form>
+            ) : (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                Pengacakan &amp; pengumuman pemenang Door Prize dilakukan secara resmi oleh Admin Pusat Sagitarius Parcel.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-7">
+            <h3 className="font-display text-lg font-bold text-[#381E5A]">
+              Daftar Pemenang Door Prize ({doorPrizeDraws.length})
+            </h3>
+            <p className="text-xs text-stone-600">
+              Pemenang langsung tampil di Dashboard Member secara real-time.
+            </p>
+
+            {doorPrizeDraws.length === 0 ? (
+              <p className="mt-6 rounded-xl bg-[#FAF7F2] p-8 text-center text-xs text-stone-500">
+                Belum ada pengundian Door Prize yang dipublikasikan.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-[#E4DCCB] text-stone-500">
+                      <th className="py-2 pr-3 font-semibold">Tanggal</th>
+                      <th className="py-2 pr-3 font-semibold">Hadiah</th>
+                      <th className="py-2 pr-3 font-semibold">Kupon &amp; Pemenang</th>
+                      <th className="py-2 pr-3 font-semibold">Wilayah</th>
+                      {isAdmin && <th className="py-2 text-right font-semibold">Aksi</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {doorPrizeDraws.map((dp) => (
+                      <tr key={dp.id} className="hover:bg-[#FAF7F2]/60">
+                        <td className="py-2.5 pr-3 font-mono-nums text-stone-600 whitespace-nowrap">
+                          {dp.tanggal_undi}
+                        </td>
+                        <td className="py-2.5 pr-3 font-bold text-[#381E5A]">{dp.hadiah}</td>
+                        <td className="py-2.5 pr-3">
+                          <p className="font-bold text-stone-900">{dp.member_nama}</p>
+                          <p className="font-mono-nums text-[11px] font-semibold text-[#0C3328]">
+                            {dp.kupon_kode}
+                          </p>
+                        </td>
+                        <td className="py-2.5 pr-3 text-stone-600">{dp.wilayah}</td>
+                        {isAdmin && (
+                          <td className="py-2.5 text-right whitespace-nowrap">
+                            {confirmDeletePrizeId === dp.id ? (
+                              <span className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDoorPrize(dp.id)}
+                                  className="rounded bg-rose-700 px-2 py-0.5 text-[10px] font-bold text-white cursor-pointer"
+                                >
+                                  Hapus
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeletePrizeId(null)}
+                                  className="text-[10px] text-stone-500 cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeletePrizeId(dp.id)}
+                                className="p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: ANALITIK & GRAFIK VISUAL (ADMIN ONLY) */}
+      {activeTab === 'analitik' && isAdmin && (
+        <AdminAnalyticsTab
+          korwilRecap={korwilRecap}
+          subscriptions={subscriptions}
+          deposits={deposits}
+          packages={packages}
+        />
+      )}
+
+      {/* TAB: PENGATURAN REKENING & PENGUMUMAN PUBLIK (ADMIN ONLY) */}
+      {activeTab === 'pengaturan' && isAdmin && (
+        <form
+          onSubmit={handleSaveAppSettings}
+          className="grid gap-6 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:grid-cols-2"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-[#E4DCCB]/70 pb-3">
+              <Settings className="h-5 w-5 text-[#381E5A]" />
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  Rekening Transfer Resmi Perusahaan
+                </h2>
+                <p className="text-xs text-stone-600">
+                  Ditampilkan otomatis di kotak Setor Transfer Bank pada Dashboard Member.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">Nama Bank Resmi</label>
+              <input
+                type="text"
+                required
+                minLength={2}
+                maxLength={60}
+                value={setBankNama}
+                onChange={(e) => setSetBankNama(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">Nomor Rekening</label>
+              <input
+                type="text"
+                required
+                minLength={4}
+                maxLength={50}
+                value={setBankRekening}
+                onChange={(e) => setSetBankRekening(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">Atas Nama Pemilik Rekening</label>
+              <input
+                type="text"
+                required
+                minLength={2}
+                maxLength={100}
+                value={setBankAtasNama}
+                onChange={(e) => setSetBankAtasNama(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">
+                Catatan / Instruksi Transfer &amp; QRIS
+              </label>
+              <textarea
+                rows={3}
+                maxLength={250}
+                value={setQrisCatatan}
+                onChange={(e) => setSetQrisCatatan(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-xs text-stone-900"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-[#E4DCCB]/70 pb-3">
+              <Megaphone className="h-5 w-5 text-[#0C3328]" />
+              <div>
+                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  Papan Pengumuman Broadcast Member
+                </h2>
+                <p className="text-xs text-stone-600">
+                  Banner info jadwal H-7/H-2, promo, atau pengundian Door Prize LIVE.
+                </p>
+              </div>
+            </div>
+
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-[#381E5A] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={setPengAktif}
+                onChange={(e) => setSetPengAktif(e.target.checked)}
+                className="h-4 w-4 rounded border-stone-300 text-[#0C3328]"
+              />
+              Tampilkan Banner Pengumuman di Dashboard Member
+            </label>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">Judul Pengumuman</label>
+              <input
+                type="text"
+                maxLength={120}
+                value={setPengJudul}
+                onChange={(e) => setSetPengJudul(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-stone-700">Isi Pesan Broadcast</label>
+              <textarea
+                rows={4}
+                maxLength={600}
+                value={setPengIsi}
+                onChange={(e) => setSetPengIsi(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-xs text-stone-900"
+              />
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={savingSettings}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>
+                  {savingSettings
+                    ? 'Menyimpan Perubahan...'
+                    : 'Simpan & Publikasikan ke Dashboard Member'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* Modal Form: Daftarkan Kontrak Member Offline (Agen / Korwil / Admin) */}
+      {showOfflineModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <form
+            onSubmit={handleCreateOfflineContract}
+            className="w-full max-w-lg rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b border-[#E4DCCB]/70 pb-3">
+              <div>
+                <h3 className="font-display text-xl font-bold text-[#381E5A]">
+                  Daftarkan Kontrak Member Baru
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Pendaftaran kontrak langsung oleh Agen/Admin untuk member offline atau tanpa HP.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowOfflineModal(false)}
+                className="rounded p-1 text-stone-500 hover:bg-stone-100 cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">
+                  Nama Lengkap Member
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  maxLength={75}
+                  value={offNama}
+                  onChange={(e) => setOffNama(e.target.value)}
+                  placeholder="Contoh: Ibu Siti Aminah"
+                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700">
+                    No. WhatsApp (Opsional)
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={20}
+                    value={offWa}
+                    onChange={(e) => setOffWa(e.target.value)}
+                    placeholder="0813xxxxxxxx"
+                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700">Wilayah</label>
+                  <select
+                    value={offWilayah}
+                    onChange={(e) => setOffWilayah(e.target.value as WilayahPriangan)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                  >
+                    {WILAYAH_LIST.map((w) => (
+                      <option key={w} value={w}>
+                        {w}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">
+                  Pilih Paket Katalog
+                </label>
+                <select
+                  value={offPackageId}
+                  onChange={(e) => setOffPackageId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                >
+                  {packages.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nama_paket} — {formatRupiah(p.harga_total)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700">
+                    Frekuensi Setoran
+                  </label>
+                  <select
+                    value={offFrekuensi}
+                    onChange={(e) => setOffFrekuensi(e.target.value as 'harian' | 'mingguan')}
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                  >
+                    <option value="harian">Harian (Setiap Hari)</option>
+                    <option value="mingguan">Mingguan (Jemput Bola)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700">
+                    Durasi (Minggu, 1–60)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    required
+                    value={offDurasiMinggu}
+                    onChange={(e) => setOffDurasiMinggu(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm text-stone-900"
+                  />
+                </div>
+              </div>
+
+              {userProfile.role !== 'agen' && (
+                <div>
+                  <label className="block text-xs font-semibold text-stone-700">
+                    Agen Penanggung Jawab
+                  </label>
+                  <select
+                    value={offAgentId}
+                    onChange={(e) => setOffAgentId(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                  >
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.kode_agen} — {a.nama} ({a.wilayah})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowOfflineModal(false)}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={savingOffline}
+                className="rounded-lg bg-[#0C3328] px-5 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
+              >
+                {savingOffline ? 'Mendaftarkan...' : 'Simpan Kontrak Member'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

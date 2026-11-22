@@ -170,18 +170,18 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
   return (
     <section
       aria-label="Riwayat Transaksi Tervalidasi"
-      className="rounded-2xl border border-stone-200 bg-white p-6"
+      className="rounded-2xl border border-[#E4DCCB] bg-white p-6"
     >
       {/* Header */}
-      <div className="flex flex-col gap-4 border-b border-stone-100 pb-5 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 border-b border-[#EFE8D8] pb-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-emerald-900">
-            <History className="h-5 w-5" />
+          <div className="flex items-center gap-2 text-[#0C3328]">
+            <History className="h-5 w-5 text-[#C8A053]" />
             <span className="text-xs font-semibold uppercase tracking-wide">
               Mutasi Tervalidasi Agen
             </span>
           </div>
-          <h3 className="mt-1 font-display text-xl font-bold text-stone-900">
+          <h3 className="mt-1 font-display text-xl font-bold text-[#381E5A]">
             Riwayat Transaksi
           </h3>
           <p className="mt-0.5 text-xs text-stone-600">
@@ -191,13 +191,13 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
 
         <div className="flex flex-wrap items-center gap-2">
           {subscriptions.length > 1 && (
-            <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-xs">
+            <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
               <button
                 type="button"
                 onClick={() => setScope('active')}
                 className={`rounded-md px-3 py-1.5 font-semibold transition cursor-pointer ${
                   scope === 'active'
-                    ? 'bg-white text-stone-900 shadow-xs'
+                    ? 'bg-white text-[#381E5A] shadow-xs'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
@@ -208,7 +208,7 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
                 onClick={() => setScope('all_contracts')}
                 className={`rounded-md px-3 py-1.5 font-semibold transition cursor-pointer ${
                   scope === 'all_contracts'
-                    ? 'bg-white text-stone-900 shadow-xs'
+                    ? 'bg-white text-[#381E5A] shadow-xs'
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
@@ -221,7 +221,7 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
             <button
               type="button"
               onClick={handleExportCsv}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 whitespace-nowrap cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] whitespace-nowrap cursor-pointer"
             >
               <Download className="h-3.5 w-3.5" />
               <span>Unduh CSV</span>
@@ -232,25 +232,25 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
 
       {/* KPI Strip (Tabular Numerals) */}
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-stone-200 bg-[#FAF8F4] px-3.5 py-3">
+        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
           <p className="text-[11px] font-medium text-stone-500">Total Setoran Valid</p>
-          <p className="mt-1 font-mono-nums text-sm font-bold text-emerald-800 sm:text-base">
+          <p className="mt-1 font-mono-nums text-sm font-bold text-[#0C3328] sm:text-base">
             +{formatRupiah(counts.totalSetoran)}
           </p>
         </div>
-        <div className="rounded-xl border border-stone-200 bg-[#FAF8F4] px-3.5 py-3">
+        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
           <p className="text-[11px] font-medium text-stone-500">Total Penarikan Valid</p>
           <p className="mt-1 font-mono-nums text-sm font-bold text-rose-700 sm:text-base">
             -{formatRupiah(counts.totalPenarikan)}
           </p>
         </div>
-        <div className="rounded-xl border border-stone-200 bg-[#FAF8F4] px-3.5 py-3">
+        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
           <p className="text-[11px] font-medium text-stone-500">Saldo Bersih Mutasi</p>
-          <p className="mt-1 font-mono-nums text-sm font-bold text-[#26124A] sm:text-base">
+          <p className="mt-1 font-mono-nums text-sm font-bold text-[#381E5A] sm:text-base">
             {formatRupiah(counts.saldoBersih)}
           </p>
         </div>
-        <div className="rounded-xl border border-stone-200 bg-[#FAF8F4] px-3.5 py-3">
+        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
           <p className="text-[11px] font-medium text-stone-500">Jumlah Transaksi</p>
           <p className="mt-1 font-mono-nums text-sm font-bold text-stone-900 sm:text-base">
             {counts.allCount} Validasi
@@ -266,8 +266,8 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
             onClick={() => setFilterJenis('all')}
             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
               filterJenis === 'all'
-                ? 'bg-[#26124A] text-white'
-                : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                ? 'bg-[#381E5A] text-white'
+                : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
             }`}
           >
             Semua ({counts.allCount})
@@ -277,8 +277,8 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
             onClick={() => setFilterJenis('setoran')}
             className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
               filterJenis === 'setoran'
-                ? 'bg-emerald-900 text-white'
-                : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50'
+                ? 'bg-[#0C3328] text-[#E8CA82]'
+                : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
             }`}
           >
             <ArrowDownLeft className="h-3.5 w-3.5" />

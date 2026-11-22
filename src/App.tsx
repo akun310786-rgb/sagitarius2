@@ -18,6 +18,7 @@ import {
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -57,8 +58,11 @@ import {
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import {
   AgentDirectoryItem,
+  AgentSettlement,
+  AppPublicSettings,
   ContactMessage,
   Deposit,
+  DoorPrizeDraw,
   ParcelPackage,
   PublicPage,
   SimulationLock,
@@ -69,6 +73,18 @@ import {
 } from './types';
 
 type ActiveView = 'landing' | 'member' | 'operasional';
+
+const DEFAULT_APP_SETTINGS: AppPublicSettings = {
+  bank_nama: 'BRI / BCA Resmi Pusat',
+  bank_rekening: '0100-01-002345-30-8',
+  bank_atas_nama: 'PT. SAGITARIUS TRINUNGGAL KARYA',
+  qris_catatan:
+    'Cantumkan Nama Member & Wilayah pada berita transfer, atau titipkan tunai ke Agen Resmi terdekat.',
+  pengumuman_judul: 'Info Layanan & Katalog 2026–2027',
+  pengumuman_isi:
+    'Setoran harian/mingguan berjalan selama 325 hari. Paket barang dibagikan selambatnya 15 Ramadhan & daging/telur pada H-2 Idul Fitri.',
+  pengumuman_aktif: true,
+};
 
 export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('landing');
@@ -105,12 +121,15 @@ export default function App() {
   // Public Catalog & Agents (live merged with Firestore)
   const [packages, setPackages] = useState<ParcelPackage[]>(DEFAULT_PACKAGES);
   const [agents, setAgents] = useState<AgentDirectoryItem[]>(DEFAULT_AGENTS);
+  const [appSettings, setAppSettings] = useState<AppPublicSettings>(DEFAULT_APP_SETTINGS);
+  const [doorPrizeDraws, setDoorPrizeDraws] = useState<DoorPrizeDraw[]>([]);
 
   // Live Firestore User Data
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [deposits, setDeposits] = useState<Deposit[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [contactMessages, setContactMessages] = useState<ContactMessage[]>([]);
+  const [agentSettlements, setAgentSettlements] = useState<AgentSettlement[]>([]);
 
   // Simulation Lock & Agent Selection across views
   const [lockedSimulation, setLockedSimulation] = useState<SimulationLock | null>(null);
@@ -164,9 +183,41 @@ export default function App() {
       }
     );
 
+    const unsubSettings = onSnapshot(
+      doc(db, 'app_settings', 'public'),
+      (snap) => {
+        if (snap.exists()) {
+          setAppSettings({
+            ...DEFAULT_APP_SETTINGS,
+            ...(snap.data() as Partial<AppPublicSettings>),
+          });
+        }
+      },
+      () => {
+        // Retain default company settings if uninitialized
+      }
+    );
+
+    const unsubDoorPrize = onSnapshot(
+      query(collection(db, 'door_prize_draws'), orderBy('createdAt', 'desc')),
+      (snap) => {
+        setDoorPrizeDraws(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<DoorPrizeDraw, 'id'>),
+          }))
+        );
+      },
+      () => {
+        // Retain empty list if offline or uninitialized
+      }
+    );
+
     return () => {
       unsubPkg();
       unsubAgents();
+      unsubSettings();
+      unsubDoorPrize();
     };
   }, []);
 
@@ -179,6 +230,8 @@ export default function App() {
         setSubscriptions([]);
         setDeposits([]);
         setAllUsers([]);
+        setContactMessages([]);
+        setAgentSettlements([]);
         setAuthReady(true);
         return;
       }
@@ -301,12 +354,36 @@ export default function App() {
       );
     }
 
+    let unsubSettlements: (() => void) | undefined;
+    if (isBootAdmin || userProfile.role === 'admin' || userProfile.role === 'agen' || userProfile.role === 'korwil') {
+      const settlementsQuery =
+        isBootAdmin || userProfile.role === 'admin'
+          ? query(collection(db, 'agent_settlements'))
+          : query(
+              collection(db, 'agent_settlements'),
+              where('agen_id', '==', firebaseUser.uid)
+            );
+      unsubSettlements = onSnapshot(
+        settlementsQuery,
+        (snap) => {
+          setAgentSettlements(
+            snap.docs.map((d) => ({
+              id: d.id,
+              ...(d.data() as Omit<AgentSettlement, 'id'>),
+            }))
+          );
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'agent_settlements')
+      );
+    }
+
     return () => {
       unsubProfile();
       unsubSubs();
       unsubDeps();
       if (unsubUsers) unsubUsers();
       if (unsubMessages) unsubMessages();
+      if (unsubSettlements) unsubSettlements();
     };
   }, [authReady, firebaseUser, userProfile?.role]);
 
@@ -472,6 +549,14 @@ export default function App() {
       throw new Error(mapFirebaseAuthError(err));
     } finally {
       isRegisteringRef.current = false;
+    }
+  };
+
+  const handleSendPasswordReset = async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+    } catch (err) {
+      throw new Error(mapFirebaseAuthError(err));
     }
   };
 
@@ -934,6 +1019,8 @@ export default function App() {
               agents={agents}
               subscriptions={subscriptions}
               deposits={deposits}
+              appSettings={appSettings}
+              doorPrizeDraws={doorPrizeDraws}
               lockedSimulation={lockedSimulation}
               onClearLockedSimulation={() => setLockedSimulation(null)}
               onNeedLogin={openAuthModal}
@@ -949,6 +1036,9 @@ export default function App() {
               subscriptions={subscriptions}
               deposits={deposits}
               contactMessages={contactMessages}
+              appSettings={appSettings}
+              doorPrizeDraws={doorPrizeDraws}
+              agentSettlements={agentSettlements}
               onNeedLogin={openAuthModal}
             />
           )}
@@ -1346,6 +1436,7 @@ export default function App() {
           onLoginIdentifier={handleLoginWithIdentifier}
           onRegisterMember={handleRegisterMember}
           onLoginGoogle={handleLoginWithGoogle}
+          onSendPasswordReset={handleSendPasswordReset}
         />
 
         <OfflineIndicator />

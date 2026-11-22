@@ -129,6 +129,52 @@ export interface ContactMessage {
   updatedAt?: unknown;
 }
 
+export interface AppPublicSettings {
+  bank_nama: string;
+  bank_rekening: string;
+  bank_atas_nama: string;
+  qris_catatan: string;
+  pengumuman_judul: string;
+  pengumuman_isi: string;
+  pengumuman_aktif: boolean;
+  updated_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface DoorPrizeDraw {
+  id: string;
+  hadiah: string;
+  kupon_kode: string;
+  subscription_id: string;
+  member_id: string;
+  member_nama: string;
+  wilayah: WilayahPriangan;
+  tanggal_undi: string;
+  drawn_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export type AgentSettlementType = 'setor_tunai_pusat' | 'pencairan_komisi';
+export type AgentSettlementStatus = 'pending' | 'verified' | 'rejected';
+
+export interface AgentSettlement {
+  id: string;
+  agen_id: string;
+  agen_kode?: string;
+  agen_nama: string;
+  wilayah: WilayahPriangan;
+  jenis: AgentSettlementType;
+  nominal: number;
+  status: AgentSettlementStatus;
+  catatan?: string;
+  tanggal: string;
+  validated_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 export type PublicPage =
   | 'beranda'
   | 'katalog'

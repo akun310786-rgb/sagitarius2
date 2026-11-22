@@ -28,6 +28,7 @@ interface AuthModalProps {
   onLoginIdentifier: (identifier: string, password: string) => Promise<void>;
   onRegisterMember: (input: RegisterMemberInput) => Promise<void>;
   onLoginGoogle: () => Promise<void>;
+  onSendPasswordReset?: (email: string) => Promise<void>;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -36,11 +37,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLoginIdentifier,
   onRegisterMember,
   onLoginGoogle,
+  onSendPasswordReset,
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [infoMsg, setInfoMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showResetHelp, setShowResetHelp] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
 
   // Login Form State
   const [identifier, setIdentifier] = useState('');
@@ -59,12 +64,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const switchMode = (nextMode: 'login' | 'register') => {
     setMode(nextMode);
     setErrorMsg('');
+    setInfoMsg('');
+    setShowResetHelp(false);
     setShowPassword(false);
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setInfoMsg('');
     if (!identifier.trim() || !loginPassword) {
       setErrorMsg('Masukkan Nomor WhatsApp / Username / Gmail dan kata sandi Anda.');
       return;
@@ -80,9 +88,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleSendResetClick = async () => {
+    setErrorMsg('');
+    setInfoMsg('');
+    const target = (resetEmail || (identifier.includes('@') ? identifier : '')).trim().toLowerCase();
+    if (!target || !target.includes('@')) {
+      setErrorMsg('Masukkan alamat Gmail terdaftar pada kolom reset, atau gunakan bantuan Admin WA di bawah.');
+      return;
+    }
+    if (!onSendPasswordReset) return;
+    setSubmitting(true);
+    try {
+      await onSendPasswordReset(target);
+      setInfoMsg(`Tautan reset kata sandi telah dikirim ke ${target}. Periksa kotak masuk atau folder Spam Gmail Anda.`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengirim email reset kata sandi.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setInfoMsg('');
 
     const cleanUsername = regUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     if (regNama.trim().length < 2) {
@@ -122,6 +151,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleGoogleClick = async () => {
     setErrorMsg('');
+    setInfoMsg('');
     setSubmitting(true);
     try {
       await onLoginGoogle();
@@ -140,17 +170,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       aria-modal="true"
       aria-labelledby="auth-modal-title"
     >
-      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-stone-200 bg-white shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#E4DCCB] bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between bg-[#1B0D36] px-6 py-4 text-white">
+        <div className="flex items-center justify-between bg-[#381E5A] px-6 py-4 text-white border-b border-[#C8A053]/40">
           <div className="flex items-center gap-3">
             <img
               src={LOGO_SAGITARIUS}
               alt="Logo Sagitarius Parcel"
-              className="h-10 w-10 rounded-full border border-amber-400/50 bg-black object-cover"
+              className="h-10 w-10 rounded-full border border-[#C8A053]/60 bg-black object-cover"
             />
             <div>
-              <p className="text-[11px] font-semibold text-amber-300">Sagitarius Parcel</p>
+              <p className="text-[11px] font-semibold text-[#E8CA82]">Sagitarius Parcel</p>
               <h2 id="auth-modal-title" className="font-display text-lg font-bold leading-tight">
                 {mode === 'login' ? 'Masuk Akun Member' : 'Daftar Member Baru'}
               </h2>
@@ -167,13 +197,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Mode Switcher */}
-        <div className="grid grid-cols-2 border-b border-stone-200 bg-stone-50 p-1.5 text-xs font-semibold">
+        <div className="grid grid-cols-2 border-b border-[#E4DCCB] bg-[#FAF7F2] p-1.5 text-xs font-semibold">
           <button
             type="button"
             onClick={() => switchMode('login')}
             className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition cursor-pointer ${
               mode === 'login'
-                ? 'bg-white text-[#26124A] shadow-xs'
+                ? 'bg-white text-[#381E5A] shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
@@ -185,7 +215,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             onClick={() => switchMode('register')}
             className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition cursor-pointer ${
               mode === 'register'
-                ? 'bg-white text-[#26124A] shadow-xs'
+                ? 'bg-white text-[#381E5A] shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
@@ -198,6 +228,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {errorMsg && (
             <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs leading-relaxed font-medium text-rose-800">
               {errorMsg}
+            </div>
+          )}
+          {infoMsg && (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs leading-relaxed font-medium text-emerald-900">
+              {infoMsg}
             </div>
           )}
 
@@ -220,7 +255,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="0813xxxx / username / nama@gmail.com"
-                    className="w-full rounded-lg border border-stone-300 py-2.5 pr-3 pl-9 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#26124A] focus:outline-none"
+                    className="w-full rounded-lg border border-stone-300 py-2.5 pr-3 pl-9 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#381E5A] focus:outline-none"
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-stone-500">
@@ -229,12 +264,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
 
               <div>
-                <label
-                  htmlFor="login-password"
-                  className="block text-xs font-semibold text-stone-700"
-                >
-                  Kata Sandi
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="login-password"
+                    className="block text-xs font-semibold text-stone-700"
+                  >
+                    Kata Sandi
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowResetHelp((v) => !v)}
+                    className="text-[11px] font-semibold text-[#381E5A] hover:underline cursor-pointer"
+                  >
+                    Lupa kata sandi?
+                  </button>
+                </div>
                 <div className="relative mt-1.5">
                   <Lock className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
                   <input
@@ -245,7 +289,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="Masukkan kata sandi"
-                    className="w-full rounded-lg border border-stone-300 py-2.5 pr-10 pl-9 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#26124A] focus:outline-none"
+                    className="w-full rounded-lg border border-stone-300 py-2.5 pr-10 pl-9 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#381E5A] focus:outline-none"
                   />
                   <button
                     type="button"
@@ -258,10 +302,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
+              {showResetHelp && (
+                <div className="space-y-2.5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3 text-xs">
+                  <p className="font-semibold text-[#381E5A]">Bantuan Reset Kata Sandi</p>
+                  {onSendPasswordReset && (
+                    <div className="flex gap-2">
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="Gmail terdaftar Anda..."
+                        className="flex-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => void handleSendResetClick()}
+                        className="rounded-lg bg-[#0C3328] px-3 py-1.5 text-[11px] font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                      >
+                        Kirim Link
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-stone-600">
+                    Daftar tanpa Gmail?{' '}
+                    <a
+                      href={`https://wa.me/6281324383479?text=${encodeURIComponent(
+                        `Halo Admin Sagitarius Parcel, saya lupa kata sandi akun member (${
+                          identifier || 'Nomor WA/Username saya'
+                        }). Mohon dibantu reset akses akun.`
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-[#15803D] hover:underline"
+                    >
+                      Hubungi WA Admin CS (0813 2438 3479)
+                    </a>
+                  </p>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-lg bg-[#26124A] py-2.5 text-sm font-semibold text-white transition hover:bg-[#341A63] disabled:opacity-60 cursor-pointer"
+                className="w-full rounded-lg bg-[#381E5A] py-2.5 text-sm font-semibold text-white transition hover:bg-[#492974] disabled:opacity-60 cursor-pointer"
               >
                 {submitting ? 'Memeriksa Akun...' : 'Masuk Sekarang'}
               </button>

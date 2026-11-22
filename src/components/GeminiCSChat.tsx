@@ -14,6 +14,11 @@ const QUICK_PROMPTS = [
   'Alamat kantor & nomor WA CS resmi?',
 ];
 
+const WELCOME_MESSAGE: ChatMessage = {
+  role: 'model',
+  text: 'Assalamu’alaikum! Saya CS Online Sagitarius Parcel. Silakan tanyakan detail Paket Bunda, Paket Anak, Diamond/Sultan, Paket Uang, 50 Barang Satuan, atau cara daftar tabungan Lebaran.',
+};
+
 interface GeminiCSChatProps {
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -29,15 +34,11 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
     setInternalOpen(next);
     if (onOpenChange) onOpenChange(next);
   };
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'model',
-      text: 'Assalamu’alaikum! Saya CS Online Sagitarius Parcel. Silakan tanyakan detail Paket Bunda, Paket Anak, Diamond/Sultan, Paket Uang, 50 Barang Satuan, atau cara daftar tabungan Lebaran.',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [lastFailedInput, setLastFailedInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,14 +47,20 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
     }
   }, [messages, isOpen, isLoading]);
 
-  const sendMessage = async (textToSend: string) => {
+  const sendMessage = async (textToSend: string, reuseLastUserTurn = false) => {
     const trimmed = textToSend.trim();
     if (!trimmed || isLoading) return;
 
-    const nextMessages: ChatMessage[] = [...messages, { role: 'user', text: trimmed }];
-    setMessages(nextMessages);
-    setInput('');
+    const nextMessages: ChatMessage[] = reuseLastUserTurn
+      ? messages
+      : [...messages, { role: 'user', text: trimmed }];
+
+    if (!reuseLastUserTurn) {
+      setMessages(nextMessages);
+      setInput('');
+    }
     setErrorText('');
+    setLastFailedInput('');
     setIsLoading(true);
 
     try {
@@ -70,12 +77,19 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
 
       setMessages((prev) => [...prev, { role: 'model', text: data.reply! }]);
     } catch (err) {
+      setLastFailedInput(trimmed);
       setErrorText(
         err instanceof Error ? err.message : 'Terjadi kendala saat menghubungi CS Online.'
       );
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleResetChat = () => {
+    setMessages([WELCOME_MESSAGE]);
+    setErrorText('');
+    setLastFailedInput('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -115,18 +129,29 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="rounded-lg p-1.5 text-stone-300 hover:bg-white/10 hover:text-white cursor-pointer"
-              aria-label="Tutup chat CS"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {messages.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleResetChat}
+                  className="rounded-lg px-2 py-1 text-[10px] font-semibold text-[#E8CA82] hover:bg-white/10 cursor-pointer"
+                >
+                  Ulangi
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg p-1.5 text-stone-300 hover:bg-white/10 hover:text-white cursor-pointer"
+                aria-label="Tutup chat CS"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-[#FAF8F4] p-4">
+          <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-[#FAF7F2] p-4">
             {messages.map((m, idx) => (
               <div
                 key={idx}
@@ -135,8 +160,8 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
                 <div
                   className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-line ${
                     m.role === 'user'
-                      ? 'bg-[#26124A] text-white'
-                      : 'border border-stone-200 bg-white text-stone-800'
+                      ? 'bg-[#381E5A] text-white'
+                      : 'border border-[#E4DCCB] bg-white text-stone-800'
                   }`}
                 >
                   {m.text}
@@ -146,15 +171,24 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
 
             {isLoading && (
               <div className="flex justify-start">
-                <div className="rounded-2xl border border-stone-200 bg-white px-3.5 py-2.5 text-xs text-stone-500">
-                  Sedang mengetik balasan...
+                <div className="rounded-2xl border border-[#E4DCCB] bg-white px-3.5 py-2.5 text-xs text-stone-500">
+                  Sedang menyiapkan jawaban...
                 </div>
               </div>
             )}
 
             {errorText && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-                {errorText}
+              <div className="space-y-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-800">
+                <p>{errorText}</p>
+                {lastFailedInput && (
+                  <button
+                    type="button"
+                    onClick={() => void sendMessage(lastFailedInput, true)}
+                    className="rounded-md bg-rose-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-rose-800 cursor-pointer"
+                  >
+                    Coba Kirim Ulang
+                  </button>
+                )}
               </div>
             )}
 
@@ -167,7 +201,7 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
                       key={prompt}
                       type="button"
                       onClick={() => void sendMessage(prompt)}
-                      className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:border-[#26124A] hover:text-[#26124A] cursor-pointer"
+                      className="rounded-lg border border-[#E4DCCB] bg-white px-2.5 py-1.5 text-left text-[11px] font-medium text-stone-700 hover:border-[#381E5A] hover:text-[#381E5A] cursor-pointer"
                     >
                       {prompt}
                     </button>

@@ -179,6 +179,53 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidAppSettings(data) {
+      return data.keys().hasAll(['bank_nama', 'bank_rekening', 'bank_atas_nama', 'qris_catatan', 'pengumuman_judul', 'pengumuman_isi', 'pengumuman_aktif', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['bank_nama', 'bank_rekening', 'bank_atas_nama', 'qris_catatan', 'pengumuman_judul', 'pengumuman_isi', 'pengumuman_aktif', 'updated_by', 'createdAt', 'updatedAt']) &&
+        data.bank_nama is string && data.bank_nama.size() >= 2 && data.bank_nama.size() <= 60 &&
+        data.bank_rekening is string && data.bank_rekening.size() >= 4 && data.bank_rekening.size() <= 50 &&
+        data.bank_atas_nama is string && data.bank_atas_nama.size() >= 2 && data.bank_atas_nama.size() <= 100 &&
+        data.qris_catatan is string && data.qris_catatan.size() <= 250 &&
+        data.pengumuman_judul is string && data.pengumuman_judul.size() <= 120 &&
+        data.pengumuman_isi is string && data.pengumuman_isi.size() <= 600 &&
+        data.pengumuman_aktif is bool &&
+        (!('updated_by' in data) || (data.updated_by is string && data.updated_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidDoorPrizeDraw(data) {
+      return data.keys().hasAll(['hadiah', 'kupon_kode', 'subscription_id', 'member_id', 'member_nama', 'wilayah', 'tanggal_undi', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['hadiah', 'kupon_kode', 'subscription_id', 'member_id', 'member_nama', 'wilayah', 'tanggal_undi', 'drawn_by', 'createdAt', 'updatedAt']) &&
+        data.hadiah is string && data.hadiah.size() >= 2 && data.hadiah.size() <= 100 &&
+        data.kupon_kode is string && data.kupon_kode.size() >= 4 && data.kupon_kode.size() <= 60 &&
+        isValidId(data.subscription_id) &&
+        isValidId(data.member_id) &&
+        data.member_nama is string && data.member_nama.size() >= 2 && data.member_nama.size() <= 100 &&
+        isValidWilayah(data.wilayah) &&
+        data.tanggal_undi is string && data.tanggal_undi.size() >= 4 && data.tanggal_undi.size() <= 40 &&
+        (!('drawn_by' in data) || (data.drawn_by is string && data.drawn_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAgentSettlement(data) {
+      return data.keys().hasAll(['agen_id', 'agen_nama', 'wilayah', 'jenis', 'nominal', 'status', 'tanggal', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'jenis', 'nominal', 'status', 'catatan', 'tanggal', 'validated_by', 'createdAt', 'updatedAt']) &&
+        isValidId(data.agen_id) &&
+        (!('agen_kode' in data) || (data.agen_kode is string && data.agen_kode.size() <= 32)) &&
+        data.agen_nama is string && data.agen_nama.size() >= 2 && data.agen_nama.size() <= 100 &&
+        isValidWilayah(data.wilayah) &&
+        data.jenis in ['setor_tunai_pusat', 'pencairan_komisi'] &&
+        data.nominal is number && data.nominal >= 1000 &&
+        data.status in ['pending', 'verified', 'rejected'] &&
+        (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 250)) &&
+        data.tanggal is string && data.tanggal.size() >= 4 && data.tanggal.size() <= 40 &&
+        (!('validated_by' in data) || (data.validated_by is string && data.validated_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // --- Collection Match Blocks ---
     match /admins/{adminId} {
       allow get: if isSignedIn() && isValidId(adminId) && (adminId == request.auth.uid || isAdmin());
@@ -275,11 +322,16 @@ service cloud.firestore {
       );
       allow create: if isSignedIn() && isValidId(subscriptionId) &&
         isValidSubscription(incoming()) &&
-        incoming().member_id == request.auth.uid &&
         incoming().total_terkumpul == 0 &&
         incoming().status == 'aktif' &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        (
+          incoming().member_id == request.auth.uid ||
+          (isAgen() && incoming().agen_id == request.auth.uid) ||
+          isKorwil() ||
+          isAdmin()
+        );
       allow update: if isSignedIn() && isValidId(subscriptionId) &&
         isValidSubscription(incoming()) &&
         incoming().member_id == existing().member_id &&
@@ -299,7 +351,14 @@ service cloud.firestore {
             incoming().diff(existing()).affectedKeys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'updatedAt'])
           )
         );
-      allow delete: if isAdmin() && isValidId(subscriptionId);
+      allow delete: if isSignedIn() && isValidId(subscriptionId) && (
+        isAdmin() ||
+        (
+          existing().member_id == request.auth.uid &&
+          existing().total_terkumpul == 0 &&
+          existing().status == 'aktif'
+        )
+      );
     }
 
     match /deposits/{depositId} {
@@ -367,6 +426,67 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
       allow delete: if isAdmin() && isValidId(messageId);
+    }
+
+    match /app_settings/{settingId} {
+      allow get: if isValidId(settingId) && (settingId == 'public' || isAdmin());
+      allow list: if isBootstrappedAdmin();
+      allow create: if isAdmin() && isValidId(settingId) &&
+        isValidAppSettings(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(settingId) &&
+        isValidAppSettings(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+
+    match /door_prize_draws/{drawId} {
+      allow get: if isValidId(drawId);
+      allow list: if true;
+      allow create: if isAdmin() && isValidId(drawId) &&
+        isValidDoorPrizeDraw(incoming()) &&
+        exists(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(drawId) &&
+        isValidDoorPrizeDraw(incoming()) &&
+        incoming().subscription_id == existing().subscription_id &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(drawId);
+    }
+
+    match /agent_settlements/{settlementId} {
+      allow get: if isSignedIn() && isValidId(settlementId) && (
+        existing().agen_id == request.auth.uid ||
+        isKorwil() ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        isBootstrappedAdmin() ||
+        resource.data.agen_id == request.auth.uid
+      );
+      allow create: if isSignedIn() && isValidId(settlementId) &&
+        isValidAgentSettlement(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            (isAgen() || isKorwil()) &&
+            incoming().agen_id == request.auth.uid &&
+            incoming().status == 'pending'
+          )
+        );
+      allow update: if isAdmin() && isValidId(settlementId) &&
+        isValidAgentSettlement(incoming()) &&
+        incoming().agen_id == existing().agen_id &&
+        incoming().jenis == existing().jenis &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(settlementId);
     }
   }
 }
