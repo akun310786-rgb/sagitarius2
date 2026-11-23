@@ -20,7 +20,7 @@ IDENTITAS & KONTAK RESMI:
 - Brand: Sagitarius Parcel ("Our Eid, Our Happiness")
 - Alamat Kantor / Gudang Pusat: Bantar Peundeuy RT. 006 RW. 001, Margajaya, Mangunreja, Kab. Tasikmalaya, Jawa Barat 46462
 - Nomor WhatsApp CS Resmi: 0813 2438 3479 (https://wa.me/6281324383479)
-- Website Resmi: www.sagitariusparcel.com
+- Website Resmi: www.sagitariusparcel.web.id
 - Wilayah Layanan Agen Resmi Priangan Timur: Ciamis, Tasikmalaya, Banjar, Pangandaran, dan Garut.
 
 KATALOG PAKET RESMI (Durasi standar 325 Hari):

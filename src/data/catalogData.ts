@@ -23,7 +23,7 @@ export const COMPANY_INFO = {
     'Bantar Peundeuy RT. 006 RW. 001, Margajaya, Mangunreja, Kab. Tasikmalaya, Jawa Barat 46462',
   csWhatsappDisplay: '0813 2438 3479',
   csWhatsappDigits: '6281324383479',
-  website: 'www.sagitariusparcel.com',
+  website: 'www.sagitariusparcel.web.id',
   terms: [
     'Pembayaran dilakukan selama 325 hari (295 hari / 42 minggu untuk Uang Munggahan; 325 hari / 45 minggu untuk Uang Lebaran).',
     'Paket Uang dibagikan lebih awal, Paket Barang selambatnya 15 Ramadhan.',

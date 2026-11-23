@@ -185,6 +185,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   onNeedLogin,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('agen');
+  const [txSubTab, setTxSubTab] = useState<'input' | 'harian' | 'riwayat'>('input');
+  const [korwilSubTab, setKorwilSubTab] = useState<'tutup_kas' | 'wilayah' | 'referral'>('tutup_kas');
+  const [gudangSubTab, setGudangSubTab] = useState<'kebutuhan' | 'manifest' | 'stok'>('kebutuhan');
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
   const cashFormRef = useRef<HTMLFormElement | null>(null);
 
@@ -1918,204 +1921,286 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const unreadMessagesCount = contactMessages.filter((m) => m.status === 'baru').length;
   const pendingSettlementsCount = agentSettlements.filter((s) => s.status === 'pending').length;
 
-  const tabs: Array<{ id: AdminTab; label: string; badge?: number; adminOnly?: boolean }> = [
-    { id: 'agen', label: 'Transaksi & Validasi', badge: pendingDeposits.length },
-    { id: 'kontrak', label: 'Kontrak Member', badge: managedSubscriptions.length },
-    { id: 'master', label: 'Katalog & Agen Master', adminOnly: true },
-    { id: 'korwil', label: 'Komisi 7% & Kas', badge: pendingSettlementsCount },
-    { id: 'gudang', label: 'Gudang H-7/H-2 & QR' },
-    { id: 'doorprize', label: 'Door Prize', badge: doorPrizeDraws.length },
-    { id: 'analitik', label: 'Analitik & Grafik', adminOnly: true },
-    { id: 'pengaturan', label: 'Rekening & Info', adminOnly: true },
-    { id: 'users', label: 'Pengguna & RBAC', badge: allUsers.length, adminOnly: true },
-    { id: 'pesan', label: 'Pesan Masuk', badge: unreadMessagesCount, adminOnly: true },
+  const tabs: Array<{
+    id: AdminTab;
+    label: string;
+    group: 'operasional' | 'keuangan' | 'pusat';
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+    adminOnly?: boolean;
+  }> = [
+    { id: 'agen', label: 'Transaksi & Validasi', group: 'operasional', icon: ClipboardCheck, badge: pendingDeposits.length },
+    { id: 'kontrak', label: 'Kontrak Member', group: 'operasional', icon: Layers, badge: managedSubscriptions.length },
+    { id: 'gudang', label: 'Gudang & Pengiriman', group: 'operasional', icon: Warehouse },
+    { id: 'korwil', label: 'Komisi & Setoran Kas', group: 'keuangan', icon: Coins, badge: pendingSettlementsCount },
+    { id: 'doorprize', label: 'Door Prize', group: 'keuangan', icon: Gift, badge: doorPrizeDraws.length },
+    { id: 'analitik', label: 'Analitik & Audit', group: 'keuangan', icon: BarChart3, adminOnly: true },
+    { id: 'master', label: 'Katalog & Agen', group: 'pusat', icon: PackageIcon, adminOnly: true },
+    { id: 'users', label: 'Pengguna & RBAC', group: 'pusat', icon: Users, badge: allUsers.length, adminOnly: true },
+    { id: 'pesan', label: 'Pesan Masuk', group: 'pusat', icon: MessageCircle, badge: unreadMessagesCount, adminOnly: true },
+    { id: 'pengaturan', label: 'Rekening & Info', group: 'pusat', icon: Settings, adminOnly: true },
+  ];
+
+  const visibleTabs = tabs.filter((t) => !t.adminOnly || isAdmin);
+  const activeTabMeta = visibleTabs.find((t) => t.id === activeTab) || visibleTabs[0];
+  const sidebarGroups: Array<{ key: 'operasional' | 'keuangan' | 'pusat'; title: string }> = [
+    { key: 'operasional', title: 'Operasional' },
+    { key: 'keuangan', title: 'Keuangan & Program' },
+    { key: 'pusat', title: 'Pengaturan Pusat' },
   ];
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      {/* Header & Navigation */}
-      <div className="flex flex-col gap-4 border-b border-[#E4DCCB] pb-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold text-[#0C3328]">
-              Pusat Kendali {userProfile.role.toUpperCase()} · Wilayah {userProfile.wilayah}
+    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        {/* Desktop Sidebar Navigation */}
+        <aside className="hidden lg:block w-60 shrink-0 rounded-xl border border-stone-200 bg-white p-3">
+          <div className="border-b border-stone-100 px-3 pb-3 mb-3">
+            <p className="text-[11px] font-semibold text-[#0C3328]">
+              {isAdmin ? 'Admin Pusat' : userProfile.role.toUpperCase()}
             </p>
-            <h1 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
-              {isAdmin
-                ? 'Dashboard Admin Pusat Sagitarius Parcel'
-                : 'Panel Operasional Agen, Korwil & Gudang'}
-            </h1>
+            <p className="truncate text-sm font-bold text-stone-900">{userProfile.nama}</p>
+            <p className="text-[11px] text-stone-500">Wilayah {userProfile.wilayah}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={openOfflineRegistration}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <UserPlus className="h-3.5 w-3.5" />
-              <span>Daftarkan Kontrak Member</span>
-            </button>
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={handleSyncCatalogToFirestore}
-                disabled={syncingCatalog}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#E4DCCB] bg-white px-4 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <PackageIcon className="h-3.5 w-3.5 text-[#0C3328]" />
-                <span>
-                  {syncingCatalog
-                    ? 'Menyinkronkan Master...'
-                    : `Sinkronkan ${DEFAULT_PACKAGES.length} Paket & ${DEFAULT_AGENTS.length} Agen`}
-                </span>
-              </button>
-            )}
-          </div>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          {tabs
-            .filter((t) => !t.adminOnly || isAdmin)
-            .map((t) => (
+          <nav className="space-y-4" aria-label="Menu Dashboard">
+            {sidebarGroups.map((grp) => {
+              const items = visibleTabs.filter((t) => t.group === grp.key);
+              if (items.length === 0) return null;
+              return (
+                <div key={grp.key}>
+                  <p className="px-3 pb-1.5 text-[11px] font-semibold text-stone-400">
+                    {grp.title}
+                  </p>
+                  <div className="space-y-0.5">
+                    {items.map((t) => {
+                      const Icon = t.icon;
+                      const isActive = activeTab === t.id;
+                      const isAlertBadge = t.id === 'agen' || t.id === 'korwil' || t.id === 'pesan';
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setActiveTab(t.id)}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium transition cursor-pointer ${
+                            isActive
+                              ? 'bg-[#0C3328] text-[#E8CA82] font-semibold'
+                              : 'text-stone-700 hover:bg-stone-100/80 hover:text-stone-900'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2.5 min-w-0">
+                            <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#E8CA82]' : 'text-stone-400'}`} />
+                            <span className="truncate">{t.label}</span>
+                          </span>
+                          {typeof t.badge === 'number' && t.badge > 0 && (
+                            <span
+                              className={`font-mono-nums text-[11px] font-semibold shrink-0 ${
+                                isActive
+                                  ? 'text-[#E8CA82]'
+                                  : isAlertBadge
+                                    ? 'text-amber-700'
+                                    : 'text-stone-400'
+                              }`}
+                            >
+                              {t.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Main Workspace */}
+        <div className="min-w-0 flex-1 space-y-5">
+          {/* Compact Top Bar */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-stone-200 pb-4">
+            <div>
+              <p className="text-xs text-stone-500">
+                Dashboard {isAdmin ? 'Admin Pusat' : userProfile.role} / {activeTabMeta?.label}
+              </p>
+              <h1 className="mt-0.5 font-display text-xl font-bold text-stone-900 sm:text-2xl">
+                {activeTabMeta?.label}
+              </h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                key={t.id}
                 type="button"
-                onClick={() => setActiveTab(t.id)}
-                className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
-                  activeTab === t.id
-                    ? 'bg-[#0C3328] text-[#E8CA82] shadow-xs'
-                    : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
-                }`}
+                onClick={openOfflineRegistration}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <span>{t.label}</span>
-                {typeof t.badge === 'number' && t.badge > 0 && (
-                  <span
-                    className={`rounded px-1.5 py-0.5 font-mono-nums text-[10px] font-bold ${
-                      activeTab === t.id
-                        ? 'bg-white/15 text-[#E8CA82]'
-                        : t.id === 'agen' || t.id === 'korwil'
-                          ? 'bg-amber-100 text-amber-900'
-                          : 'bg-[#FAF7F2] text-[#381E5A]'
-                    }`}
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>Kontrak Baru</span>
+              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleSyncCatalogToFirestore}
+                  disabled={syncingCatalog}
+                  title={`Sinkronkan ${DEFAULT_PACKAGES.length} Paket & ${DEFAULT_AGENTS.length} Agen ke Firestore`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3.5 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <PackageIcon className="h-3.5 w-3.5 text-stone-500" />
+                  <span>{syncingCatalog ? 'Menyinkronkan...' : 'Sinkronkan Katalog'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile Horizontal Menu Strip */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden">
+            {visibleTabs.map((t) => {
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'bg-[#0C3328] text-[#E8CA82]'
+                      : 'border border-stone-200 bg-white text-stone-700'
+                  }`}
+                >
+                  <span>{t.label}</span>
+                  {typeof t.badge === 'number' && t.badge > 0 && (
+                    <span className="font-mono-nums text-[11px] opacity-80">({t.badge})</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Clean 4-Column Summary Strip */}
+          <div className="grid grid-cols-2 divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white sm:grid-cols-4 sm:divide-y-0 sm:divide-x">
+            <div className="p-4">
+              <p className="text-[11px] font-medium text-stone-500">Dana Terkumpul</p>
+              <p className="mt-1 font-mono-nums text-base font-bold text-[#0C3328]">
+                {formatRupiah(executiveKpi.totalCollected)}
+              </p>
+              <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
+                {executiveKpi.avgProgress}% dari {formatRupiah(executiveKpi.totalTarget)}
+              </p>
+            </div>
+            <div className="p-4">
+              <p className="text-[11px] font-medium text-stone-500">Antrean Validasi</p>
+              <p className="mt-1 font-mono-nums text-base font-bold text-amber-800">
+                {executiveKpi.pendingCount} Pending
+              </p>
+              <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
+                {formatRupiah(executiveKpi.pendingTotal)} menunggu cek
+              </p>
+            </div>
+            <div className="p-4">
+              <p className="text-[11px] font-medium text-stone-500">Kontrak &amp; Logistik</p>
+              <p className="mt-1 font-mono-nums text-base font-bold text-stone-900">
+                {managedSubscriptions.length} Kontrak
+              </p>
+              <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
+                {executiveKpi.lunasCount} lunas · {executiveKpi.diambilCount} diambil
+              </p>
+            </div>
+            <div className="p-4">
+              <p className="text-[11px] font-medium text-stone-500">Komisi &amp; Jaringan</p>
+              <p className="mt-1 font-mono-nums text-base font-bold text-[#381E5A]">
+                {formatRupiah(executiveKpi.totalCommission)}
+              </p>
+              <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
+                {agents.filter((a) => a.aktif).length} agen · {allUsers.length || '—'} akun
+              </p>
+            </div>
+          </div>
+
+          {/* Status Alert + Quick WhatsApp & PNG/Thermal Receipt */}
+          {statusMessage && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
+              <span>{statusMessage}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {lastValidatedDeposit && (
+                  <button
+                    type="button"
+                    onClick={() => setReceiptDeposit(lastValidatedDeposit)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-1.5 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
                   >
-                    {t.badge}
-                  </span>
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>Cetak Struk PNG</span>
+                  </button>
                 )}
-              </button>
-            ))}
-        </div>
-      </div>
-
-      {/* Executive KPI Overview Strip */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-[11px] font-medium text-stone-500">Dana Terkumpul Netto</p>
-          <p className="mt-1 font-mono-nums text-base font-bold text-emerald-900">
-            {formatRupiah(executiveKpi.totalCollected)}
-          </p>
-          <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-            {executiveKpi.avgProgress}% dari target
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-[11px] font-medium text-stone-500">Target Kontrak Aktif</p>
-          <p className="mt-1 font-mono-nums text-base font-bold text-stone-900">
-            {formatRupiah(executiveKpi.totalTarget)}
-          </p>
-          <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-            {managedSubscriptions.length} kontrak terdata
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-[11px] font-medium text-stone-500">Antrean Validasi</p>
-          <p className="mt-1 font-mono-nums text-base font-bold text-amber-800">
-            {executiveKpi.pendingCount} Pending
-          </p>
-          <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-            {formatRupiah(executiveKpi.pendingTotal)}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-[11px] font-medium text-stone-500">Estimasi Komisi Agen</p>
-          <p className="mt-1 font-mono-nums text-base font-bold text-[#26124A]">
-            {formatRupiah(executiveKpi.totalCommission)}
-          </p>
-          <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-            {agents.filter((a) => a.aktif).length} agen aktif
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-[11px] font-medium text-stone-500">Logistik Paket</p>
-          <p className="mt-1 font-mono-nums text-base font-bold text-emerald-900">
-            {executiveKpi.lunasCount} Lunas
-          </p>
-          <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-            {executiveKpi.diambilCount} sudah diambil
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-stone-200 bg-white p-4">
-          <p className="text-[11px] font-medium text-stone-500">Pengguna &amp; Katalog</p>
-          <p className="mt-1 font-mono-nums text-base font-bold text-stone-900">
-            {allUsers.length || '—'} Akun
-          </p>
-          <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-            {packages.length} produk katalog
-          </p>
-        </div>
-      </div>
-
-      {/* Status Alert + Quick WhatsApp & PNG/Thermal Receipt */}
-      {statusMessage && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
-          <span>{statusMessage}</span>
-          <div className="flex flex-wrap items-center gap-2">
-            {lastValidatedDeposit && (
-              <button
-                type="button"
-                onClick={() => setReceiptDeposit(lastValidatedDeposit)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-1.5 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
-              >
-                <Printer className="h-3.5 w-3.5" />
-                <span>Cetak Struk PNG / 58mm</span>
-              </button>
-            )}
-            {lastWaPayload && (
-              <a
-                href={formatWhatsAppUrl(lastWaPayload.phone, lastWaPayload.message)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A34A] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#15803D]"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                <span>Kirim Struk WhatsApp ke Member</span>
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={() => setStatusMessage('')}
-              className="rounded p-1 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
-              aria-label="Tutup notifikasi"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+                {lastWaPayload && (
+                  <a
+                    href={formatWhatsAppUrl(lastWaPayload.phone, lastWaPayload.message)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A34A] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#15803D]"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>Kirim Struk WA</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setStatusMessage('')}
+                  className="rounded p-1 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                  aria-label="Tutup notifikasi"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
       {/* TAB 1: TRANSAKSI (SETORAN & PENARIKAN) + VERIFIKASI + JEMPUT BOLA + LOG AUDIT */}
       {activeTab === 'agen' && (
-        <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-12">
+        <div className="space-y-5">
+          {/* Sub-Tab Navigasi Transaksi */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                type="button"
+                onClick={() => setTxSubTab('input')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  txSubTab === 'input'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Validasi &amp; Input ({pendingDeposits.length} Pending)
+              </button>
+              <button
+                type="button"
+                onClick={() => setTxSubTab('harian')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  txSubTab === 'harian'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Kas Harian &amp; Jemput Bola ({checklistItems.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTxSubTab('riwayat')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  txSubTab === 'riwayat'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Riwayat Tervalidasi ({verifiedTransactions.length})
+              </button>
+            </div>
+          </div>
+
+          {txSubTab === 'input' && (
+          <div className="grid gap-5 lg:grid-cols-12">
             {/* Input Setoran Tunai atau Penarikan */}
             <form
               ref={cashFormRef}
               onSubmit={handleRecordCashTransaction}
-              className="space-y-4 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5"
+              className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-emerald-900">
@@ -2255,7 +2340,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </form>
 
             {/* Antrean Verifikasi Setoran & Penarikan Pending */}
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-7">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="h-5 w-5 text-emerald-900" />
@@ -2351,15 +2436,18 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
           </div>
+          )}
 
+          {txSubTab === 'harian' && (
+          <div className="space-y-5">
           {/* Daily Closing Sheet / Rekap Kas Harian Agen */}
-          <div className="rounded-2xl border border-[#C8A053]/60 bg-white p-6">
+          <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-[#B98E3A]">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
                   Daily Closing Sheet · {dailyClosingSummary.todayIsoDate}
                 </p>
-                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                <h2 className="font-display text-lg font-bold text-stone-900">
                   Rekap Kas Harian &amp; Tutup Kas Otomatis
                 </h2>
                 <p className="text-xs text-stone-600">
@@ -2376,9 +2464,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                       dailyClosingSummary.cashIn
                     )}, Pencairan ${formatRupiah(dailyClosingSummary.cashOut)}`
                   );
+                  setKorwilSubTab('tutup_kas');
                   setActiveTab('korwil');
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
               >
                 <Wallet className="h-3.5 w-3.5" />
                 <span>Ajukan Tutup Kas Hari Ini</span>
@@ -2413,10 +2502,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
 
           {/* Checklist Jemput Bola Member Binaan */}
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
-            <div className="flex flex-col gap-3 border-b border-[#E4DCCB]/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="rounded-xl border border-stone-200 bg-white p-5">
+            <div className="flex flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                <h2 className="font-display text-lg font-bold text-stone-900">
                   Checklist Jemput Bola Member Binaan ({checklistItems.length})
                 </h2>
                 <p className="text-xs text-stone-600">
@@ -2520,10 +2609,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                             setCashTxType('setoran');
                             setCashNominal(String(s.setoran_nominal || 20000));
                             setCashNote('Setoran Tunai Jemput Bola');
-                            cashFormRef.current?.scrollIntoView({
-                              behavior: 'smooth',
-                              block: 'center',
-                            });
+                            setTxSubTab('input');
+                            setTimeout(() => {
+                              cashFormRef.current?.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center',
+                              });
+                            }, 50);
                           }}
                           className="flex-1 rounded-lg bg-[#0C3328] py-1.5 text-[11px] font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
                         >
@@ -2545,9 +2637,12 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </div>
             )}
           </div>
+          </div>
+          )}
 
-          {/* Log Audit Transaksi Tervalidasi (Admin & Staff) */}
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+          {txSubTab === 'riwayat' && (
+          /* Log Audit Transaksi Tervalidasi (Admin & Staff) */
+          <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-lg font-bold text-stone-900">
@@ -2736,12 +2831,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </div>
             )}
           </div>
+          )}
         </div>
       )}
 
       {/* TAB 2: MANAJEMEN KONTRAK MEMBER */}
       {activeTab === 'kontrak' && (
-        <div className="rounded-2xl border border-stone-200 bg-white p-6 space-y-5">
+        <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-5">
           <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-display text-xl font-bold text-stone-900">
@@ -3069,8 +3165,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
       {/* TAB 3: KATALOG PAKET & DIREKTORI AGEN MASTER (ADMIN ONLY) */}
       {activeTab === 'master' && isAdmin && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-5">
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-stone-200 bg-white p-5">
             <div className="inline-flex rounded-lg border border-stone-200 bg-stone-50 p-0.5 text-xs">
               <button
                 type="button"
@@ -3118,7 +3214,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
 
           {masterSubTab === 'packages' ? (
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 space-y-4">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="relative flex-1">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
@@ -3223,7 +3319,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-stone-200 bg-white p-6">
+            <div className="rounded-xl border border-stone-200 bg-white p-5">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
@@ -3319,8 +3415,49 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
       {/* TAB 4: KOMISI OTOMATIS & REKAP KORWIL */}
       {activeTab === 'korwil' && (
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-stone-200 bg-white p-6">
+        <div className="space-y-5">
+          {/* Sub-Tab Navigasi Komisi & Setoran Kas */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                type="button"
+                onClick={() => setKorwilSubTab('tutup_kas')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  korwilSubTab === 'tutup_kas'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Tutup Kas &amp; Pencairan ({agentSettlements.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setKorwilSubTab('wilayah')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  korwilSubTab === 'wilayah'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Rekap Wilayah &amp; Komisi 7%
+              </button>
+              <button
+                type="button"
+                onClick={() => setKorwilSubTab('referral')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  korwilSubTab === 'referral'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Link QR &amp; Leaderboard
+              </button>
+            </div>
+          </div>
+
+          {korwilSubTab === 'wilayah' && (
+          <div className="space-y-5">
+          <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-emerald-900" />
@@ -3387,7 +3524,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-stone-200 bg-white p-6">
+          <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -3460,16 +3597,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </table>
             </div>
           </div>
+          </div>
+          )}
 
-          {/* Tutup Kas Setor Tunai Agen -> Pusat & Klaim Pencairan Komisi */}
-          <div className="grid gap-6 lg:grid-cols-12">
+          {korwilSubTab === 'tutup_kas' && (
+          /* Tutup Kas Setor Tunai Agen -> Pusat & Klaim Pencairan Komisi */
+          <div className="grid gap-5 lg:grid-cols-12">
             <form
               onSubmit={handleCreateSettlement}
-              className="space-y-4 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5"
+              className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5"
             >
               <div className="flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-[#381E5A]" />
-                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                <Wallet className="h-5 w-5 text-emerald-900" />
+                <h2 className="font-display text-lg font-bold text-stone-900">
                   Tutup Kas Agen &amp; Klaim Komisi
                 </h2>
               </div>
@@ -3530,10 +3670,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </button>
             </form>
 
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-7">
-              <div className="flex items-center justify-between gap-2 border-b border-[#E4DCCB]/70 pb-3">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
+              <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-3">
                 <div>
-                  <h3 className="font-display text-lg font-bold text-[#381E5A]">
+                  <h3 className="font-display text-lg font-bold text-stone-900">
                     Riwayat Setor Kas &amp; Pencairan Komisi ({agentSettlements.length})
                   </h3>
                   <p className="text-xs text-stone-600">
@@ -3655,13 +3795,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
           </div>
+          )}
 
-          {/* Link & QR Pendaftaran Khusus Agen + Leaderboard Agen */}
-          <div className="grid gap-6 lg:grid-cols-12">
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5">
+          {korwilSubTab === 'referral' && (
+          /* Link & QR Pendaftaran Khusus Agen + Leaderboard Agen */
+          <div className="grid gap-5 lg:grid-cols-12">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5">
               <div className="flex items-center gap-2">
-                <Link2 className="h-5 w-5 text-[#381E5A]" />
-                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                <Link2 className="h-5 w-5 text-emerald-900" />
+                <h2 className="font-display text-lg font-bold text-stone-900">
                   Link &amp; QR Pendaftaran Agen
                 </h2>
               </div>
@@ -3692,7 +3834,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 const origin =
                   typeof window !== 'undefined'
                     ? window.location.origin
-                    : 'https://sagitariusparcel.web.id';
+                    : 'https://www.sagitariusparcel.web.id';
                 const activeCode = referralAgentCode || agents[0]?.kode_agen || 'AGT-TSM-01';
                 const referralUrl = `${origin}/?agen=${encodeURIComponent(activeCode)}`;
                 return (
@@ -3742,12 +3884,12 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               })()}
             </div>
 
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-7">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-[#B98E3A]" />
+                  <Trophy className="h-5 w-5 text-amber-700" />
                   <div>
-                    <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                    <h2 className="font-display text-lg font-bold text-stone-900">
                       Leaderboard Agen &amp; Progres Tier Komisi
                     </h2>
                     <p className="text-xs text-stone-600">
@@ -3812,14 +3954,55 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </div>
             </div>
           </div>
+          )}
         </div>
       )}
 
       {/* TAB 5: GUDANG & LOGISTIK H-7 / H-2 + STOK HPP + MANIFEST + SUBSTITUSI + QR */}
       {activeTab === 'gudang' && (
-        <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-12">
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 lg:col-span-8">
+        <div className="space-y-5">
+          {/* Sub-Tab Navigasi Gudang & Pengiriman */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                type="button"
+                onClick={() => setGudangSubTab('kebutuhan')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  gudangSubTab === 'kebutuhan'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Kebutuhan &amp; Scan QR ({warehouseRecap.readyToPickSubs.length} Siap)
+              </button>
+              <button
+                type="button"
+                onClick={() => setGudangSubTab('manifest')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  gudangSubTab === 'manifest'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Surat Jalan &amp; Manifest ({manifestGroups.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setGudangSubTab('stok')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  gudangSubTab === 'stok'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Stok Modal HPP &amp; Substitusi ({warehouseInventory.length})
+              </button>
+            </div>
+          </div>
+
+          {gudangSubTab === 'kebutuhan' && (
+          <div className="grid gap-5 lg:grid-cols-12">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-8">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -3915,10 +4098,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
 
-            <div className="space-y-6 lg:col-span-4">
+            <div className="space-y-5 lg:col-span-4">
               <form
                 onSubmit={handleMarkQrPickedUp}
-                className="rounded-2xl border border-stone-200 bg-white p-6"
+                className="rounded-xl border border-stone-200 bg-white p-5"
               >
                 <div className="flex items-center gap-2">
                   <QrCode className="h-5 w-5 text-emerald-900" />
@@ -3971,7 +4154,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </form>
 
               {warehouseRecap.readyToPickSubs.length > 0 && (
-                <div className="rounded-2xl border border-stone-200 bg-white p-5">
+                <div className="rounded-xl border border-stone-200 bg-white p-5">
                   <h4 className="text-xs font-bold uppercase tracking-wide text-stone-700">
                     Antrean Paket Lunas Siap Ambil
                   </h4>
@@ -3998,14 +4181,16 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
           </div>
+          )}
 
-          {/* Surat Jalan & Manifest Pengiriman per Wilayah / Agen */}
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 space-y-4">
-            <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          {gudangSubTab === 'manifest' && (
+          /* Surat Jalan & Manifest Pengiriman per Wilayah / Agen */
+          <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
+            <div className="flex flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
-                <Truck className="h-5 w-5 text-[#381E5A]" />
+                <Truck className="h-5 w-5 text-emerald-900" />
                 <div>
-                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  <h2 className="font-display text-lg font-bold text-stone-900">
                     Surat Jalan &amp; Manifest Pengiriman
                   </h2>
                   <p className="text-xs text-stone-600">
@@ -4137,15 +4322,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </div>
             )}
           </div>
+          )}
 
-          {/* Stok Gudang HPP & Pengumuman Substitusi Produk Resmi */}
-          <div className="grid gap-6 lg:grid-cols-12">
+          {gudangSubTab === 'stok' && (
+          /* Stok Gudang HPP & Pengumuman Substitusi Produk Resmi */
+          <div className="grid gap-5 lg:grid-cols-12">
             {/* Stok Gudang & HPP (Admin CRUD) */}
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-6 space-y-4">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-6 space-y-4">
               <div className="flex items-center gap-2">
-                <Warehouse className="h-5 w-5 text-[#0C3328]" />
+                <Warehouse className="h-5 w-5 text-emerald-900" />
                 <div>
-                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  <h2 className="font-display text-lg font-bold text-stone-900">
                     Stok Gudang &amp; Harga Beli (HPP) ({warehouseInventory.length})
                   </h2>
                   <p className="text-xs text-stone-600">
@@ -4302,11 +4489,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
 
             {/* Pengumuman Substitusi Produk Resmi */}
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-6 space-y-4">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-6 space-y-4">
               <div className="flex items-center gap-2">
-                <Replace className="h-5 w-5 text-[#B98E3A]" />
+                <Replace className="h-5 w-5 text-amber-700" />
                 <div>
-                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                  <h2 className="font-display text-lg font-bold text-stone-900">
                     Info Substitusi Produk Resmi ({productSubstitutions.length})
                   </h2>
                   <p className="text-xs text-stone-600">
@@ -4430,6 +4617,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
           </div>
+          )}
         </div>
       )}
 
@@ -4463,7 +4651,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-stone-200 bg-white p-6 space-y-4">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
             <div>
               <h2 className="font-display text-xl font-bold text-stone-900">
                 Manajemen Peran Pengguna &amp; RBAC ({filteredUsers.length})
@@ -4680,11 +4868,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
       {/* TAB: DOOR PRIZE UNDIAN RESMI */}
       {activeTab === 'doorprize' && (
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="space-y-4 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-5">
+        <div className="grid gap-5 lg:grid-cols-12">
+          <div className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5">
             <div className="flex items-center gap-2">
-              <Gift className="h-5 w-5 text-[#381E5A]" />
-              <h2 className="font-display text-lg font-bold text-[#381E5A]">
+              <Gift className="h-5 w-5 text-emerald-900" />
+              <h2 className="font-display text-lg font-bold text-stone-900">
                 Undian Door Prize Member
               </h2>
             </div>
@@ -4767,8 +4955,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             )}
           </div>
 
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-7">
-            <h3 className="font-display text-lg font-bold text-[#381E5A]">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
+            <h3 className="font-display text-lg font-bold text-stone-900">
               Daftar Pemenang Door Prize ({doorPrizeDraws.length})
             </h3>
             <p className="text-xs text-stone-600">
@@ -4861,13 +5049,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {activeTab === 'pengaturan' && isAdmin && (
         <form
           onSubmit={handleSaveAppSettings}
-          className="grid gap-6 rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:grid-cols-2"
+          className="grid gap-6 rounded-xl border border-stone-200 bg-white p-5 lg:grid-cols-2"
         >
           <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-[#E4DCCB]/70 pb-3">
-              <Settings className="h-5 w-5 text-[#381E5A]" />
+            <div className="flex items-center gap-2 border-b border-stone-200 pb-3">
+              <Settings className="h-5 w-5 text-emerald-900" />
               <div>
-                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                <h2 className="font-display text-lg font-bold text-stone-900">
                   Rekening Transfer Resmi Perusahaan
                 </h2>
                 <p className="text-xs text-stone-600">
@@ -4927,10 +5115,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-[#E4DCCB]/70 pb-3">
-              <Megaphone className="h-5 w-5 text-[#0C3328]" />
+            <div className="flex items-center gap-2 border-b border-stone-200 pb-3">
+              <Megaphone className="h-5 w-5 text-emerald-900" />
               <div>
-                <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                <h2 className="font-display text-lg font-bold text-stone-900">
                   Papan Pengumuman Broadcast Member
                 </h2>
                 <p className="text-xs text-stone-600">
@@ -4988,6 +5176,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
         </form>
       )}
+        </div>
+      </div>
 
       {/* Modal Form: Daftarkan Kontrak Member Offline (Agen / Korwil / Admin) */}
       {showOfflineModal && (
