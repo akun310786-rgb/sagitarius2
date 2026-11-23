@@ -41,7 +41,6 @@ import {
 import { AgentKorwilAdminDashboard } from './components/AgentKorwilAdminDashboard';
 import { AuthModal, RegisterMemberInput } from './components/AuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { GeminiCSChat } from './components/GeminiCSChat';
 import { LandingCatalog } from './components/LandingCatalog';
 import { MemberDashboard } from './components/MemberDashboard';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -95,7 +94,6 @@ export default function App() {
   const [detailPackageId, setDetailPackageId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [focusSearchTrigger, setFocusSearchTrigger] = useState(0);
-  const [chatOpen, setChatOpen] = useState(false);
 
   // Wishlist / Paket Pilihan State (persisted in localStorage)
   const [wishlistIds, setWishlistIds] = useState<string[]>(() => {
@@ -710,40 +708,6 @@ export default function App() {
 
   const wishlistPackages = packages.filter((p) => wishlistIds.includes(p.id));
 
-  const memberContext = useMemo(() => {
-    if (!userProfile) return undefined;
-    const mySubs = subscriptions.filter((s) => s.member_id === userProfile.uid);
-    const pendingCount = deposits.filter(
-      (d) => d.member_id === userProfile.uid && d.status_verifikasi === 'pending'
-    ).length;
-    const myWins = doorPrizeDraws.filter((dp) => dp.member_id === userProfile.uid);
-    const subSummaries =
-      mySubs.length === 0
-        ? 'Belum memiliki kontrak paket aktif.'
-        : mySubs
-            .slice(0, 5)
-            .map((s) => {
-              const sisa = Math.max(0, s.target_nominal - (s.total_terkumpul || 0));
-              const kupon = `DP-${s.qr_code_token}`.slice(0, 32);
-              return `${s.package_nama} (Status: ${s.status}, Pengiriman: ${
-                s.status_pengiriman || 'menunggu_lunas'
-              }, Terkumpul: ${formatRupiah(s.total_terkumpul)} dari ${formatRupiah(
-                s.target_nominal
-              )}, Sisa pelunasan: ${formatRupiah(sisa)}, Agen: ${
-                s.agen_nama || s.agen_kode || '-'
-              }, Kupon Door Prize: ${kupon}${s.grup_arisan ? `, Grup: ${s.grup_arisan}` : ''})`;
-            })
-            .join(' | ');
-    const winText =
-      myWins.length > 0
-        ? ` | Pemenang Door Prize: ${myWins.map((w) => `${w.hadiah} (${w.kupon_kode})`).join(', ')}`
-        : '';
-    return `Nama: ${userProfile.nama} | Peran: ${userProfile.role} | Wilayah: ${userProfile.wilayah} | Transfer Pending: ${pendingCount} | Kontrak: ${subSummaries}${winText}`.slice(
-      0,
-      2200
-    );
-  }, [userProfile, subscriptions, deposits, doorPrizeDraws]);
-
   const navLinkClass = (isActive: boolean) =>
     `relative py-1 text-xs lg:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
       isActive
@@ -1114,7 +1078,6 @@ export default function App() {
               onOpenDetail={handleOpenDetail}
               wishlistIds={wishlistIds}
               onToggleWishlist={handleToggleWishlist}
-              onOpenChat={() => setChatOpen(true)}
               focusSearchTrigger={focusSearchTrigger}
               referralAgent={referralAgent}
             />
@@ -1291,13 +1254,6 @@ export default function App() {
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
                   Hubungi Admin / Kirim Pesan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setChatOpen(true)}
-                  className="hover:text-[#E8CA82] cursor-pointer"
-                >
-                  Chat CS Online (AI)
                 </button>
                 <a
                   href={formatWhatsAppUrl(
@@ -1553,12 +1509,6 @@ export default function App() {
         />
 
         <OfflineIndicator />
-        <GeminiCSChat
-          isOpen={chatOpen}
-          onOpenChange={setChatOpen}
-          memberContext={memberContext}
-          memberLabel={userProfile?.nama}
-        />
       </div>
     </ErrorBoundary>
   );

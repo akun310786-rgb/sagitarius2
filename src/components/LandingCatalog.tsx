@@ -65,7 +65,6 @@ interface LandingCatalogProps {
   onOpenDetail: (pkg: ParcelPackage) => void;
   wishlistIds: string[];
   onToggleWishlist: (pkgId: string) => void;
-  onOpenChat: () => void;
   focusSearchTrigger?: number;
   referralAgent?: AgentDirectoryItem | null;
 }
@@ -122,7 +121,6 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   onOpenDetail,
   wishlistIds,
   onToggleWishlist,
-  onOpenChat,
   focusSearchTrigger,
   referralAgent,
 }) => {
@@ -235,13 +233,12 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         onSelectAgent={onSelectAgent}
         onLockSimulation={onLockSimulation}
         initialPackageId={detailPackageId || undefined}
-        onOpenChat={onOpenChat}
       />
     );
   }
 
   if (activePage === 'cara_pesan') {
-    return <CaraPemesananPage onNavigate={onNavigate} onOpenChat={onOpenChat} />;
+    return <CaraPemesananPage onNavigate={onNavigate} />;
   }
 
   if (activePage === 'tentang') {
@@ -256,7 +253,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   }
 
   if (activePage === 'kontak') {
-    return <KontakPage onOpenChat={onOpenChat} />;
+    return <KontakPage />;
   }
 
   // Detail gallery images built from package photo + relevant official brochures
@@ -1470,13 +1467,6 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
               >
                 <MessageCircle className="h-4 w-4" />
                 <span>Hubungi Kami</span>
-              </button>
-              <button
-                type="button"
-                onClick={onOpenChat}
-                className="text-center text-[11px] font-semibold text-[#E8CA82] hover:underline cursor-pointer"
-              >
-                Atau tanya CS Online AI
               </button>
             </div>
           </div>

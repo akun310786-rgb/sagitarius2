@@ -50,7 +50,6 @@ interface TabunganPageProps {
   onSelectAgent: (id: string) => void;
   onLockSimulation: (lock: SimulationLock) => void;
   initialPackageId?: string;
-  onOpenChat: () => void;
 }
 
 const FAQ_ITEMS = [
@@ -83,7 +82,6 @@ export const TabunganProgramPage: React.FC<TabunganPageProps> = ({
   onSelectAgent,
   onLockSimulation,
   initialPackageId,
-  onOpenChat,
 }) => {
   const [openFaqIdx, setOpenFaqIdx] = useState<number>(0);
 
@@ -116,14 +114,18 @@ export const TabunganProgramPage: React.FC<TabunganPageProps> = ({
                 <span>Hitung Simulasi Sekarang</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
-              <button
-                type="button"
-                onClick={onOpenChat}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-3 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+              <a
+                href={formatWhatsAppUrl(
+                  COMPANY_INFO.csWhatsappDigits,
+                  'Halo CS Sagitarius Parcel, saya ingin bertanya tentang Program Tabungan Lebaran.'
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-3 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2]"
               >
                 <MessageCircle className="h-4 w-4 text-[#0C3328]" />
-                <span>Tanyakan Program (CS AI)</span>
-              </button>
+                <span>Tanyakan Program (WA CS)</span>
+              </a>
             </div>
           </div>
 
@@ -343,14 +345,18 @@ export const TabunganProgramPage: React.FC<TabunganPageProps> = ({
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={onOpenChat}
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-6 py-3 text-xs font-bold text-[#1D122B] hover:brightness-105 whitespace-nowrap cursor-pointer"
+            <a
+              href={formatWhatsAppUrl(
+                COMPANY_INFO.csWhatsappDigits,
+                'Halo CS Sagitarius Parcel, saya ingin berkonsultasi mengenai program tabungan Lebaran.'
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-6 py-3 text-xs font-bold text-[#1D122B] hover:brightness-105 whitespace-nowrap"
             >
               <span>Tanyakan Program</span>
               <ArrowRight className="h-4 w-4" />
-            </button>
+            </a>
           </div>
         </div>
       </section>
@@ -360,12 +366,10 @@ export const TabunganProgramPage: React.FC<TabunganPageProps> = ({
 
 interface CaraPemesananPageProps {
   onNavigate: (page: PublicPage) => void;
-  onOpenChat: () => void;
 }
 
 export const CaraPemesananPage: React.FC<CaraPemesananPageProps> = ({
   onNavigate,
-  onOpenChat,
 }) => {
   const steps = [
     {
@@ -533,13 +537,6 @@ export const CaraPemesananPage: React.FC<CaraPemesananPageProps> = ({
                 <span>Hubungi Admin</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </a>
-              <button
-                type="button"
-                onClick={onOpenChat}
-                className="rounded-xl border border-[#0C3328]/30 bg-white px-4 py-2.5 text-xs font-semibold text-[#0C3328] hover:bg-stone-50 cursor-pointer"
-              >
-                Chat CS AI
-              </button>
             </div>
           </div>
         </div>
@@ -805,11 +802,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
   );
 };
 
-interface KontakPageProps {
-  onOpenChat: () => void;
-}
-
-export const KontakPage: React.FC<KontakPageProps> = ({ onOpenChat }) => {
+export const KontakPage: React.FC = () => {
   const [nama, setNama] = useState('');
   const [noWa, setNoWa] = useState('');
   const [pesan, setPesan] = useState('');
@@ -919,24 +912,28 @@ export const KontakPage: React.FC<KontakPageProps> = ({ onOpenChat }) => {
               <ArrowRight className="h-4 w-4 shrink-0 text-[#C8A053]" />
             </a>
 
-            <button
-              type="button"
-              onClick={onOpenChat}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#E4DCCB] bg-white p-3.5 text-left transition hover:border-[#C8A053] cursor-pointer"
+            <a
+              href={formatWhatsAppUrl(
+                COMPANY_INFO.csWhatsappDigits,
+                'Halo Admin Sagitarius Parcel, saya ingin bertanya tentang jam operasional dan layanan.'
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#E4DCCB] bg-white p-3.5 text-left transition hover:border-[#C8A053]"
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
                   <Clock className="h-4 w-4" />
                 </span>
                 <div>
-                  <p className="text-xs font-bold text-[#381E5A]">Jam Operasional &amp; CS AI</p>
+                  <p className="text-xs font-bold text-[#381E5A]">Jam Operasional &amp; CS Resmi</p>
                   <p className="text-xs text-stone-600">
-                    Senin–Sabtu 08.00–17.00 WIB · CS AI 24 Jam
+                    Senin–Sabtu 08.00–17.00 WIB · WA {COMPANY_INFO.csWhatsappDisplay}
                   </p>
                 </div>
               </div>
               <ArrowRight className="h-4 w-4 text-[#C8A053]" />
-            </button>
+            </a>
 
             <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E4DCCB] bg-white p-3.5">
               <div className="flex items-center gap-3">
