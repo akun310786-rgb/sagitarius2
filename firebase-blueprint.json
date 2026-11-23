@@ -59,7 +59,7 @@
     },
     "AgentDirectory": {
       "title": "AgentDirectory",
-      "description": "Direktori publik agen resmi Sagitarius Parcel di wilayah Priangan Timur.",
+      "description": "Direktori publik agen resmi Sagitarius Parcel di wilayah Priangan Timur (hanya field publik, tanpa konfigurasi internal komisi).",
       "type": "object",
       "properties": {
         "kode_agen": {
@@ -86,9 +86,6 @@
           "maxLength": 20
         },
         "jumlah_member": {
-          "type": "number"
-        },
-        "komisi_persen": {
           "type": "number"
         },
         "aktif": {

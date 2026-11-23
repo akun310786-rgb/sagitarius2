@@ -206,7 +206,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [auditSearch, setAuditSearch] = useState('');
   const [auditTypeFilter, setAuditTypeFilter] = useState<'all' | TransactionType>('all');
   const [auditWilayahFilter, setAuditWilayahFilter] = useState<'all' | WilayahPriangan>('all');
-  const [confirmDeleteDepId, setConfirmDeleteDepId] = useState<string | null>(null);
 
   // Tab 2: Manajemen Kontrak Member
   const [contractSearch, setContractSearch] = useState('');
@@ -251,7 +250,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [agentFormKecamatan, setAgentFormKecamatan] = useState('');
   const [agentFormWa, setAgentFormWa] = useState('');
   const [agentFormMemberCount, setAgentFormMemberCount] = useState('15');
-  const [agentFormKomisi, setAgentFormKomisi] = useState('5.5');
   const [agentFormAktif, setAgentFormAktif] = useState(true);
   const [savingAgent, setSavingAgent] = useState(false);
 
@@ -301,7 +299,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [settleNominal, setSettleNominal] = useState('250000');
   const [settleCatatan, setSettleCatatan] = useState('Setoran tunai kolektif member binaan');
   const [savingSettlement, setSavingSettlement] = useState(false);
-  const [confirmDeleteSettleId, setConfirmDeleteSettleId] = useState<string | null>(null);
   const [referralAgentCode, setReferralAgentCode] = useState<string>(
     userProfile?.kode_agen || agents[0]?.kode_agen || 'AGT-TSM-01'
   );
@@ -979,22 +976,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  const handleDeleteDepositRecord = async (depId: string) => {
-    const depObj = deposits.find((d) => d.id === depId);
-    try {
-      await deleteDoc(doc(db, 'deposits', depId));
-      await writeAuditLog(
-        'HAPUS_TRANSAKSI',
-        depObj?.member_nama || depId,
-        `Menghapus log transaksi ${depObj ? formatRupiah(depObj.nominal) : depId} (${depObj?.tanggal || '-'})`
-      );
-      setConfirmDeleteDepId(null);
-      setStatusMessage('Log transaksi berhasil dihapus oleh Admin.');
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `deposits/${depId}`);
-    }
-  };
-
   // --- Handlers: Contracts Management & Delivery Tracking ---
   const handleUpdateContractStatus = async (sub: Subscription, newStatus: SubscriptionStatus) => {
     try {
@@ -1112,15 +1093,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
   const handleDeleteContract = async (subId: string) => {
     const subObj = subscriptions.find((s) => s.id === subId);
+    if ((subObj?.total_terkumpul || 0) > 0) {
+      setConfirmDeleteSubId(null);
+      setStatusMessage('Kontrak dengan saldo terkumpul (> Rp 0) tidak dapat dihapus demi menjaga integritas audit keuangan.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'subscriptions', subId));
       await writeAuditLog(
         'HAPUS_KONTRAK',
         subObj?.member_nama || subId,
-        `Menghapus kontrak ${subObj?.package_nama || subId} (saldo ${formatRupiah(subObj?.total_terkumpul || 0)})`
+        `Menghapus kontrak kosong ${subObj?.package_nama || subId}`
       );
       setConfirmDeleteSubId(null);
-      setStatusMessage('Kontrak berhasil dihapus dari Firestore.');
+      setStatusMessage('Kontrak kosong berhasil dihapus dari Firestore.');
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `subscriptions/${subId}`);
     }
@@ -1234,7 +1220,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     setAgentFormKecamatan('');
     setAgentFormWa('0813');
     setAgentFormMemberCount('10');
-    setAgentFormKomisi('5.5');
     setAgentFormAktif(true);
     setShowAgentForm(true);
   };
@@ -1247,7 +1232,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     setAgentFormKecamatan(agt.kecamatan || '');
     setAgentFormWa(agt.no_wa);
     setAgentFormMemberCount(String(agt.jumlah_member));
-    setAgentFormKomisi(String(agt.komisi_persen));
     setAgentFormAktif(agt.aktif);
     setShowAgentForm(true);
   };
@@ -1273,7 +1257,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         kecamatan: agentFormKecamatan.trim().slice(0, 80),
         no_wa: agentFormWa.trim().slice(0, 20),
         jumlah_member: Math.max(0, Number(agentFormMemberCount) || 0),
-        komisi_persen: Math.min(15, Math.max(0, Number(agentFormKomisi) || 4)),
         aktif: agentFormAktif,
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
@@ -1306,7 +1289,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         kecamatan: agt.kecamatan || '',
         no_wa: agt.no_wa,
         jumlah_member: agt.jumlah_member,
-        komisi_persen: agt.komisi_persen,
         aktif: !agt.aktif,
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
@@ -1454,7 +1436,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           kecamatan: a.kecamatan,
           no_wa: a.no_wa,
           jumlah_member: a.jumlah_member,
-          komisi_persen: a.komisi_persen,
           aktif: a.aktif,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -1516,9 +1497,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     const assignedAgenNama =
       userProfile.role === 'agen' ? userProfile.nama : chosenAgent?.nama || userProfile.nama;
 
+    const effectiveWilayah: WilayahPriangan =
+      userProfile.role === 'agen' || userProfile.role === 'korwil'
+        ? userProfile.wilayah
+        : offWilayah;
+
     const cleanWaNote = offWa.trim();
     const memberLabel = cleanWaNote ? `${cleanName} (${cleanWaNote})` : cleanName;
-    const qrToken = `SGT-${offWilayah.slice(0, 3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
+    const qrToken = `SGT-${effectiveWilayah.slice(0, 3).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
     setSavingOffline(true);
     try {
@@ -1529,7 +1515,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         korwil_id: userProfile.role === 'korwil' ? userProfile.uid : '',
         agen_kode: assignedAgenKode.slice(0, 32),
         agen_nama: assignedAgenNama.slice(0, 100),
-        wilayah: offWilayah,
+        wilayah: effectiveWilayah,
         package_id: pkg.id,
         package_nama: pkg.nama_paket.slice(0, 120),
         kategori: pkg.kategori,
@@ -1622,16 +1608,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `agent_settlements/${item.id}`);
-    }
-  };
-
-  const handleDeleteSettlement = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'agent_settlements', id));
-      setConfirmDeleteSettleId(null);
-      setStatusMessage('Catatan tutup kas / komisi berhasil dihapus.');
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `agent_settlements/${id}`);
     }
   };
 
@@ -2803,37 +2779,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                                   Bukti
                                 </button>
                               )}
-                              {isAdmin && (
-                                <>
-                                  {confirmDeleteDepId === d.id ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteDepositRecord(d.id)}
-                                        className="rounded bg-rose-700 px-2 py-0.5 text-[11px] font-semibold text-white cursor-pointer"
-                                      >
-                                        Ya, Hapus
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setConfirmDeleteDepId(null)}
-                                        className="text-[11px] text-stone-500 cursor-pointer"
-                                      >
-                                        Batal
-                                      </button>
-                                    </span>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmDeleteDepId(d.id)}
-                                      className="text-stone-400 hover:text-rose-700 cursor-pointer"
-                                      title="Hapus Log Transaksi"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
                             </div>
                           </td>
                         </tr>
@@ -3136,32 +3081,34 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                                 Koreksi Saldo
                               </button>
 
-                              {confirmDeleteSubId === s.id ? (
-                                <span className="inline-flex items-center gap-1">
+                              {(s.total_terkumpul || 0) === 0 && (
+                                confirmDeleteSubId === s.id ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteContract(s.id)}
+                                      className="rounded bg-rose-700 px-2 py-1 text-[11px] font-semibold text-white cursor-pointer"
+                                    >
+                                      Ya, Hapus
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmDeleteSubId(null)}
+                                      className="text-[11px] text-stone-500 cursor-pointer"
+                                    >
+                                      Batal
+                                    </button>
+                                  </span>
+                                ) : (
                                   <button
                                     type="button"
-                                    onClick={() => handleDeleteContract(s.id)}
-                                    className="rounded bg-rose-700 px-2 py-1 text-[11px] font-semibold text-white cursor-pointer"
+                                    onClick={() => setConfirmDeleteSubId(s.id)}
+                                    className="rounded p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
+                                    title="Hapus Kontrak Kosong"
                                   >
-                                    Ya, Hapus
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteSubId(null)}
-                                    className="text-[11px] text-stone-500 cursor-pointer"
-                                  >
-                                    Batal
-                                  </button>
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setConfirmDeleteSubId(s.id)}
-                                  className="rounded p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
-                                  title="Hapus Kontrak"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                )
                               )}
                             </div>
                           </td>
@@ -3769,33 +3716,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                                       Tolak
                                     </button>
                                   </>
-                                )}
-                                {confirmDeleteSettleId === st.id ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSettlement(st.id)}
-                                      className="rounded bg-rose-700 px-2 py-1 text-[10px] font-bold text-white cursor-pointer"
-                                    >
-                                      Hapus
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmDeleteSettleId(null)}
-                                      className="text-[10px] text-stone-500 cursor-pointer"
-                                    >
-                                      Batal
-                                    </button>
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteSettleId(st.id)}
-                                    className="p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
-                                    title="Hapus"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
                                 )}
                               </div>
                             </td>
@@ -5255,9 +5175,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 <div>
                   <label className="block text-xs font-semibold text-stone-700">Wilayah</label>
                   <select
-                    value={offWilayah}
+                    value={
+                      userProfile.role === 'agen' || userProfile.role === 'korwil'
+                        ? userProfile.wilayah
+                        : offWilayah
+                    }
+                    disabled={userProfile.role === 'agen' || userProfile.role === 'korwil'}
                     onChange={(e) => setOffWilayah(e.target.value as WilayahPriangan)}
-                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 disabled:bg-stone-100 disabled:text-stone-600"
                   >
                     {WILAYAH_LIST.map((w) => (
                       <option key={w} value={w}>
@@ -5663,21 +5588,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                   className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-stone-700">
-                  Komisi Dasar (%)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={15}
-                  step="0.5"
-                  value={agentFormKomisi}
-                  onChange={(e) => setAgentFormKomisi(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 font-mono-nums text-sm"
-                />
-              </div>
-              <div className="flex items-end pb-2">
+              <div className="flex items-end pb-2 sm:col-span-2">
                 <label className="inline-flex items-center gap-2 text-xs font-semibold text-stone-800 cursor-pointer">
                   <input
                     type="checkbox"
@@ -5685,7 +5596,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                     onChange={(e) => setAgentFormAktif(e.target.checked)}
                     className="h-4 w-4 rounded border-stone-300 text-emerald-900"
                   />
-                  Agen Berstatus Aktif
+                  Agen Berstatus Aktif (Tarif komisi dihitung otomatis secara internal berdasarkan tier member)
                 </label>
               </div>
             </div>

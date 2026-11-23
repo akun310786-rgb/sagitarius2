@@ -1,8 +1,35 @@
 import React from 'react';
+import { getFriendlyFirestoreErrorMessage } from '../firebase';
 
 interface ErrorBoundaryState {
   hasError: boolean;
-  errorMessage: string;
+  friendlyMessage: string;
+  operationContext: string;
+}
+
+function parseErrorPresentation(rawMessage: string): {
+  friendlyMessage: string;
+  operationContext: string;
+} {
+  try {
+    const parsed = JSON.parse(rawMessage) as {
+      error?: string;
+      operationType?: string;
+      path?: string | null;
+    };
+    if (parsed && typeof parsed.error === 'string' && parsed.operationType) {
+      return {
+        friendlyMessage: getFriendlyFirestoreErrorMessage(new Error(parsed.error)),
+        operationContext: `${parsed.operationType.toUpperCase()} · ${parsed.path || '-'}`,
+      };
+    }
+  } catch {
+    // Not a JSON FirestoreErrorInfo payload
+  }
+  return {
+    friendlyMessage: getFriendlyFirestoreErrorMessage(new Error(rawMessage)),
+    operationContext: '',
+  };
 }
 
 export class ErrorBoundary extends React.Component<
@@ -11,13 +38,16 @@ export class ErrorBoundary extends React.Component<
 > {
   constructor(props: { children: React.ReactNode }) {
     super(props);
-    this.state = { hasError: false, errorMessage: '' };
+    this.state = { hasError: false, friendlyMessage: '', operationContext: '' };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    const raw = error.message || 'Terjadi kendala saat memuat data aplikasi.';
+    const { friendlyMessage, operationContext } = parseErrorPresentation(raw);
     return {
       hasError: true,
-      errorMessage: error.message || 'Terjadi kendala saat memuat data aplikasi.',
+      friendlyMessage,
+      operationContext,
     };
   }
 
@@ -28,12 +58,12 @@ export class ErrorBoundary extends React.Component<
           <h2 className="font-display text-xl font-bold text-stone-900">
             Terjadi Kendala Koneksi atau Izin Data
           </h2>
-          <p className="mt-2 text-sm text-stone-600">
-            Silakan muat ulang halaman atau pastikan akun Anda memiliki akses yang sesuai.
-          </p>
-          <pre className="mt-4 max-h-36 overflow-auto rounded-lg bg-stone-100 p-3 text-left text-xs text-stone-700">
-            {this.state.errorMessage}
-          </pre>
+          <p className="mt-2 text-sm text-stone-700">{this.state.friendlyMessage}</p>
+          {this.state.operationContext && (
+            <p className="mt-2 rounded-lg bg-stone-100 px-3 py-1.5 font-mono-nums text-xs text-stone-600">
+              Operasi: {this.state.operationContext}
+            </p>
+          )}
           <button
             type="button"
             onClick={() => window.location.reload()}

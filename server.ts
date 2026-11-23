@@ -1,8 +1,11 @@
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getApp, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 dotenv.config();
@@ -11,6 +14,130 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
+const BOOTSTRAPPED_ADMIN_EMAIL = 'akun310786@gmail.com';
+
+interface FirebaseAppletConfig {
+  projectId?: string;
+  firestoreDatabaseId?: string;
+}
+
+function loadFirebaseAppletConfig(): FirebaseAppletConfig {
+  try {
+    const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+    const raw = fs.readFileSync(configPath, 'utf8');
+    return JSON.parse(raw) as FirebaseAppletConfig;
+  } catch {
+    return {};
+  }
+}
+
+const firebaseAppletConfig = loadFirebaseAppletConfig();
+const configuredProjectId =
+  firebaseAppletConfig.projectId && firebaseAppletConfig.projectId !== 'remixed-project-id'
+    ? firebaseAppletConfig.projectId
+    : undefined;
+
+const firebaseAdminApp = configuredProjectId
+  ? getApps().length
+    ? getApp()
+    : initializeApp({ projectId: configuredProjectId })
+  : null;
+
+export interface VerifiedAuthUser {
+  uid: string;
+  email: string | null;
+  emailVerified: boolean;
+  isBootstrappedAdmin: boolean;
+  authTime?: number;
+}
+
+interface AuthenticatedRequest extends Request {
+  authUser?: VerifiedAuthUser | null;
+}
+
+// Simple sliding-window in-memory rate limiter for API routes
+const rateLimitBuckets = new Map<string, number[]>();
+
+function createRateLimiter(maxRequests: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const now = Date.now();
+    const clientKey = `${req.path}:${req.ip || 'unknown'}`;
+    const recent = (rateLimitBuckets.get(clientKey) || []).filter((ts) => now - ts < windowMs);
+    if (recent.length >= maxRequests) {
+      res.setHeader('Retry-After', String(Math.ceil(windowMs / 1000)));
+      return res.status(429).json({
+        error: 'Terlalu banyak permintaan dalam waktu singkat. Silakan tunggu beberapa saat.',
+      });
+    }
+    recent.push(now);
+    rateLimitBuckets.set(clientKey, recent);
+    if (rateLimitBuckets.size > 5000) {
+      // Prevent unbounded growth
+      const oldestKey = rateLimitBuckets.keys().next().value;
+      if (oldestKey) rateLimitBuckets.delete(oldestKey);
+    }
+    return next();
+  };
+}
+
+async function verifyBearerTokenFromHeader(authHeader?: string): Promise<VerifiedAuthUser | null> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token || token.length > 8192 || !firebaseAdminApp) return null;
+
+  const decoded = await getAuth(firebaseAdminApp).verifyIdToken(token);
+  const email = typeof decoded.email === 'string' ? decoded.email : null;
+  const emailVerified = Boolean(decoded.email_verified);
+  return {
+    uid: decoded.uid,
+    email,
+    emailVerified,
+    isBootstrappedAdmin: Boolean(emailVerified && email === BOOTSTRAPPED_ADMIN_EMAIL),
+    authTime: typeof decoded.auth_time === 'number' ? decoded.auth_time : undefined,
+  };
+}
+
+async function attachOptionalAuth(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
+  req.authUser = null;
+  try {
+    req.authUser = await verifyBearerTokenFromHeader(req.headers.authorization);
+  } catch {
+    req.authUser = null;
+  }
+  return next();
+}
+
+async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        error: 'Autentikasi diperlukan. Sertakan Bearer token Firebase yang valid.',
+      });
+    }
+    const verified = await verifyBearerTokenFromHeader(authHeader);
+    if (!verified) {
+      return res.status(401).json({
+        error: 'Token autentikasi tidak valid atau konfigurasi server belum siap.',
+      });
+    }
+    req.authUser = verified;
+    return next();
+  } catch {
+    return res.status(401).json({
+      error: 'Sesi token tidak valid atau sudah kedaluwarsa. Silakan masuk ulang.',
+    });
+  }
+}
+
+function sanitizeMemberContext(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/ignore\s+(all\s+)?previous\s+instructions/gi, '[disensor]')
+    .trim()
+    .slice(0, 2000);
+}
 
 const CS_SYSTEM_INSTRUCTION = `Anda adalah Asisten Customer Service Online resmi Sagitarius Parcel (PT. SAGITARIUS TRINUNGGAL KARYA).
 Jawab selalu dengan ramah, jelas, sopan, dan akurat dalam Bahasa Indonesia. Gunakan informasi resmi berikut sebagai sumber kebenaran utama:
@@ -59,9 +186,12 @@ Jika user bertanya tentang pendaftaran, cek tabungan, atau kendala transaksi spe
 async function startServer() {
   const app = express();
   const httpServer = http.createServer(app);
-  app.use(express.json({ limit: '1mb' }));
+  app.disable('x-powered-by');
+  app.use(express.json({ limit: '256kb' }));
 
   const allowedOrigins = new Set([
+    'https://www.sagitariusparcel.web.id',
+    'https://sagitariusparcel.web.id',
     'https://www.sagitarius-parcel.web.id',
     'https://sagitarius-parcel.web.id',
     'https://sagitarius-parcel.web.app',
@@ -73,196 +203,233 @@ async function startServer() {
     if (origin && (allowedOrigins.has(origin) || origin.startsWith('http://localhost:'))) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Vary', 'Origin');
-      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Cache-Control', 'no-store');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(204);
     }
     return next();
   });
 
-  app.post('/api/cs-chat', async (req, res) => {
-    try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-      if (!apiKey || apiKey.includes('MY_GEMINI_API_KEY')) {
-        return res.status(500).json({
-          error:
-            'API key Gemini belum aktif pada environment server. Periksa panel Settings > Secrets untuk memastikan GEMINI_API_KEY sudah terpasang.',
-        });
-      }
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      ok: true,
+      service: 'sagitarius-parcel-api',
+      authConfigured: Boolean(firebaseAdminApp),
+    });
+  });
 
-      const rawMessages = Array.isArray(req.body?.messages) ? req.body.messages : [];
-      const mapped = rawMessages
-        .slice(-14)
-        .map((m: { role?: string; text?: string }) => ({
-          role: (m.role === 'model' ? 'model' : 'user') as 'user' | 'model',
-          text: String(m.text || '').trim().slice(0, 2000),
-        }))
-        .filter((m: { text: string }) => m.text.length > 0);
-
-      // Gemini generateContent requires conversation history to start with a 'user' turn
-      const firstUserIdx = mapped.findIndex((m: { role: string }) => m.role === 'user');
-      if (firstUserIdx === -1) {
-        return res.status(400).json({ error: 'Pesan chat tidak boleh kosong.' });
-      }
-
-      const alternating: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
-      for (const item of mapped.slice(firstUserIdx)) {
-        const last = alternating[alternating.length - 1];
-        if (last && last.role === item.role) {
-          last.parts[0].text = `${last.parts[0].text}\n${item.text}`;
-        } else {
-          alternating.push({ role: item.role, parts: [{ text: item.text }] });
-        }
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          },
-        },
+  // Verified caller identity endpoint (verifies Firebase ID token cryptographically; never trusts body claims)
+  app.get(
+    '/api/me',
+    createRateLimiter(60, 60_000),
+    requireAuth,
+    (req: AuthenticatedRequest, res: Response) => {
+      return res.json({
+        user: req.authUser,
       });
+    }
+  );
 
-      const extractErrorInfo = (err: unknown): { status: number; code: string; message: string } => {
-        const rawMsg = err instanceof Error ? err.message : String(err);
-        let status = 500;
-        let code = '';
-        let msg = rawMsg;
-
-        if (typeof err === 'object' && err !== null && 'status' in err) {
-          const s = Number((err as { status?: unknown }).status);
-          if (s >= 400 && s < 600) status = s;
+  app.post(
+    '/api/cs-chat',
+    createRateLimiter(25, 60_000),
+    attachOptionalAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+        if (!apiKey || apiKey.includes('MY_GEMINI_API_KEY')) {
+          return res.status(500).json({
+            error:
+              'API key Gemini belum aktif pada environment server. Periksa panel Settings > Secrets untuk memastikan GEMINI_API_KEY sudah terpasang.',
+          });
         }
+
+        if (!req.body || typeof req.body !== 'object' || !Array.isArray(req.body.messages)) {
+          return res.status(400).json({ error: 'Format payload chat tidak valid.' });
+        }
+
+        const rawMessages = req.body.messages;
+        if (rawMessages.length === 0 || rawMessages.length > 30) {
+          return res.status(400).json({
+            error: 'Jumlah riwayat pesan harus antara 1 hingga 30 pesan.',
+          });
+        }
+
+        const mapped = rawMessages
+          .slice(-14)
+          .map((m: { role?: unknown; text?: unknown }) => ({
+            role: (m?.role === 'model' ? 'model' : 'user') as 'user' | 'model',
+            text: typeof m?.text === 'string' ? m.text.trim().slice(0, 2000) : '',
+          }))
+          .filter((m: { text: string }) => m.text.length > 0);
+
+        const firstUserIdx = mapped.findIndex((m: { role: string }) => m.role === 'user');
+        if (firstUserIdx === -1) {
+          return res.status(400).json({ error: 'Pesan chat tidak boleh kosong.' });
+        }
+
+        const alternating: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+        for (const item of mapped.slice(firstUserIdx)) {
+          const last = alternating[alternating.length - 1];
+          if (last && last.role === item.role) {
+            last.parts[0].text = `${last.parts[0].text}\n${item.text}`;
+          } else {
+            alternating.push({ role: item.role, parts: [{ text: item.text }] });
+          }
+        }
+
+        // Only attach personal memberContext when caller presents a verified Firebase ID token
+        const verifiedMemberContext = req.authUser
+          ? sanitizeMemberContext(req.body?.memberContext)
+          : '';
+
+        const effectiveSystemInstruction = verifiedMemberContext
+          ? `${CS_SYSTEM_INSTRUCTION}\n\nKONTEKS AKUN MEMBER TERVERIFIKASI (UID: ${req.authUser?.uid}):\n${verifiedMemberContext}`
+          : CS_SYSTEM_INSTRUCTION;
+
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
+          },
+        });
+
+        const extractErrorInfo = (err: unknown): { status: number; code: string; message: string } => {
+          const rawMsg = err instanceof Error ? err.message : String(err);
+          let status = 500;
+          let code = '';
+          let msg = rawMsg;
+
+          if (typeof err === 'object' && err !== null && 'status' in err) {
+            const s = Number((err as { status?: unknown }).status);
+            if (s >= 400 && s < 600) status = s;
+          }
+
+          try {
+            const parsed = JSON.parse(rawMsg) as {
+              error?: { code?: number; message?: string; status?: string };
+            };
+            if (parsed?.error) {
+              if (parsed.error.code) status = parsed.error.code;
+              if (parsed.error.status) code = parsed.error.status;
+              if (parsed.error.message) msg = parsed.error.message;
+            }
+          } catch {
+            // Raw text message
+          }
+
+          return { status, code, message: msg };
+        };
+
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+        const attemptGenerate = async (model: string, thinkingLevel: ThinkingLevel) => {
+          return ai.models.generateContent({
+            model,
+            contents: alternating,
+            config: {
+              abortSignal: AbortSignal.timeout(12000),
+              systemInstruction: effectiveSystemInstruction,
+              thinkingConfig: {
+                thinkingLevel,
+              },
+            },
+          });
+        };
+
+        const modelCandidates: Array<{ model: string; thinkingLevel: ThinkingLevel }> = [
+          { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW },
+          { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
+        ];
+
+        let lastErr: unknown = null;
+        let replyText = '';
+
+        for (const candidate of modelCandidates) {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const response = await attemptGenerate(candidate.model, candidate.thinkingLevel);
+              const txt = response.text?.trim();
+              if (txt) {
+                replyText = txt;
+                break;
+              }
+            } catch (err) {
+              lastErr = err;
+              const info = extractErrorInfo(err);
+              const isTimeout =
+                (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) ||
+                info.message.toLowerCase().includes('timeout') ||
+                info.message.toLowerCase().includes('aborted');
+              const isTransient =
+                isTimeout ||
+                info.status === 503 ||
+                info.status === 502 ||
+                info.status === 504 ||
+                info.code === 'UNAVAILABLE';
+              if (!isTransient) {
+                throw err;
+              }
+              if (isTimeout) {
+                break;
+              }
+              if (attempt === 0) {
+                await sleep(600);
+              }
+            }
+          }
+          if (replyText) break;
+        }
+
+        if (!replyText) {
+          if (lastErr) throw lastErr;
+          return res.status(502).json({
+            error: 'Respon dari asisten Gemini kosong. Silakan coba beberapa saat lagi.',
+          });
+        }
+
+        return res.json({ reply: replyText });
+      } catch (error) {
+        console.error('Error /api/cs-chat:', error);
+        const rawMsg = error instanceof Error ? error.message : String(error);
+        let status = 500;
+        let friendlyMsg = 'Gagal menghubungi layanan CS Online Gemini.';
 
         try {
           const parsed = JSON.parse(rawMsg) as {
             error?: { code?: number; message?: string; status?: string };
           };
-          if (parsed?.error) {
-            if (parsed.error.code) status = parsed.error.code;
-            if (parsed.error.status) code = parsed.error.status;
-            if (parsed.error.message) msg = parsed.error.message;
+          if (parsed?.error?.code) status = parsed.error.code;
+          if (parsed?.error?.status === 'API_KEY_INVALID' || status === 400) {
+            friendlyMsg =
+              'API key Gemini tidak valid atau permintaan bermasalah. Silakan periksa API key di panel Settings > Secrets.';
+          } else if (parsed?.error?.status === 'PERMISSION_DENIED' || status === 403) {
+            friendlyMsg =
+              'Akses API Gemini ditolak (PERMISSION_DENIED). Pastikan API key di panel Settings > Secrets memiliki izin yang aktif.';
+          } else if (parsed?.error?.status === 'RESOURCE_EXHAUSTED' || status === 429) {
+            friendlyMsg =
+              'Kuota permintaan Gemini sedang penuh (429). Silakan coba beberapa saat lagi atau cek kuota API key di Settings > Secrets.';
+          } else if (parsed?.error?.status === 'UNAVAILABLE' || status === 503) {
+            friendlyMsg =
+              'Server model Gemini sedang mengalami lonjakan permintaan sementara (503). Silakan kirim ulang sesaat lagi atau hubungi WA CS 0813 2438 3479.';
+          } else if (parsed?.error?.message) {
+            friendlyMsg = parsed.error.message;
           }
         } catch {
-          // Raw text message
+          if (rawMsg) friendlyMsg = rawMsg;
         }
 
-        return { status, code, message: msg };
-      };
-
-      const rawMemberContext =
-        typeof req.body?.memberContext === 'string'
-          ? req.body.memberContext.trim().slice(0, 2500)
-          : '';
-
-      const effectiveSystemInstruction = rawMemberContext
-        ? `${CS_SYSTEM_INSTRUCTION}\n\nKONTEKS AKUN MEMBER YANG SEDANG LOGIN (Gunakan hanya untuk membantu menjawab pertanyaan pribadi member ini terkait saldo, progres pelunasan, status pengiriman, kupon Door Prize, atau kontrak aktifnya):\n${rawMemberContext}`
-        : CS_SYSTEM_INSTRUCTION;
-
-      const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-      const attemptGenerate = async (model: string, thinkingLevel: ThinkingLevel) => {
-        return ai.models.generateContent({
-          model,
-          contents: alternating,
-          config: {
-            abortSignal: AbortSignal.timeout(12000),
-            systemInstruction: effectiveSystemInstruction,
-            thinkingConfig: {
-              thinkingLevel,
-            },
-          },
-        });
-      };
-
-      const modelCandidates: Array<{ model: string; thinkingLevel: ThinkingLevel }> = [
-        { model: 'gemini-4-hydrogen', thinkingLevel: ThinkingLevel.LOW },
-        { model: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
-      ];
-
-      let lastErr: unknown = null;
-      let replyText = '';
-
-      for (const candidate of modelCandidates) {
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const response = await attemptGenerate(candidate.model, candidate.thinkingLevel);
-            const txt = response.text?.trim();
-            if (txt) {
-              replyText = txt;
-              break;
-            }
-          } catch (err) {
-            lastErr = err;
-            const info = extractErrorInfo(err);
-            const isTimeout =
-              (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) ||
-              info.message.toLowerCase().includes('timeout') ||
-              info.message.toLowerCase().includes('aborted');
-            const isTransient =
-              isTimeout ||
-              info.status === 503 ||
-              info.status === 502 ||
-              info.status === 504 ||
-              info.code === 'UNAVAILABLE';
-            if (!isTransient) {
-              throw err;
-            }
-            if (isTimeout) {
-              break; // Immediately fall back to next model candidate on timeout
-            }
-            if (attempt === 0) {
-              await sleep(600);
-            }
-          }
-        }
-        if (replyText) break;
+        return res.status(status >= 400 && status < 600 ? status : 500).json({ error: friendlyMsg });
       }
-
-      if (!replyText) {
-        if (lastErr) throw lastErr;
-        return res.status(502).json({
-          error: 'Respon dari asisten Gemini kosong. Silakan coba beberapa saat lagi.',
-        });
-      }
-
-      return res.json({ reply: replyText });
-    } catch (error) {
-      console.error('Error /api/cs-chat:', error);
-      const rawMsg = error instanceof Error ? error.message : String(error);
-      let status = 500;
-      let friendlyMsg = 'Gagal menghubungi layanan CS Online Gemini.';
-
-      try {
-        const parsed = JSON.parse(rawMsg) as {
-          error?: { code?: number; message?: string; status?: string };
-        };
-        if (parsed?.error?.code) status = parsed.error.code;
-        if (parsed?.error?.status === 'API_KEY_INVALID' || status === 400) {
-          friendlyMsg =
-            'API key Gemini tidak valid atau permintaan bermasalah. Silakan periksa API key di panel Settings > Secrets.';
-        } else if (parsed?.error?.status === 'PERMISSION_DENIED' || status === 403) {
-          friendlyMsg =
-            'Akses API Gemini ditolak (PERMISSION_DENIED). Pastikan API key di panel Settings > Secrets memiliki izin yang aktif.';
-        } else if (parsed?.error?.status === 'RESOURCE_EXHAUSTED' || status === 429) {
-          friendlyMsg =
-            'Kuota permintaan Gemini sedang penuh (429). Silakan coba beberapa saat lagi atau cek kuota API key di Settings > Secrets.';
-        } else if (parsed?.error?.status === 'UNAVAILABLE' || status === 503) {
-          friendlyMsg =
-            'Server model Gemini sedang mengalami lonjakan permintaan sementara (503). Silakan kirim ulang sesaat lagi atau hubungi WA CS 0813 2438 3479.';
-        } else if (parsed?.error?.message) {
-          friendlyMsg = parsed.error.message;
-        }
-      } catch {
-        if (rawMsg) friendlyMsg = rawMsg;
-      }
-
-      return res.status(status >= 400 && status < 600 ? status : 500).json({ error: friendlyMsg });
     }
-  });
+  );
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

@@ -141,7 +141,8 @@ export default function App() {
   const [referralCodeParam] = useState<string>(() => {
     if (typeof window === 'undefined') return '';
     const params = new URLSearchParams(window.location.search);
-    return (params.get('agen') || params.get('ref') || '').trim();
+    const rawRef = (params.get('agen') || params.get('ref') || '').trim();
+    return /^[a-zA-Z0-9_-]{1,32}$/.test(rawRef) ? rawRef : '';
   });
 
   const referralAgent = useMemo(() => {
@@ -159,6 +160,22 @@ export default function App() {
       setSelectedAgentId(referralAgent.id);
     }
   }, [referralAgent]);
+
+  const canAccessOperational = Boolean(
+    userProfile &&
+      (userProfile.role === 'agen' ||
+        userProfile.role === 'korwil' ||
+        userProfile.role === 'admin')
+  );
+  const showDashboardNav = !userProfile || canAccessOperational;
+
+  // Enforce strict role guard on operational view
+  useEffect(() => {
+    if (authReady && activeView === 'operasional' && userProfile && !canAccessOperational) {
+      setActiveView('member');
+      setAuthError('Akses Dashboard Operasional khusus untuk Agen, Korwil, dan Admin Pusat.');
+    }
+  }, [authReady, activeView, userProfile, canAccessOperational]);
 
   // Listen to public Firestore packages & agents (fallback gracefully to defaults)
   useEffect(() => {
@@ -208,36 +225,6 @@ export default function App() {
       }
     );
 
-    const unsubSettings = onSnapshot(
-      doc(db, 'app_settings', 'public'),
-      (snap) => {
-        if (snap.exists()) {
-          setAppSettings({
-            ...DEFAULT_APP_SETTINGS,
-            ...(snap.data() as Partial<AppPublicSettings>),
-          });
-        }
-      },
-      () => {
-        // Retain default company settings if uninitialized
-      }
-    );
-
-    const unsubDoorPrize = onSnapshot(
-      query(collection(db, 'door_prize_draws'), orderBy('createdAt', 'desc')),
-      (snap) => {
-        setDoorPrizeDraws(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as Omit<DoorPrizeDraw, 'id'>),
-          }))
-        );
-      },
-      () => {
-        // Retain empty list if offline or uninitialized
-      }
-    );
-
     const unsubSubstitutions = onSnapshot(
       query(collection(db, 'product_substitutions'), orderBy('createdAt', 'desc')),
       (snap) => {
@@ -256,8 +243,6 @@ export default function App() {
     return () => {
       unsubPkg();
       unsubAgents();
-      unsubSettings();
-      unsubDoorPrize();
       unsubSubstitutions();
     };
   }, []);
@@ -275,6 +260,8 @@ export default function App() {
         setAgentSettlements([]);
         setWarehouseInventory([]);
         setAuditLogs([]);
+        setDoorPrizeDraws([]);
+        setAppSettings(DEFAULT_APP_SETTINGS);
         setAuthReady(true);
         return;
       }
@@ -332,13 +319,46 @@ export default function App() {
 
     const isBootAdmin =
       firebaseUser.email === BOOTSTRAPPED_ADMIN_EMAIL && firebaseUser.emailVerified;
+    const hasAdminAccess = isBootAdmin || userProfile.role === 'admin';
 
-    const subsQuery = isBootAdmin
+    const unsubSettings = onSnapshot(
+      doc(db, 'app_settings', 'public'),
+      (snap) => {
+        if (snap.exists()) {
+          setAppSettings({
+            ...DEFAULT_APP_SETTINGS,
+            ...(snap.data() as Partial<AppPublicSettings>),
+          });
+        }
+      },
+      (err) => handleFirestoreError(err, OperationType.GET, 'app_settings/public')
+    );
+
+    const doorPrizeQuery = hasAdminAccess
+      ? query(collection(db, 'door_prize_draws'), orderBy('createdAt', 'desc'))
+      : userProfile.role === 'korwil'
+        ? query(collection(db, 'door_prize_draws'), where('wilayah', '==', userProfile.wilayah))
+        : query(collection(db, 'door_prize_draws'), where('member_id', '==', firebaseUser.uid));
+
+    const unsubDoorPrize = onSnapshot(
+      doorPrizeQuery,
+      (snap) => {
+        setDoorPrizeDraws(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<DoorPrizeDraw, 'id'>),
+          }))
+        );
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'door_prize_draws')
+    );
+
+    const subsQuery = hasAdminAccess
       ? query(collection(db, 'subscriptions'))
       : userProfile.role === 'agen'
         ? query(collection(db, 'subscriptions'), where('agen_id', '==', firebaseUser.uid))
         : userProfile.role === 'korwil'
-          ? query(collection(db, 'subscriptions'), where('korwil_id', '==', firebaseUser.uid))
+          ? query(collection(db, 'subscriptions'), where('wilayah', '==', userProfile.wilayah))
           : query(collection(db, 'subscriptions'), where('member_id', '==', firebaseUser.uid));
 
     const unsubSubs = onSnapshot(
@@ -353,12 +373,12 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.LIST, 'subscriptions')
     );
 
-    const depsQuery = isBootAdmin
+    const depsQuery = hasAdminAccess
       ? query(collection(db, 'deposits'))
       : userProfile.role === 'agen'
         ? query(collection(db, 'deposits'), where('agen_id', '==', firebaseUser.uid))
         : userProfile.role === 'korwil'
-          ? query(collection(db, 'deposits'), where('korwil_id', '==', firebaseUser.uid))
+          ? query(collection(db, 'deposits'), where('wilayah', '==', userProfile.wilayah))
           : query(collection(db, 'deposits'), where('member_id', '==', firebaseUser.uid));
 
     const unsubDeps = onSnapshot(
@@ -374,10 +394,7 @@ export default function App() {
     );
 
     let unsubUsers: (() => void) | undefined;
-    let unsubMessages: (() => void) | undefined;
-    let unsubInventory: (() => void) | undefined;
-    let unsubAuditLogs: (() => void) | undefined;
-    if (isBootAdmin) {
+    if (hasAdminAccess) {
       unsubUsers = onSnapshot(
         collection(db, 'users'),
         (snap) => {
@@ -385,6 +402,30 @@ export default function App() {
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'users')
       );
+    } else if (userProfile.role === 'korwil') {
+      unsubUsers = onSnapshot(
+        query(collection(db, 'users'), where('wilayah', '==', userProfile.wilayah)),
+        (snap) => {
+          setAllUsers(snap.docs.map((d) => d.data() as UserProfile));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'users')
+      );
+    } else if (userProfile.role === 'agen') {
+      unsubUsers = onSnapshot(
+        query(collection(db, 'users'), where('agen_id', '==', firebaseUser.uid)),
+        (snap) => {
+          setAllUsers(snap.docs.map((d) => d.data() as UserProfile));
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'users')
+      );
+    } else {
+      setAllUsers([]);
+    }
+
+    let unsubMessages: (() => void) | undefined;
+    let unsubInventory: (() => void) | undefined;
+    let unsubAuditLogs: (() => void) | undefined;
+    if (hasAdminAccess) {
       unsubMessages = onSnapshot(
         query(collection(db, 'contact_messages'), orderBy('createdAt', 'desc')),
         (snap) => {
@@ -421,13 +462,18 @@ export default function App() {
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'audit_logs')
       );
+    } else {
+      setContactMessages([]);
+      setWarehouseInventory([]);
+      setAuditLogs([]);
     }
 
     let unsubSettlements: (() => void) | undefined;
-    if (isBootAdmin || userProfile.role === 'admin' || userProfile.role === 'agen' || userProfile.role === 'korwil') {
-      const settlementsQuery =
-        isBootAdmin || userProfile.role === 'admin'
-          ? query(collection(db, 'agent_settlements'))
+    if (hasAdminAccess || userProfile.role === 'agen' || userProfile.role === 'korwil') {
+      const settlementsQuery = hasAdminAccess
+        ? query(collection(db, 'agent_settlements'))
+        : userProfile.role === 'korwil'
+          ? query(collection(db, 'agent_settlements'), where('wilayah', '==', userProfile.wilayah))
           : query(
               collection(db, 'agent_settlements'),
               where('agen_id', '==', firebaseUser.uid)
@@ -444,10 +490,14 @@ export default function App() {
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'agent_settlements')
       );
+    } else {
+      setAgentSettlements([]);
     }
 
     return () => {
       unsubProfile();
+      unsubSettings();
+      unsubDoorPrize();
       unsubSubs();
       unsubDeps();
       if (unsubUsers) unsubUsers();
@@ -456,7 +506,7 @@ export default function App() {
       if (unsubAuditLogs) unsubAuditLogs();
       if (unsubSettlements) unsubSettlements();
     };
-  }, [authReady, firebaseUser, userProfile?.role]);
+  }, [authReady, firebaseUser, userProfile?.role, userProfile?.wilayah]);
 
   const normalizeWaDigits = (input: string): string => {
     const digits = input.replace(/\D/g, '');
@@ -632,8 +682,22 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    // Clear profile first so scoped onSnapshot listeners tear down cleanly before auth token revocation
+    setUserProfile(null);
+    setSubscriptions([]);
+    setDeposits([]);
+    setAllUsers([]);
+    setContactMessages([]);
+    setAgentSettlements([]);
+    setWarehouseInventory([]);
+    setAuditLogs([]);
+    setDoorPrizeDraws([]);
+    setAppSettings(DEFAULT_APP_SETTINGS);
+    setLockedSimulation(null);
+    setShowProfileModal(false);
+    setAuthError('');
     setActiveView('landing');
+    await signOut(auth);
   };
 
   const handleLockSimulation = (lock: SimulationLock) => {
@@ -654,15 +718,28 @@ export default function App() {
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userProfile) return;
-    const cleanUser = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const cleanNama = editNama.trim().slice(0, 100);
+    const cleanUser = editUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
+    const cleanWa = editWa.trim().slice(0, 20);
+    if (cleanNama.length < 2 || cleanWa.length < 8) {
+      setAuthError('Nama lengkap minimal 2 karakter dan nomor WhatsApp minimal 8 digit.');
+      return;
+    }
+
+    const canChangeOwnWilayah =
+      userProfile.role === 'member' || userProfile.role === 'admin';
+    const updatePayload: Record<string, unknown> = {
+      nama: cleanNama,
+      username: cleanUser,
+      no_wa: cleanWa,
+      updatedAt: serverTimestamp(),
+    };
+    if (canChangeOwnWilayah) {
+      updatePayload.wilayah = editWilayah;
+    }
+
     try {
-      await updateDoc(doc(db, 'users', userProfile.uid), {
-        nama: editNama.trim(),
-        username: cleanUser,
-        no_wa: editWa.trim(),
-        wilayah: editWilayah,
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, 'users', userProfile.uid), updatePayload);
       setShowProfileModal(false);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userProfile.uid}`);
@@ -799,16 +876,18 @@ export default function App() {
               >
                 Member
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveView('operasional');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={navLinkClass(activeView === 'operasional')}
-              >
-                Dashboard
-              </button>
+              {showDashboardNav && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveView('operasional');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className={navLinkClass(activeView === 'operasional')}
+                >
+                  Dashboard
+                </button>
+              )}
             </nav>
 
             {/* Compact tablet nav */}
@@ -847,16 +926,18 @@ export default function App() {
               >
                 Member
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveView('operasional');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={navLinkClass(activeView === 'operasional')}
-              >
-                Dashboard
-              </button>
+              {showDashboardNav && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveView('operasional');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className={navLinkClass(activeView === 'operasional')}
+                >
+                  Dashboard
+                </button>
+              )}
             </nav>
 
             {/* Zone 3: Search, Wishlist Bag, Account & Hubungi Kami */}
@@ -978,16 +1059,18 @@ export default function App() {
                 >
                   Dashboard Member
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView('operasional');
-                    setMobileMenuOpen(false);
-                  }}
-                  className="rounded-xl border border-[#C8A053]/40 bg-white/10 px-3 py-2.5 text-left font-bold text-white"
-                >
-                  Dashboard
-                </button>
+                {showDashboardNav && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveView('operasional');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="rounded-xl border border-[#C8A053]/40 bg-white/10 px-3 py-2.5 text-left font-bold text-white"
+                  >
+                    Dashboard
+                  </button>
+                )}
               </div>
               {userProfile && (
                 <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
@@ -1225,16 +1308,18 @@ export default function App() {
                 >
                   Direktori Agen Wilayah
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView('operasional');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="hover:text-[#E8CA82] cursor-pointer"
-                >
-                  Dashboard
-                </button>
+                {showDashboardNav && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveView('operasional');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="hover:text-[#E8CA82] cursor-pointer"
+                  >
+                    Dashboard
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1477,8 +1562,9 @@ export default function App() {
                   </label>
                   <select
                     value={editWilayah}
+                    disabled={userProfile.role === 'agen' || userProfile.role === 'korwil'}
                     onChange={(e) => setEditWilayah(e.target.value as WilayahPriangan)}
-                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900"
+                    className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 disabled:bg-stone-100 disabled:text-stone-600"
                   >
                     {WILAYAH_LIST.map((w) => (
                       <option key={w} value={w}>
@@ -1486,6 +1572,11 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                  {(userProfile.role === 'agen' || userProfile.role === 'korwil') && (
+                    <p className="mt-1 text-[11px] text-stone-500">
+                      Wilayah tugas Agen/Korwil hanya dapat diubah oleh Admin Pusat.
+                    </p>
+                  )}
                 </div>
               </div>
 

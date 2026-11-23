@@ -1,5 +1,9 @@
 export type UserRole = 'member' | 'agen' | 'korwil' | 'admin';
 
+export type StaffRole = 'agen' | 'korwil' | 'admin';
+
+export type DataSensitivityTier = 'public' | 'private' | 'privileged';
+
 export type WilayahPriangan =
   | 'Ciamis'
   | 'Tasikmalaya'
@@ -28,6 +32,24 @@ export type DepositMethod =
 
 export type DepositVerificationStatus = 'pending' | 'verified' | 'rejected';
 
+export interface SecurityContext {
+  uid: string;
+  email: string | null;
+  emailVerified: boolean;
+  role: UserRole;
+  wilayah: WilayahPriangan;
+  isBootstrappedAdmin: boolean;
+  isStaff: boolean;
+}
+
+export interface VerifiedApiCaller {
+  uid: string;
+  email: string | null;
+  emailVerified: boolean;
+  isBootstrappedAdmin: boolean;
+  authTime?: number;
+}
+
 export interface ParcelPackage {
   id: string;
   nama_paket: string;
@@ -45,7 +67,11 @@ export interface ParcelPackage {
   deskripsi_singkat?: string;
 }
 
-export interface AgentDirectoryItem {
+/**
+ * Public Agent Directory entry.
+ * Internal commission/routing fields must NOT be persisted into public `/agents` documents.
+ */
+export interface PublicAgentDirectoryItem {
   id: string;
   kode_agen: string;
   nama: string;
@@ -53,8 +79,11 @@ export interface AgentDirectoryItem {
   kecamatan: string;
   no_wa: string;
   jumlah_member: number;
-  komisi_persen: number;
   aktif: boolean;
+}
+
+export interface AgentDirectoryItem extends PublicAgentDirectoryItem {
+  komisi_persen?: number;
   korwil_id?: string;
 }
 

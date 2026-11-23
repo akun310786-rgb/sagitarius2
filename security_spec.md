@@ -1,30 +1,32 @@
-# Security Specification — Sagitarius Parcel PWA
+# Security Specification — Sagitarius Parcel PWA (Fase 1 Hardened)
+
+## Klasifikasi Data
+- **Public Data**: `/packages/{packageId}`, `/agents/{agentId}` (tanpa field internal seperti `komisi_persen` atau `korwil_id`), dan `/product_substitutions/{subId}`.
+- **Private User Data**: `/users/{userId}`, `/subscriptions/{subscriptionId}`, `/deposits/{depositId}`, `/door_prize_draws/{drawId}`, `/login_aliases/{aliasId}` (`get` tunggal untuk lookup login, `list` ditolak total).
+- **Privileged Data**: `/admins/{adminId}`, `/app_settings/{settingId}`, `/agent_settlements/{settlementId}`, `/warehouse_inventory/{itemId}`, `/audit_logs/{logId}`, `/contact_messages/{messageId}` (`create` publik untuk form kontak, `read/update/delete` khusus Admin).
 
 ## Data Invariants
-1. **User Role Integrity**: Only `akun310786@gmail.com` (verified via Google Auth `email_verified == true`) or existing admins may assign `agen`, `korwil`, or `admin` roles. New user registrations (via Google Auth or WhatsApp/Username/Email+Password) may only create `role: "member"`.
-2. **Login Alias Isolation**: `/login_aliases/{aliasId}` maps normalized WhatsApp numbers (`wa_62...`) or usernames (`u_...`) strictly for single-document `get` lookup prior to `signInWithEmailAndPassword`. Collection `list` queries on `login_aliases` are strictly denied (`allow list: if false`) to prevent enumeration/scraping.
-3. **Contract Ownership & Initial State**: A `subscription` can only be created with `total_terkumpul == 0` and `status == "aktif"`, either by the authenticated `member_id`, by the assigned Agen/Korwil (for offline-assisted walk-in members), or by Admin. A member may only cancel/delete their own contract when `total_terkumpul == 0` and `status == "aktif"`.
-4. **Deposit & Withdrawal Binding**: A transaction in `deposits` (`jenis_transaksi` in `setoran`, `penarikan`) must reference an existing `subscription_id`. Members may only submit `status_verifikasi: "pending"` (either `metode: "transfer"` for `setoran` or `metode in ["pencairan_tunai", "transfer_keluar"]` for `penarikan`). Only the assigned Agen, Korwil, or Admin may verify/validate (`validated_by`) transactions or record direct `verified` cash deposits/withdrawals.
-5. **Terminal State Lock**: Once a subscription reaches `status == "diambil"`, non-admins cannot mutate its balance or status.
-6. **PII Isolation**: User profiles (`users/{userId}`) containing personal WhatsApp/email are readable only by the owner, assigned Agen, Korwil, or Admin. Public agent listings live in `agents/{agentId}`.
-7. **Contact Message Privacy**: Public visitors may create `/contact_messages/{messageId}` strictly with `status == "baru"` and server timestamps; reading, marking as `"dibalas"`, or deleting messages is strictly restricted to Admin.
-8. **Official Settings Integrity**: `/app_settings/public` stores official company bank transfer info and broadcast announcements, readable publicly (`get` on `public` doc ID) and writable strictly by Admin.
-9. **Door Prize Transparency & Control**: `/door_prize_draws/{drawId}` may only be created, updated, or deleted by Admin referencing an existing `subscription_id`.
-10. **Agent Settlements & Commission Claims**: `/agent_settlements/{settlementId}` may only be created by the authenticated `agen_id` (or Korwil/Admin) in `status == "pending"`, and only Admin may validate (`verified` / `rejected`).
-11. **Warehouse Inventory & HPP Isolation**: `/warehouse_inventory/{itemId}` holds internal unit purchase costs and warehouse stock counts, readable and writable strictly by Admin.
-12. **Official Product Substitutions**: `/product_substitutions/{subId}` publishes brochure-compliant equivalent-value item replacements (`allow list: if true`), modifiable strictly by Admin.
-13. **Immutable Audit Logs**: `/audit_logs/{logId}` is append-only (`create` strictly by Admin with `actor_uid == request.auth.uid`), with `update` and `delete` strictly denied.
+1. **User Role & Region Integrity**: Hanya `akun310786@gmail.com` (`email_verified == true`) atau Admin terdaftar yang dapat menetapkan role `agen`, `korwil`, atau `admin`. Pendaftaran baru hanya boleh `role: "member"`. Agen dan Korwil tidak dapat mengubah `role`, `wilayah`, atau `kode_agen` miliknya sendiri melalui update profil.
+2. **Login Alias Isolation**: `/login_aliases/{aliasId}` hanya mengizinkan `get` pada ID valid (`wa_62...` atau `u_...`) dan menolak `list` total untuk mencegah scraping data login.
+3. **Contract Ownership & Initial State**: Kontrak `subscriptions` hanya dapat dibuat dengan `total_terkumpul == 0` dan `status == "aktif"`. Member A tidak dapat membaca atau menulis kontrak Member B. Member tidak dapat mengubah `total_terkumpul`, `target_nominal`, atau `status` melalui browser.
+4. **Agent & Korwil Scope Enforcement**:
+   - **Agen**: Hanya dapat mengakses/memverifikasi kontrak, member, setoran, dan settlement dengan `agen_id == request.auth.uid` dan `wilayah` yang sesuai wilayah tugasnya. Agen A tidak bisa mengakses atau mengubah transaksi Agen B.
+   - **Korwil**: Hanya dapat mengakses/memverifikasi user, kontrak, setoran, dan settlement pada `wilayah` yang ditugaskan kepadanya. Akses lintas wilayah ditolak.
+5. **Immutable Financial Transactions**: Dokumen pada `/deposits` dan `/agent_settlements` tidak boleh dihapus oleh siapa pun (`allow delete: if false`), termasuk Admin. Setelah transaksi berstatus `verified` atau `rejected`, nominal, metode, identitas pemilik, dan statusnya terkunci permanen.
+6. **Parent Contract Binding on Deposits**: Setiap pengajuan setoran/penarikan pada `/deposits` wajib memverifikasi eksistensi kontrak induk pada `/subscriptions/$(subscription_id)` serta konsistensi `member_id`, `agen_id`, dan `wilayah`, sekaligus menolak penarikan melebihi saldo `total_terkumpul`.
+7. **Public Data Hygiene**: Koleksi `/agents` yang dapat dibaca publik tidak boleh menyimpan informasi internal perusahaan seperti persentase komisi (`komisi_persen`) atau routing internal (`korwil_id`).
+8. **Admin Role Access**: Admin memperoleh akses ke seluruh data operasional, inventaris gudang, pesan kontak, pengaturan rekening/info (`app_settings`), dan audit log append-only.
 
-## Dirty Dozen Payloads (Must Return PERMISSION_DENIED)
-1. Unauthenticated `create` on `/users/attacker`
-2. Self-escalation `create` on `/users/{uid}` with `role: "admin"` by non-admin user
-3. Self-escalation `update` on `/users/{uid}` modifying `role` from `"member"` to `"agen"`
-4. Shadow update on `/users/{uid}` adding ghost field `isVerified: true`
-5. Spoofed `createdAt` timestamp not equal to `request.time`
-6. Spoofed `akun310786@gmail.com` with `email_verified == false` attempting admin write
-7. Enumeration `list` query on `/login_aliases` to scrape member phone/username aliases
-8. Creating `/login_aliases/{aliasId}` with `uid` belonging to another user
-9. Creating `/subscriptions/{subId}` with `total_terkumpul: 1000000` or `status: "lunas"`
-10. Reading another user's `/subscriptions/{subId}` as an unrelated member
-11. Member creating `/deposits/{depId}` with `metode: "tunai_agen"` and `status_verifikasi: "verified"`
-12. Poisoned 1.5KB document ID on `/subscriptions/{1500_char_id}`
+## Skenario Uji Keamanan (Wajib PERMISSION_DENIED)
+1. Pengguna tanpa login mencoba membaca `/users/{uid}`, `/subscriptions/{subId}`, `/deposits/{depId}`, `/app_settings/public`, atau `/door_prize_draws`.
+2. Member A mencoba membaca (`get` / `list`) kontrak atau riwayat transaksi milik Member B.
+3. Member mencoba mengubah saldo `total_terkumpul` atau `status` pada kontraknya sendiri melalui browser.
+4. Member mencoba membuat `deposits` berstatus `verified` atau atas `subscription_id` milik Member B, atau mengajukan penarikan melebihi saldo.
+5. Member mencoba self-escalation `role` menjadi `agen` / `admin`, atau menambahkan shadow field `isVerified: true`.
+6. Agen A mencoba membaca, memverifikasi, atau menolak `deposits` maupun mengubah kontrak yang menjadi kewenangan Agen B.
+7. Korwil `Ciamis` mencoba membaca atau mengubah data user, kontrak, `deposits`, atau `agent_settlements` di wilayah `Tasikmalaya`.
+8. Korwil `Ciamis` mencoba mengubah `wilayah` di dokumen `/users/{uid}` miliknya sendiri menjadi `Tasikmalaya`.
+9. Pengguna mana pun (Member, Agen, Korwil, maupun Admin) mencoba menghapus (`delete`) transaksi keuangan di `/deposits` atau `/agent_settlements`.
+10. Pengguna atau Staff mencoba mengubah nominal/status `deposits` yang sudah berstatus `verified` atau `rejected`.
+11. Pendaftar atau visitor mencoba melakukan `list` pada `/login_aliases` atau `/warehouse_inventory` atau `/contact_messages`.
+12. Penyerang mengirimkan ID dokumen >128 karakter / karakter terlarang (`Resource Poisoning`) atau timestamp palsu (`createdAt != request.time`).

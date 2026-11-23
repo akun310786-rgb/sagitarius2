@@ -643,7 +643,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Margajaya, Mangunreja, Kab. Tasikmalaya',
     no_wa: '081324383479',
     jumlah_member: 120,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -654,7 +653,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Tawang & Cihideung, Kota Tasikmalaya',
     no_wa: '082115678903',
     jumlah_member: 56,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -665,7 +663,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Ciamis Kota & Cijeungjing',
     no_wa: '081223456701',
     jumlah_member: 48,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -676,7 +673,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Kawali & Panjalu',
     no_wa: '081322456702',
     jumlah_member: 31,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -687,7 +683,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Banjar Patroman & Purwaharja',
     no_wa: '085223445505',
     jumlah_member: 39,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -698,7 +693,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Langensari',
     no_wa: '081311223306',
     jumlah_member: 22,
-    komisi_persen: 5.5,
     aktif: true,
   },
   {
@@ -709,7 +703,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Pangandaran & Sidamulih',
     no_wa: '081288990007',
     jumlah_member: 34,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -720,7 +713,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Parigi & Cijulang',
     no_wa: '085344556608',
     jumlah_member: 19,
-    komisi_persen: 5,
     aktif: true,
   },
   {
@@ -731,7 +723,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Garut Kota & Tarogong',
     no_wa: '081277665509',
     jumlah_member: 44,
-    komisi_persen: 7,
     aktif: true,
   },
   {
@@ -742,7 +733,6 @@ export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
     kecamatan: 'Limbangan & Cikajang',
     no_wa: '082233445510',
     jumlah_member: 24,
-    komisi_persen: 6,
     aktif: true,
   },
 ];

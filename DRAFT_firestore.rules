@@ -24,30 +24,45 @@ service cloud.firestore {
     }
 
     function isEmailVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() &&
+        'email_verified' in request.auth.token &&
+        request.auth.token.email_verified == true;
     }
 
     function isBootstrappedAdmin() {
-      return isEmailVerified() && request.auth.token.email == 'akun310786@gmail.com';
+      return isEmailVerified() &&
+        'email' in request.auth.token &&
+        request.auth.token.email == 'akun310786@gmail.com';
+    }
+
+    function userExists() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function requesterData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function requesterWilayah() {
+      return userExists() ? requesterData().wilayah : '';
     }
 
     function isAdmin() {
       return isBootstrappedAdmin() ||
         (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))) ||
-        (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+        (userExists() && requesterData().role == 'admin');
     }
 
     function isKorwil() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'korwil';
+      return userExists() && requesterData().role == 'korwil';
+    }
+
+    function isKorwilIn(wilayah) {
+      return isKorwil() && requesterData().wilayah == wilayah;
     }
 
     function isAgen() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'agen';
+      return userExists() && requesterData().role == 'agen';
     }
 
     function isValidWilayah(w) {
@@ -86,18 +101,17 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    // Public Agent Directory strictly excludes internal business configuration (e.g. commission rates / korwil routing)
     function isValidAgent(data) {
       return data.keys().hasAll(['kode_agen', 'nama', 'wilayah', 'no_wa', 'jumlah_member', 'aktif', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['kode_agen', 'nama', 'wilayah', 'kecamatan', 'no_wa', 'jumlah_member', 'komisi_persen', 'aktif', 'korwil_id', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['kode_agen', 'nama', 'wilayah', 'kecamatan', 'no_wa', 'jumlah_member', 'aktif', 'createdAt', 'updatedAt']) &&
         data.kode_agen is string && data.kode_agen.size() >= 3 && data.kode_agen.size() <= 32 &&
         data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 100 &&
         isValidWilayah(data.wilayah) &&
         (!('kecamatan' in data) || (data.kecamatan is string && data.kecamatan.size() <= 80)) &&
         data.no_wa is string && data.no_wa.size() >= 8 && data.no_wa.size() <= 20 &&
         data.jumlah_member is number && data.jumlah_member >= 0 &&
-        (!('komisi_persen' in data) || (data.komisi_persen is number && data.komisi_persen >= 0 && data.komisi_persen <= 15)) &&
         data.aktif is bool &&
-        (!('korwil_id' in data) || (data.korwil_id is string && data.korwil_id.size() <= 128)) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -151,14 +165,14 @@ service cloud.firestore {
     }
 
     function isValidDeposit(data) {
-      return data.keys().hasAll(['subscription_id', 'member_id', 'agen_id', 'nominal', 'metode', 'status_verifikasi', 'tanggal', 'createdAt', 'updatedAt']) &&
+      return data.keys().hasAll(['subscription_id', 'member_id', 'agen_id', 'wilayah', 'nominal', 'metode', 'status_verifikasi', 'tanggal', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['subscription_id', 'member_id', 'member_nama', 'agen_id', 'korwil_id', 'wilayah', 'jenis_transaksi', 'nominal', 'metode', 'bukti_foto_url', 'catatan', 'status_verifikasi', 'validated_by', 'tanggal', 'createdAt', 'updatedAt']) &&
         isValidId(data.subscription_id) &&
         isValidId(data.member_id) &&
         (!('member_nama' in data) || (data.member_nama is string && data.member_nama.size() <= 100)) &&
         isValidId(data.agen_id) &&
         (!('korwil_id' in data) || (data.korwil_id is string && data.korwil_id.size() <= 128)) &&
-        (!('wilayah' in data) || isValidWilayah(data.wilayah)) &&
+        isValidWilayah(data.wilayah) &&
         (!('jenis_transaksi' in data) || (data.jenis_transaksi in ['setoran', 'penarikan'])) &&
         data.nominal is number && data.nominal >= 1000 &&
         data.metode in ['tunai_agen', 'transfer', 'pencairan_tunai', 'transfer_keluar'] &&
@@ -271,12 +285,13 @@ service cloud.firestore {
     // --- Collection Match Blocks ---
     match /admins/{adminId} {
       allow get: if isSignedIn() && isValidId(adminId) && (adminId == request.auth.uid || isAdmin());
-      allow list: if isBootstrappedAdmin();
-      allow create, update, delete: if isAdmin() && isValidId(adminId);
+      allow list: if isAdmin();
+      allow create, update, delete: if isBootstrappedAdmin() && isValidId(adminId);
     }
 
     match /login_aliases/{aliasId} {
-      allow get: if isValidId(aliasId);
+      allow get: if isValidId(aliasId) &&
+        (aliasId.matches('^wa_62[0-9]{6,15}$') || aliasId.matches('^u_[a-z0-9_]{3,40}$'));
       allow list: if false;
       allow create: if isSignedIn() && isValidId(aliasId) &&
         isValidLoginAlias(incoming()) &&
@@ -299,14 +314,14 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(userId) && (
         userId == request.auth.uid ||
         isAdmin() ||
-        isKorwil() ||
+        isKorwilIn(existing().wilayah) ||
         (isAgen() && existing().agen_id == request.auth.uid)
       );
       allow list: if isSignedIn() && (
-        isBootstrappedAdmin() ||
+        isAdmin() ||
         resource.data.uid == request.auth.uid ||
-        resource.data.agen_id == request.auth.uid ||
-        resource.data.korwil_id == request.auth.uid
+        (isAgen() && resource.data.agen_id == request.auth.uid) ||
+        isKorwilIn(resource.data.wilayah)
       );
       allow create: if isSignedIn() && isValidId(userId) &&
         userId == request.auth.uid &&
@@ -325,12 +340,18 @@ service cloud.firestore {
           (
             userId == request.auth.uid &&
             incoming().role == existing().role &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'username', 'no_wa', 'wilayah', 'agen_id', 'kode_agen', 'updatedAt'])
+            (
+              (existing().role == 'member' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'username', 'no_wa', 'wilayah', 'agen_id', 'kode_agen', 'updatedAt'])) ||
+              (existing().role in ['agen', 'korwil'] &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'username', 'no_wa', 'updatedAt']))
+            )
           )
         );
       allow delete: if isAdmin() && isValidId(userId);
     }
 
+    // Public Agent Directory (No internal commission/routing fields)
     match /agents/{agentId} {
       allow get, list: if true;
       allow create: if isAdmin() && isValidId(agentId) && isValidAgent(incoming()) &&
@@ -340,6 +361,7 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(agentId);
     }
 
+    // Public Catalog Packages
     match /packages/{packageId} {
       allow get, list: if true;
       allow create: if isAdmin() && isValidId(packageId) && isValidPackage(incoming()) &&
@@ -352,15 +374,15 @@ service cloud.firestore {
     match /subscriptions/{subscriptionId} {
       allow get: if isSignedIn() && isValidId(subscriptionId) && (
         existing().member_id == request.auth.uid ||
-        existing().agen_id == request.auth.uid ||
-        isKorwil() ||
+        (isAgen() && existing().agen_id == request.auth.uid) ||
+        isKorwilIn(existing().wilayah) ||
         isAdmin()
       );
       allow list: if isSignedIn() && (
-        isBootstrappedAdmin() ||
+        isAdmin() ||
         resource.data.member_id == request.auth.uid ||
-        resource.data.agen_id == request.auth.uid ||
-        resource.data.korwil_id == request.auth.uid
+        (isAgen() && resource.data.agen_id == request.auth.uid) ||
+        isKorwilIn(resource.data.wilayah)
       );
       allow create: if isSignedIn() && isValidId(subscriptionId) &&
         isValidSubscription(incoming()) &&
@@ -370,21 +392,25 @@ service cloud.firestore {
         incoming().updatedAt == request.time &&
         (
           incoming().member_id == request.auth.uid ||
-          (isAgen() && incoming().agen_id == request.auth.uid) ||
-          isKorwil() ||
+          (isAgen() && incoming().agen_id == request.auth.uid && incoming().wilayah == requesterWilayah()) ||
+          isKorwilIn(incoming().wilayah) ||
           isAdmin()
         );
       allow update: if isSignedIn() && isValidId(subscriptionId) &&
         isValidSubscription(incoming()) &&
         incoming().member_id == existing().member_id &&
         incoming().package_id == existing().package_id &&
+        incoming().target_nominal == existing().target_nominal &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         (
           isAdmin() ||
           (
             existing().status != 'diambil' &&
-            ((isAgen() && existing().agen_id == request.auth.uid) || isKorwil()) &&
+            (
+              (isAgen() && existing().agen_id == request.auth.uid && existing().wilayah == requesterWilayah()) ||
+              isKorwilIn(existing().wilayah)
+            ) &&
             incoming().diff(existing()).affectedKeys().hasOnly(['total_terkumpul', 'status', 'status_pengiriman', 'updatedAt'])
           ) ||
           (
@@ -393,28 +419,27 @@ service cloud.firestore {
             incoming().diff(existing()).affectedKeys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'grup_arisan', 'updatedAt'])
           )
         );
-      allow delete: if isSignedIn() && isValidId(subscriptionId) && (
-        isAdmin() ||
+      allow delete: if isSignedIn() && isValidId(subscriptionId) &&
+        existing().total_terkumpul == 0 &&
         (
-          existing().member_id == request.auth.uid &&
-          existing().total_terkumpul == 0 &&
-          existing().status == 'aktif'
-        )
-      );
+          isAdmin() ||
+          (existing().member_id == request.auth.uid && existing().status == 'aktif')
+        );
     }
 
+    // Financial Transactions: strictly scoped, parent-verified, terminal-locked, NEVER deletable
     match /deposits/{depositId} {
       allow get: if isSignedIn() && isValidId(depositId) && (
         existing().member_id == request.auth.uid ||
-        existing().agen_id == request.auth.uid ||
-        isKorwil() ||
+        (isAgen() && existing().agen_id == request.auth.uid) ||
+        isKorwilIn(existing().wilayah) ||
         isAdmin()
       );
       allow list: if isSignedIn() && (
-        isBootstrappedAdmin() ||
+        isAdmin() ||
         resource.data.member_id == request.auth.uid ||
-        resource.data.agen_id == request.auth.uid ||
-        resource.data.korwil_id == request.auth.uid
+        (isAgen() && resource.data.agen_id == request.auth.uid) ||
+        isKorwilIn(resource.data.wilayah)
       );
       allow create: if isSignedIn() && isValidId(depositId) &&
         isValidDeposit(incoming()) &&
@@ -425,38 +450,64 @@ service cloud.firestore {
           isAdmin() ||
           (
             incoming().member_id == request.auth.uid &&
+            get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.member_id == request.auth.uid &&
+            incoming().agen_id == get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.agen_id &&
+            incoming().wilayah == get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.wilayah &&
             incoming().status_verifikasi == 'pending' &&
+            !('validated_by' in incoming()) &&
             (
               ((!('jenis_transaksi' in incoming()) || incoming().jenis_transaksi == 'setoran') && incoming().metode == 'transfer') ||
-              (incoming().jenis_transaksi == 'penarikan' && incoming().metode in ['pencairan_tunai', 'transfer_keluar'])
+              (
+                incoming().jenis_transaksi == 'penarikan' &&
+                incoming().metode in ['pencairan_tunai', 'transfer_keluar'] &&
+                get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.status != 'diambil' &&
+                incoming().nominal <= get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.total_terkumpul
+              )
             )
           ) ||
           (
-            ((isAgen() && incoming().agen_id == request.auth.uid) || isKorwil()) &&
+            (
+              (isAgen() && incoming().agen_id == request.auth.uid &&
+                get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.agen_id == request.auth.uid &&
+                incoming().wilayah == requesterWilayah() &&
+                get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.wilayah == requesterWilayah()) ||
+              (isKorwilIn(incoming().wilayah) &&
+                get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.wilayah == requesterWilayah())
+            ) &&
             incoming().status_verifikasi == 'verified' &&
-            incoming().metode in ['tunai_agen', 'pencairan_tunai', 'transfer_keluar']
+            incoming().metode in ['tunai_agen', 'pencairan_tunai', 'transfer_keluar'] &&
+            (
+              !('jenis_transaksi' in incoming()) ||
+              incoming().jenis_transaksi == 'setoran' ||
+              incoming().nominal <= get(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)).data.total_terkumpul
+            )
           )
         );
       allow update: if isSignedIn() && isValidId(depositId) &&
         isValidDeposit(incoming()) &&
+        existing().status_verifikasi == 'pending' &&
+        incoming().status_verifikasi in ['verified', 'rejected'] &&
         incoming().subscription_id == existing().subscription_id &&
         incoming().member_id == existing().member_id &&
+        incoming().agen_id == existing().agen_id &&
+        incoming().wilayah == existing().wilayah &&
+        incoming().nominal == existing().nominal &&
+        incoming().metode == existing().metode &&
+        incoming().tanggal == existing().tanggal &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status_verifikasi', 'validated_by', 'catatan', 'updatedAt']) &&
         (
           isAdmin() ||
-          (
-            existing().status_verifikasi == 'pending' &&
-            ((isAgen() && existing().agen_id == request.auth.uid) || isKorwil()) &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['status_verifikasi', 'validated_by', 'catatan', 'updatedAt'])
-          )
+          (isAgen() && existing().agen_id == request.auth.uid && existing().wilayah == requesterWilayah()) ||
+          isKorwilIn(existing().wilayah)
         );
-      allow delete: if isAdmin() && isValidId(depositId);
+      allow delete: if false;
     }
 
     match /contact_messages/{messageId} {
       allow get: if isAdmin() && isValidId(messageId);
-      allow list: if isBootstrappedAdmin();
+      allow list: if isAdmin();
       allow create: if isValidId(messageId) &&
         isValidContactMessage(incoming()) &&
         incoming().status == 'baru' &&
@@ -470,9 +521,10 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(messageId);
     }
 
+    // Company financial & broadcast configuration (signed-in users only for public doc, admin for all)
     match /app_settings/{settingId} {
-      allow get: if isValidId(settingId) && (settingId == 'public' || isAdmin());
-      allow list: if isBootstrappedAdmin();
+      allow get: if isSignedIn() && isValidId(settingId) && (settingId == 'public' || isAdmin());
+      allow list: if isAdmin();
       allow create: if isAdmin() && isValidId(settingId) &&
         isValidAppSettings(incoming()) &&
         incoming().createdAt == request.time &&
@@ -484,9 +536,18 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(settingId);
     }
 
+    // Door Prize records contain member_id/subscription_id PII -> authenticated + scoped reads only
     match /door_prize_draws/{drawId} {
-      allow get: if isValidId(drawId);
-      allow list: if true;
+      allow get: if isSignedIn() && isValidId(drawId) && (
+        existing().member_id == request.auth.uid ||
+        isKorwilIn(existing().wilayah) ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        isKorwilIn(resource.data.wilayah) ||
+        resource.data.member_id == request.auth.uid
+      );
       allow create: if isAdmin() && isValidId(drawId) &&
         isValidDoorPrizeDraw(incoming()) &&
         exists(/databases/$(database)/documents/subscriptions/$(incoming().subscription_id)) &&
@@ -500,15 +561,17 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(drawId);
     }
 
+    // Agent Settlements: scoped by agen_id / korwil wilayah, terminal-locked, NEVER deletable
     match /agent_settlements/{settlementId} {
       allow get: if isSignedIn() && isValidId(settlementId) && (
-        existing().agen_id == request.auth.uid ||
-        isKorwil() ||
+        (isAgen() && existing().agen_id == request.auth.uid) ||
+        isKorwilIn(existing().wilayah) ||
         isAdmin()
       );
       allow list: if isSignedIn() && (
-        isBootstrappedAdmin() ||
-        resource.data.agen_id == request.auth.uid
+        isAdmin() ||
+        (isAgen() && resource.data.agen_id == request.auth.uid) ||
+        isKorwilIn(resource.data.wilayah)
       );
       allow create: if isSignedIn() && isValidId(settlementId) &&
         isValidAgentSettlement(incoming()) &&
@@ -519,21 +582,26 @@ service cloud.firestore {
           (
             (isAgen() || isKorwil()) &&
             incoming().agen_id == request.auth.uid &&
+            incoming().wilayah == requesterWilayah() &&
             incoming().status == 'pending'
           )
         );
       allow update: if isAdmin() && isValidId(settlementId) &&
         isValidAgentSettlement(incoming()) &&
+        existing().status == 'pending' &&
+        incoming().status in ['verified', 'rejected'] &&
         incoming().agen_id == existing().agen_id &&
         incoming().jenis == existing().jenis &&
+        incoming().nominal == existing().nominal &&
         incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time;
-      allow delete: if isAdmin() && isValidId(settlementId);
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'validated_by', 'catatan', 'updatedAt']);
+      allow delete: if false;
     }
 
     match /warehouse_inventory/{itemId} {
       allow get: if isAdmin() && isValidId(itemId);
-      allow list: if isBootstrappedAdmin();
+      allow list: if isAdmin();
       allow create: if isAdmin() && isValidId(itemId) &&
         isValidWarehouseInventory(incoming()) &&
         incoming().createdAt == request.time &&
@@ -561,7 +629,7 @@ service cloud.firestore {
 
     match /audit_logs/{logId} {
       allow get: if isAdmin() && isValidId(logId);
-      allow list: if isBootstrappedAdmin();
+      allow list: if isAdmin();
       allow create: if isAdmin() && isValidId(logId) &&
         isValidAuditLog(incoming()) &&
         incoming().actor_uid == request.auth.uid &&
