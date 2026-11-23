@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Clock,
   CreditCard,
+  Download,
   Gift,
   HeartHandshake,
   Mail,
@@ -441,6 +442,16 @@ export const CaraPemesananPage: React.FC<CaraPemesananPageProps> = ({
               >
                 <span>Buka Simulator Cicilan</span>
               </button>
+              <a
+                href="/panduan-penggunaan-sagitarius-parcel.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                download="Panduan-Penggunaan-Sagitarius-Parcel.pdf"
+                className="inline-flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
+              >
+                <Download className="h-4 w-4 text-[#0C3328]" />
+                <span>Buku Panduan (PDF)</span>
+              </a>
             </div>
           </div>
 

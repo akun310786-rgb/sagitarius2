@@ -807,7 +807,7 @@ export default function App() {
                 }}
                 className={navLinkClass(activeView === 'operasional')}
               >
-                Agen &amp; Admin
+                Dashboard
               </button>
             </nav>
 
@@ -855,7 +855,7 @@ export default function App() {
                 }}
                 className={navLinkClass(activeView === 'operasional')}
               >
-                Admin
+                Dashboard
               </button>
             </nav>
 
@@ -986,7 +986,7 @@ export default function App() {
                   }}
                   className="rounded-xl border border-[#C8A053]/40 bg-white/10 px-3 py-2.5 text-left font-bold text-white"
                 >
-                  Agen &amp; Admin
+                  Dashboard
                 </button>
               </div>
               {userProfile && (
@@ -1233,7 +1233,7 @@ export default function App() {
                   }}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
-                  Portal Agen &amp; Admin
+                  Dashboard
                 </button>
               </div>
             </div>
@@ -1248,6 +1248,15 @@ export default function App() {
                 >
                   Cara Pemesanan
                 </button>
+                <a
+                  href="/panduan-penggunaan-sagitarius-parcel.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download="Panduan-Penggunaan-Sagitarius-Parcel.pdf"
+                  className="hover:text-[#E8CA82]"
+                >
+                  Unduh Buku Panduan (PDF)
+                </a>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('kontak')}
