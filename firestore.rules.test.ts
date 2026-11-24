@@ -588,8 +588,109 @@ async function runTests() {
       await assertFails(deleteDoc(doc(admin, 'audit_logs', 'log_1')));
     });
 
+    await check('9. Pendaftaran agen baru (agent_applications) & notifikasi realtime (notifications) terisolasi sesuai peran dan kewenangan', async () => {
+      const anon = testEnv.unauthenticatedContext().firestore();
+      const memberA = testEnv.authenticatedContext(MEMBER_A).firestore();
+      const memberB = testEnv.authenticatedContext(MEMBER_B).firestore();
+      const admin = testEnv.authenticatedContext(ADMIN_UID).firestore();
+
+      // Unauthenticated ditolak membaca/menulis agent_applications & notifications
+      await assertFails(getDocs(collection(anon, 'agent_applications')));
+      await assertFails(getDocs(collection(anon, 'notifications')));
+
+      // Member A bisa mengirim pengajuan agen pending atas UID miliknya
+      await assertSucceeds(setDoc(doc(memberA, 'agent_applications', MEMBER_A), {
+        applicant_uid: MEMBER_A,
+        nama: 'Member A',
+        username: 'membera',
+        no_wa: '081111111111',
+        wilayah: 'Ciamis',
+        kecamatan: 'Ciamis Kota',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+
+      // Member A dilarang menyetujui pengajuannya sendiri atau mendaftarkan milik Member B
+      await assertFails(updateDoc(doc(memberA, 'agent_applications', MEMBER_A), {
+        status: 'approved',
+        assigned_kode_agen: 'AGT-FAKE-01',
+        updatedAt: serverTimestamp(),
+      }));
+      await assertFails(setDoc(doc(memberA, 'agent_applications', MEMBER_B), {
+        applicant_uid: MEMBER_B,
+        nama: 'Spoof',
+        no_wa: '081111111111',
+        wilayah: 'Ciamis',
+        kecamatan: 'Ciamis Kota',
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+
+      // Member A bisa mengirim notifikasi pendaftaran_agen ke staff_admin & diri sendiri, tidak bisa broadcast
+      await assertSucceeds(setDoc(doc(memberA, 'notifications', 'notif_admin_app'), {
+        recipient_type: 'admin',
+        recipient_uid: 'staff_admin',
+        wilayah: 'Ciamis',
+        kategori: 'pendaftaran_agen',
+        judul: 'Pendaftaran Agen Baru',
+        pesan: 'Member A mendaftar sebagai agen Ciamis.',
+        sender_uid: MEMBER_A,
+        sender_nama: 'Member A',
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+      await assertFails(setDoc(doc(memberA, 'notifications', 'notif_fake_broadcast'), {
+        recipient_type: 'broadcast',
+        recipient_uid: 'all_signed_in',
+        kategori: 'pengumuman',
+        judul: 'Broadcast Palsu',
+        pesan: 'Member tidak boleh kirim broadcast.',
+        sender_uid: MEMBER_A,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+
+      // Member B tidak boleh membaca pengajuan agen atau notifikasi admin milik Member A
+      await assertFails(getDoc(doc(memberB, 'agent_applications', MEMBER_A)));
+      await assertFails(getDoc(doc(memberB, 'notifications', 'notif_admin_app')));
+
+      // Admin dapat menyetujui agent_application, mengirim notifikasi ke Member A, dan Member A dapat menandai dibaca
+      await assertSucceeds(updateDoc(doc(admin, 'agent_applications', MEMBER_A), {
+        status: 'approved',
+        assigned_kode_agen: 'AGT-CMS-99',
+        reviewed_by: 'Admin Utama',
+        updatedAt: serverTimestamp(),
+      }));
+      await assertSucceeds(setDoc(doc(admin, 'notifications', 'notif_to_member_a'), {
+        recipient_type: 'user',
+        recipient_uid: MEMBER_A,
+        wilayah: 'Ciamis',
+        kategori: 'pendaftaran_agen',
+        judul: 'Akun Agen Disetujui',
+        pesan: 'Selamat! Kode agen AGT-CMS-99 aktif.',
+        sender_uid: ADMIN_UID,
+        sender_nama: 'Admin Utama',
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+      await assertSucceeds(updateDoc(doc(memberA, 'notifications', 'notif_to_member_a'), {
+        is_read: true,
+        updatedAt: serverTimestamp(),
+      }));
+      // Member B tidak boleh menandai dibaca notifikasi milik Member A
+      await assertFails(updateDoc(doc(memberB, 'notifications', 'notif_to_member_a'), {
+        is_read: true,
+        updatedAt: serverTimestamp(),
+      }));
+    });
+
     console.log(`\nALL ${passed} SECURITY TEST SUITES PASSED!`);
-    assert.equal(passed, 8);
+    assert.equal(passed, 9);
   } finally {
     await testEnv.cleanup();
   }

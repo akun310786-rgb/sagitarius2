@@ -60,6 +60,7 @@ import {
   formatWhatsAppUrl,
 } from '../data/catalogData';
 import {
+  AgentApplication,
   AgentDirectoryItem,
   AgentSettlement,
   AgentSettlementType,
@@ -100,7 +101,10 @@ interface AgentKorwilAdminDashboardProps {
   warehouseInventory?: WarehouseInventoryItem[];
   productSubstitutions?: ProductSubstitution[];
   auditLogs?: AuditLogEntry[];
+  agentApplications?: AgentApplication[];
+  externalTabRequest?: { tab: string; nonce: number } | null;
   onNeedLogin: () => void;
+  onOpenAgentRegister?: () => void;
 }
 
 const DELIVERY_STAGE_OPTIONS: Array<{ value: DeliveryStage; label: string }> = [
@@ -182,14 +186,38 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   warehouseInventory = [],
   productSubstitutions = [],
   auditLogs = [],
+  agentApplications = [],
+  externalTabRequest = null,
   onNeedLogin,
+  onOpenAgentRegister,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('agen');
   const [txSubTab, setTxSubTab] = useState<'input' | 'harian' | 'riwayat'>('input');
   const [korwilSubTab, setKorwilSubTab] = useState<'tutup_kas' | 'wilayah' | 'referral'>('tutup_kas');
   const [gudangSubTab, setGudangSubTab] = useState<'kebutuhan' | 'manifest' | 'stok'>('kebutuhan');
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
+  const [appKodeDraft, setAppKodeDraft] = useState<Record<string, string>>({});
+  const [processingAppId, setProcessingAppId] = useState<string | null>(null);
   const cashFormRef = useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    if (!externalTabRequest) return;
+    const validTabs: AdminTab[] = [
+      'agen',
+      'kontrak',
+      'master',
+      'korwil',
+      'gudang',
+      'doorprize',
+      'analitik',
+      'pengaturan',
+      'users',
+      'pesan',
+    ];
+    if (validTabs.includes(externalTabRequest.tab as AdminTab)) {
+      setActiveTab(externalTabRequest.tab as AdminTab);
+    }
+  }, [externalTabRequest]);
 
   // Tab 1: Transaksi (Setoran & Penarikan) & Verifikasi & Checklist Jemput Bola
   const [selectedSubId, setSelectedSubId] = useState<string>(subscriptions[0]?.id || '');
@@ -841,6 +869,30 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
       await batch.commit();
 
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          recipient_type: 'user',
+          recipient_uid: targetSub.member_id,
+          wilayah: targetSub.wilayah,
+          kategori: cashTxType,
+          judul:
+            cashTxType === 'penarikan'
+              ? `Penarikan ${formatRupiah(nominalNum)} Divalidasi`
+              : `Setoran ${formatRupiah(nominalNum)} Dicatat`,
+          pesan: `${userProfile.nama} telah memvalidasi ${
+            cashTxType === 'penarikan' ? 'penarikan dana' : 'setoran tunai'
+          } pada paket ${targetSub.package_nama}. Saldo saat ini: ${formatRupiah(newTotal)}.`,
+          tautan_view: 'member',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch {
+        // Non-blocking notification send
+      }
+
       const receiptItem: Deposit = {
         id: depRef.id,
         subscription_id: targetSub.id,
@@ -940,6 +992,31 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       }
 
       await batch.commit();
+
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          recipient_type: 'user',
+          recipient_uid: targetSub.member_id,
+          wilayah: targetSub.wilayah,
+          kategori: isWithdraw ? 'penarikan' : 'setoran',
+          judul:
+            decision === 'verified'
+              ? `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(dep.nominal)} Terverifikasi`
+              : `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(dep.nominal)} Ditolak`,
+          pesan:
+            decision === 'verified'
+              ? `Transaksi Anda untuk paket ${targetSub.package_nama} telah disetujui (${userProfile.nama}). Saldo terkumpul: ${formatRupiah(newTotal)}.`
+              : `Pengajuan transaksi Anda untuk paket ${targetSub.package_nama} ditolak oleh ${userProfile.nama}. Silakan periksa catatan atau hubungi agen.`,
+          tautan_view: 'member',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch {
+        // Non-blocking notification send
+      }
 
       if (decision === 'verified') {
         setLastValidatedDeposit({
@@ -1400,6 +1477,118 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${targetUser.uid}`);
+    }
+  };
+
+  // --- Handler: Approve / Reject New Agent Application ---
+  const handleApproveAgentApplication = async (app: AgentApplication) => {
+    if (!userProfile || !isAdmin) return;
+    const suggested = `AGT-${app.wilayah.slice(0, 3).toUpperCase()}-${app.applicant_uid.slice(0, 4).toUpperCase()}`;
+    const kodeAgen = (appKodeDraft[app.id] || suggested)
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9_-]/g, '')
+      .slice(0, 32);
+    if (kodeAgen.length < 3) {
+      setStatusMessage('Kode agen minimal 3 karakter.');
+      return;
+    }
+
+    setProcessingAppId(app.id);
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'users', app.applicant_uid), {
+        role: 'agen',
+        wilayah: app.wilayah,
+        kode_agen: kodeAgen,
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(db, 'agents', app.applicant_uid), {
+        kode_agen: kodeAgen,
+        nama: app.nama.slice(0, 100),
+        wilayah: app.wilayah,
+        kecamatan: app.kecamatan.slice(0, 80),
+        no_wa: app.no_wa.slice(0, 20),
+        jumlah_member: 0,
+        aktif: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, 'agent_applications', app.id), {
+        status: 'approved',
+        assigned_kode_agen: kodeAgen,
+        reviewed_by: userProfile.nama,
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(collection(db, 'notifications')), {
+        recipient_type: 'user',
+        recipient_uid: app.applicant_uid,
+        wilayah: app.wilayah,
+        kategori: 'pendaftaran_agen',
+        judul: 'Selamat! Akun Agen Anda Resmi Aktif',
+        pesan: `Pengajuan agen wilayah ${app.wilayah} (${app.kecamatan}) disetujui oleh ${userProfile.nama}. Kode Agen resmi Anda: ${kodeAgen}. Silakan buka menu Dashboard.`,
+        tautan_view: 'operasional',
+        tautan_tab: 'agen',
+        sender_uid: userProfile.uid,
+        sender_nama: userProfile.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+
+      await writeAuditLog(
+        'SETUJUI_AGEN_BARU',
+        app.nama,
+        `Disetujui menjadi Agen ${app.wilayah} (${app.kecamatan}) dengan kode ${kodeAgen}`
+      );
+      setStatusMessage(
+        `${app.nama} resmi disetujui sebagai Agen ${app.wilayah} (${kodeAgen}) & ditambahkan ke direktori publik.`
+      );
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `agent_applications/${app.id}`);
+    } finally {
+      setProcessingAppId(null);
+    }
+  };
+
+  const handleRejectAgentApplication = async (app: AgentApplication) => {
+    if (!userProfile || !isAdmin) return;
+    setProcessingAppId(app.id);
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'agent_applications', app.id), {
+        status: 'rejected',
+        review_note: `Pengajuan agen belum dapat disetujui saat ini oleh ${userProfile.nama}.`,
+        reviewed_by: userProfile.nama,
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(collection(db, 'notifications')), {
+        recipient_type: 'user',
+        recipient_uid: app.applicant_uid,
+        wilayah: app.wilayah,
+        kategori: 'pendaftaran_agen',
+        judul: 'Status Pendaftaran Agen Baru',
+        pesan: `Mohon maaf, pengajuan agen wilayah ${app.wilayah} belum dapat disetujui saat ini. Hubungi Admin CS (0813 2438 3479) untuk informasi lanjut.`,
+        tautan_view: 'member',
+        sender_uid: userProfile.uid,
+        sender_nama: userProfile.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+
+      await writeAuditLog(
+        'TOLAK_AGEN_BARU',
+        app.nama,
+        `Pengajuan agen ${app.wilayah} (${app.kecamatan}) ditolak`
+      );
+      setStatusMessage(`Pengajuan agen ${app.nama} ditandai ditolak.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `agent_applications/${app.id}`);
+    } finally {
+      setProcessingAppId(null);
     }
   };
 
@@ -1864,13 +2053,24 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           <p className="mt-3 text-sm text-stone-600">
             Silakan masuk menggunakan akun resmi Agen, Korwil, atau Admin Pusat (WhatsApp / Username / Gmail / Google) untuk mengelola setoran, penarikan, komisi, kontrak member, master katalog, dan logistik gudang H-7/H-2.
           </p>
-          <button
-            type="button"
-            onClick={onNeedLogin}
-            className="mt-6 rounded-lg bg-[#26124A] px-6 py-3 text-sm font-semibold text-white hover:bg-[#341A63] cursor-pointer"
-          >
-            Masuk Akun Resmi
-          </button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onNeedLogin}
+              className="rounded-lg bg-[#26124A] px-6 py-3 text-sm font-semibold text-white hover:bg-[#341A63] cursor-pointer"
+            >
+              Masuk Akun Resmi
+            </button>
+            {onOpenAgentRegister && (
+              <button
+                type="button"
+                onClick={onOpenAgentRegister}
+                className="rounded-lg border border-[#0C3328] bg-white px-6 py-3 text-sm font-semibold text-[#0C3328] hover:bg-emerald-50 cursor-pointer"
+              >
+                Daftar Agen Baru
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1896,6 +2096,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
   const unreadMessagesCount = contactMessages.filter((m) => m.status === 'baru').length;
   const pendingSettlementsCount = agentSettlements.filter((s) => s.status === 'pending').length;
+  const pendingAgentApps = agentApplications.filter((a) => a.status === 'pending');
 
   const tabs: Array<{
     id: AdminTab;
@@ -1912,7 +2113,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     { id: 'doorprize', label: 'Door Prize', group: 'keuangan', icon: Gift, badge: doorPrizeDraws.length },
     { id: 'analitik', label: 'Analitik & Audit', group: 'keuangan', icon: BarChart3, adminOnly: true },
     { id: 'master', label: 'Katalog & Agen', group: 'pusat', icon: PackageIcon, adminOnly: true },
-    { id: 'users', label: 'Pengguna & RBAC', group: 'pusat', icon: Users, badge: allUsers.length, adminOnly: true },
+    { id: 'users', label: 'Pengguna & RBAC', group: 'pusat', icon: Users, badge: pendingAgentApps.length > 0 ? pendingAgentApps.length : allUsers.length, adminOnly: true },
     { id: 'pesan', label: 'Pesan Masuk', group: 'pusat', icon: MessageCircle, badge: unreadMessagesCount, adminOnly: true },
     { id: 'pengaturan', label: 'Rekening & Info', group: 'pusat', icon: Settings, adminOnly: true },
   ];
@@ -4557,6 +4758,98 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* TAB 6: PENGGUNA & RBAC (ADMIN PUSAT) */}
       {activeTab === 'users' && isAdmin && (
         <div className="space-y-6">
+          {agentApplications.length > 0 && (
+            <div className="rounded-xl border border-emerald-200 bg-white p-5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-[#0C3328]">
+                    Pengajuan Pendaftaran Agen Baru ({pendingAgentApps.length} Menunggu)
+                  </h2>
+                  <p className="text-xs text-stone-600">
+                    Pendaftar lewat form Daftar Agen Baru. Klik Setujui untuk mengaktifkan role Agen &amp; menerbitkan ke direktori publik.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                {agentApplications.map((app) => {
+                  const defaultKode = `AGT-${app.wilayah.slice(0, 3).toUpperCase()}-${app.applicant_uid.slice(0, 4).toUpperCase()}`;
+                  return (
+                    <div
+                      key={app.id}
+                      className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-[#FAF7F2] p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="space-y-1 text-xs">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-stone-900">{app.nama}</span>
+                          {app.username && (
+                            <span className="text-stone-500">@{app.username}</span>
+                          )}
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              app.status === 'pending'
+                                ? 'bg-amber-100 text-amber-900'
+                                : app.status === 'approved'
+                                  ? 'bg-emerald-100 text-emerald-900'
+                                  : 'bg-rose-100 text-rose-900'
+                            }`}
+                          >
+                            {app.status}
+                          </span>
+                        </div>
+                        <p className="text-stone-700">
+                          Wilayah: <strong>{app.wilayah}</strong> · Kec: <strong>{app.kecamatan}</strong> · WA:{' '}
+                          <span className="font-mono-nums">{app.no_wa}</span>
+                        </p>
+                        {app.catatan && (
+                          <p className="text-[11px] text-stone-500">Catatan: {app.catatan}</p>
+                        )}
+                        {app.assigned_kode_agen && (
+                          <p className="font-mono-nums text-[11px] font-semibold text-emerald-800">
+                            Kode Agen: {app.assigned_kode_agen}
+                          </p>
+                        )}
+                      </div>
+
+                      {app.status === 'pending' && (
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <input
+                            type="text"
+                            maxLength={32}
+                            value={appKodeDraft[app.id] ?? defaultKode}
+                            onChange={(e) =>
+                              setAppKodeDraft((prev) => ({
+                                ...prev,
+                                [app.id]: e.target.value.toUpperCase(),
+                              }))
+                            }
+                            aria-label="Kode Agen Baru"
+                            className="w-32 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 font-mono-nums text-xs font-semibold text-stone-900"
+                          />
+                          <button
+                            type="button"
+                            disabled={processingAppId === app.id}
+                            onClick={() => void handleApproveAgentApplication(app)}
+                            className="rounded-lg bg-[#0C3328] px-3 py-1.5 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-60 cursor-pointer"
+                          >
+                            {processingAppId === app.id ? 'Memproses...' : 'Setujui Agen'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={processingAppId === app.id}
+                            onClick={() => void handleRejectAgentApplication(app)}
+                            className="rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 cursor-pointer"
+                          >
+                            Tolak
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-stone-200 bg-white px-4 py-3">
               <p className="text-[11px] text-stone-500">Total Member</p>

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
+  Briefcase,
   Eye,
   EyeOff,
   Lock,
   LogIn,
   MapPin,
   Phone,
+  ShieldCheck,
   User as UserIcon,
   UserPlus,
   X,
@@ -22,24 +24,35 @@ export interface RegisterMemberInput {
   password: string;
 }
 
+export interface RegisterAgentInput extends RegisterMemberInput {
+  kecamatan: string;
+  catatan: string;
+}
+
+export type AuthModalMode = 'login' | 'register_member' | 'register_agent';
+
 interface AuthModalProps {
   isOpen: boolean;
+  initialMode?: AuthModalMode;
   onClose: () => void;
   onLoginIdentifier: (identifier: string, password: string) => Promise<void>;
   onRegisterMember: (input: RegisterMemberInput) => Promise<void>;
+  onRegisterAgent: (input: RegisterAgentInput) => Promise<void>;
   onLoginGoogle: () => Promise<void>;
   onSendPasswordReset?: (email: string) => Promise<void>;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
+  initialMode = 'login',
   onClose,
   onLoginIdentifier,
   onRegisterMember,
+  onRegisterAgent,
   onLoginGoogle,
   onSendPasswordReset,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<AuthModalMode>(initialMode);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [infoMsg, setInfoMsg] = useState('');
@@ -51,17 +64,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [identifier, setIdentifier] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // Register Form State
+  // Register Form State (shared between Member & Agen)
   const [regNama, setRegNama] = useState('');
   const [regUsername, setRegUsername] = useState('');
   const [regWa, setRegWa] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regWilayah, setRegWilayah] = useState<WilayahPriangan>('Tasikmalaya');
+  const [regKecamatan, setRegKecamatan] = useState('');
+  const [regCatatan, setRegCatatan] = useState('');
   const [regPassword, setRegPassword] = useState('');
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setErrorMsg('');
+      setInfoMsg('');
+    }
+  }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
 
-  const switchMode = (nextMode: 'login' | 'register') => {
+  const isAgentMode = mode === 'register_agent';
+  const isRegisterMode = mode === 'register_member' || mode === 'register_agent';
+
+  const switchMode = (nextMode: AuthModalMode) => {
     setMode(nextMode);
     setErrorMsg('');
     setInfoMsg('');
@@ -126,6 +152,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMsg('Nomor WhatsApp tidak valid (minimal 8 digit).');
       return;
     }
+    if (isAgentMode && regKecamatan.trim().length < 2) {
+      setErrorMsg('Masukkan Kecamatan / area pemasaran calon Agen (minimal 2 karakter).');
+      return;
+    }
     if (regPassword.length < 6) {
       setErrorMsg('Kata sandi minimal 6 karakter.');
       return;
@@ -133,17 +163,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setSubmitting(true);
     try {
-      await onRegisterMember({
-        nama: regNama.trim(),
-        username: cleanUsername,
-        no_wa: regWa.trim(),
-        email: regEmail.trim().toLowerCase(),
-        wilayah: regWilayah,
-        password: regPassword,
-      });
+      if (isAgentMode) {
+        await onRegisterAgent({
+          nama: regNama.trim(),
+          username: cleanUsername,
+          no_wa: regWa.trim(),
+          email: regEmail.trim().toLowerCase(),
+          wilayah: regWilayah,
+          kecamatan: regKecamatan.trim().slice(0, 80),
+          catatan: regCatatan.trim().slice(0, 300),
+          password: regPassword,
+        });
+      } else {
+        await onRegisterMember({
+          nama: regNama.trim(),
+          username: cleanUsername,
+          no_wa: regWa.trim(),
+          email: regEmail.trim().toLowerCase(),
+          wilayah: regWilayah,
+          password: regPassword,
+        });
+      }
       onClose();
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal mendaftarkan akun member.');
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : isAgentMode
+            ? 'Gagal mengirim pendaftaran agen baru.'
+            : 'Gagal mendaftarkan akun member.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -170,9 +219,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       aria-modal="true"
       aria-labelledby="auth-modal-title"
     >
-      <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#E4DCCB] bg-white shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#E4DCCB] bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between bg-[#381E5A] px-6 py-4 text-white border-b border-[#C8A053]/40">
+        <div className="flex items-center justify-between border-b border-[#C8A053]/40 bg-[#381E5A] px-6 py-4 text-white">
           <div className="flex items-center gap-3">
             <img
               src={LOGO_SAGITARIUS}
@@ -182,7 +231,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div>
               <p className="text-[11px] font-semibold text-[#E8CA82]">Sagitarius Parcel</p>
               <h2 id="auth-modal-title" className="font-display text-lg font-bold leading-tight">
-                {mode === 'login' ? 'Masuk Akun Member' : 'Daftar Member Baru'}
+                {mode === 'login'
+                  ? 'Masuk Akun Sagitarius'
+                  : isAgentMode
+                    ? 'Daftar Agen Baru'
+                    : 'Daftar Member Baru'}
               </h2>
             </div>
           </div>
@@ -196,31 +249,43 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Mode Switcher */}
-        <div className="grid grid-cols-2 border-b border-[#E4DCCB] bg-[#FAF7F2] p-1.5 text-xs font-semibold">
+        {/* Mode Switcher: Masuk | Daftar Member | Daftar Agen */}
+        <div className="grid grid-cols-3 gap-1 border-b border-[#E4DCCB] bg-[#FAF7F2] p-1.5 text-[11px] font-semibold sm:text-xs">
           <button
             type="button"
             onClick={() => switchMode('login')}
-            className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition cursor-pointer ${
+            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition cursor-pointer ${
               mode === 'login'
                 ? 'bg-white text-[#381E5A] shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <LogIn className="h-3.5 w-3.5" />
+            <LogIn className="h-3.5 w-3.5 shrink-0" />
             <span>Masuk Akun</span>
           </button>
           <button
             type="button"
-            onClick={() => switchMode('register')}
-            className={`flex items-center justify-center gap-1.5 rounded-lg py-2 transition cursor-pointer ${
-              mode === 'register'
+            onClick={() => switchMode('register_member')}
+            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition cursor-pointer ${
+              mode === 'register_member'
                 ? 'bg-white text-[#381E5A] shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <UserPlus className="h-3.5 w-3.5" />
-            <span>Daftar Member Baru</span>
+            <UserPlus className="h-3.5 w-3.5 shrink-0" />
+            <span>Daftar Member</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode('register_agent')}
+            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition cursor-pointer ${
+              mode === 'register_agent'
+                ? 'bg-[#0C3328] text-[#E8CA82] shadow-xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            <Briefcase className="h-3.5 w-3.5 shrink-0" />
+            <span>Daftar Agen</span>
           </button>
         </div>
 
@@ -236,7 +301,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {mode === 'login' ? (
+          {!isRegisterMode ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
                 <label
@@ -328,7 +393,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Daftar tanpa Gmail?{' '}
                     <a
                       href={`https://wa.me/6281324383479?text=${encodeURIComponent(
-                        `Halo Admin Sagitarius Parcel, saya lupa kata sandi akun member (${
+                        `Halo Admin Sagitarius Parcel, saya lupa kata sandi akun (${
                           identifier || 'Nomor WA/Username saya'
                         }). Mohon dibantu reset akses akun.`
                       )}`}
@@ -352,9 +417,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </form>
           ) : (
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+              {isAgentMode && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950">
+                  <p className="inline-flex items-center gap-1.5 font-bold text-[#0C3328]">
+                    <ShieldCheck className="h-4 w-4 text-emerald-700" />
+                    Pendaftaran Mitra Agen Resmi Priangan Timur
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-emerald-900">
+                    Setelah mendaftar, pengajuan agen Anda langsung dikirim ke Admin Pusat secara realtime untuk aktivasi kode agen resmi.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label htmlFor="reg-nama" className="block text-xs font-semibold text-stone-700">
-                  Nama Lengkap
+                  Nama Lengkap {isAgentMode ? 'Calon Agen' : ''}
                 </label>
                 <input
                   id="reg-nama"
@@ -364,7 +441,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   maxLength={100}
                   value={regNama}
                   onChange={(e) => setRegNama(e.target.value)}
-                  placeholder="Contoh: Ibu Siti Aminah"
+                  placeholder={isAgentMode ? 'Contoh: Hj. Siti Aminah' : 'Contoh: Ibu Siti Aminah'}
                   className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#26124A] focus:outline-none"
                 />
               </div>
@@ -387,13 +464,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onChange={(e) =>
                       setRegUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))
                     }
-                    placeholder="siti_tasik"
+                    placeholder={isAgentMode ? 'agen_siti' : 'siti_tasik'}
                     className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#26124A] focus:outline-none"
                   />
                 </div>
                 <div>
                   <label htmlFor="reg-wa" className="block text-xs font-semibold text-stone-700">
-                    Nomor WhatsApp
+                    Nomor WhatsApp Aktif
                   </label>
                   <div className="relative mt-1">
                     <Phone className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
@@ -418,7 +495,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     htmlFor="reg-wilayah"
                     className="block text-xs font-semibold text-stone-700"
                   >
-                    Wilayah
+                    Wilayah {isAgentMode ? 'Penugasan' : ''}
                   </label>
                   <div className="relative mt-1">
                     <MapPin className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
@@ -452,6 +529,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
+              {isAgentMode && (
+                <>
+                  <div>
+                    <label
+                      htmlFor="reg-kecamatan"
+                      className="block text-xs font-semibold text-stone-700"
+                    >
+                      Kecamatan / Area Pemasaran
+                    </label>
+                    <input
+                      id="reg-kecamatan"
+                      type="text"
+                      required
+                      minLength={2}
+                      maxLength={80}
+                      value={regKecamatan}
+                      onChange={(e) => setRegKecamatan(e.target.value)}
+                      placeholder="Contoh: Ciamis Kota & Cijeungjing"
+                      className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#0C3328] focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="reg-catatan"
+                      className="block text-xs font-semibold text-stone-700"
+                    >
+                      Catatan / Pengalaman Koordinator{' '}
+                      <span className="font-normal text-stone-400">(Opsional)</span>
+                    </label>
+                    <input
+                      id="reg-catatan"
+                      type="text"
+                      maxLength={300}
+                      value={regCatatan}
+                      onChange={(e) => setRegCatatan(e.target.value)}
+                      placeholder="Contoh: Mengelola kelompok arisan RT / toko sembako"
+                      className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#0C3328] focus:outline-none"
+                    />
+                  </div>
+                </>
+              )}
+
               <div>
                 <label
                   htmlFor="reg-password"
@@ -484,9 +603,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-lg bg-[#26124A] py-2.5 text-sm font-semibold text-white transition hover:bg-[#341A63] disabled:opacity-60 cursor-pointer"
+                className={`w-full rounded-lg py-2.5 text-sm font-semibold transition disabled:opacity-60 cursor-pointer ${
+                  isAgentMode
+                    ? 'bg-[#0C3328] text-[#E8CA82] hover:bg-[#144738]'
+                    : 'bg-[#26124A] text-white hover:bg-[#341A63]'
+                }`}
               >
-                {submitting ? 'Mendaftarkan Akun...' : 'Daftar & Masuk Member'}
+                {submitting
+                  ? isAgentMode
+                    ? 'Mengirim Pendaftaran Agen...'
+                    : 'Mendaftarkan Akun...'
+                  : isAgentMode
+                    ? 'Daftar Sebagai Agen Baru'
+                    : 'Daftar & Masuk Member'}
               </button>
             </form>
           )}
@@ -530,13 +659,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <p className="mt-4 text-center text-xs text-stone-500">
             {mode === 'login' ? (
               <>
-                Belum punya akun tabungan?{' '}
+                Belum punya akun?{' '}
                 <button
                   type="button"
-                  onClick={() => switchMode('register')}
+                  onClick={() => switchMode('register_member')}
                   className="font-semibold text-[#26124A] hover:underline cursor-pointer"
                 >
-                  Daftar di sini
+                  Daftar Member
+                </button>{' '}
+                atau{' '}
+                <button
+                  type="button"
+                  onClick={() => switchMode('register_agent')}
+                  className="font-semibold text-[#0C3328] hover:underline cursor-pointer"
+                >
+                  Daftar Agen Baru
                 </button>
               </>
             ) : (

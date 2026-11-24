@@ -282,6 +282,43 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    function isValidAgentApplication(data) {
+      return data.keys().hasAll(['applicant_uid', 'nama', 'no_wa', 'wilayah', 'kecamatan', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['applicant_uid', 'nama', 'username', 'no_wa', 'email', 'wilayah', 'kecamatan', 'catatan', 'status', 'assigned_kode_agen', 'review_note', 'reviewed_by', 'createdAt', 'updatedAt']) &&
+        isValidId(data.applicant_uid) &&
+        data.nama is string && data.nama.size() >= 2 && data.nama.size() <= 100 &&
+        (!('username' in data) || (data.username is string && data.username.size() <= 40)) &&
+        data.no_wa is string && data.no_wa.size() >= 8 && data.no_wa.size() <= 20 &&
+        (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+        isValidWilayah(data.wilayah) &&
+        data.kecamatan is string && data.kecamatan.size() >= 2 && data.kecamatan.size() <= 80 &&
+        (!('catatan' in data) || (data.catatan is string && data.catatan.size() <= 300)) &&
+        data.status in ['pending', 'approved', 'rejected'] &&
+        (!('assigned_kode_agen' in data) || (data.assigned_kode_agen is string && data.assigned_kode_agen.size() <= 32)) &&
+        (!('review_note' in data) || (data.review_note is string && data.review_note.size() <= 250)) &&
+        (!('reviewed_by' in data) || (data.reviewed_by is string && data.reviewed_by.size() <= 100)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['recipient_type', 'recipient_uid', 'kategori', 'judul', 'pesan', 'is_read', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['recipient_type', 'recipient_uid', 'wilayah', 'kategori', 'judul', 'pesan', 'tautan_view', 'tautan_tab', 'sender_uid', 'sender_nama', 'is_read', 'createdAt', 'updatedAt']) &&
+        data.recipient_type in ['user', 'agen', 'korwil', 'admin', 'broadcast'] &&
+        isValidId(data.recipient_uid) &&
+        (!('wilayah' in data) || isValidWilayah(data.wilayah)) &&
+        data.kategori in ['setoran', 'penarikan', 'pendaftaran_agen', 'kontrak', 'pengumuman', 'pesan_kontak', 'sistem'] &&
+        data.judul is string && data.judul.size() >= 2 && data.judul.size() <= 120 &&
+        data.pesan is string && data.pesan.size() >= 2 && data.pesan.size() <= 500 &&
+        (!('tautan_view' in data) || data.tautan_view in ['member', 'operasional']) &&
+        (!('tautan_tab' in data) || (data.tautan_tab is string && data.tautan_tab.size() <= 40)) &&
+        (!('sender_uid' in data) || isValidId(data.sender_uid)) &&
+        (!('sender_nama' in data) || (data.sender_nama is string && data.sender_nama.size() <= 100)) &&
+        data.is_read is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
     // --- Collection Match Blocks ---
     match /admins/{adminId} {
       allow get: if isSignedIn() && isValidId(adminId) && (adminId == request.auth.uid || isAdmin());
@@ -636,6 +673,83 @@ service cloud.firestore {
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
       allow update, delete: if false;
+    }
+
+    // Agent Applications: applicants can submit pending application under own UID; Admin Pusat reviews & approves
+    match /agent_applications/{applicationId} {
+      allow get: if isSignedIn() && isValidId(applicationId) && (
+        applicationId == request.auth.uid ||
+        existing().applicant_uid == request.auth.uid ||
+        isKorwilIn(existing().wilayah) ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.applicant_uid == request.auth.uid ||
+        isKorwilIn(resource.data.wilayah)
+      );
+      allow create: if isSignedIn() && isValidId(applicationId) &&
+        applicationId == request.auth.uid &&
+        isValidAgentApplication(incoming()) &&
+        incoming().applicant_uid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        !('assigned_kode_agen' in incoming()) &&
+        !('review_note' in incoming()) &&
+        !('reviewed_by' in incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(applicationId) &&
+        isValidAgentApplication(incoming()) &&
+        existing().status == 'pending' &&
+        incoming().status in ['approved', 'rejected'] &&
+        incoming().applicant_uid == existing().applicant_uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(applicationId);
+    }
+
+    // Real-time Notifications: strictly scoped by recipient identity, role, or broadcast
+    match /notifications/{notifId} {
+      allow get: if isSignedIn() && isValidId(notifId) && (
+        isAdmin() ||
+        existing().recipient_uid == request.auth.uid ||
+        existing().recipient_type == 'broadcast' ||
+        (existing().recipient_type == 'korwil' && isKorwilIn(existing().wilayah))
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.recipient_uid == request.auth.uid ||
+        resource.data.recipient_type == 'broadcast' ||
+        (resource.data.recipient_type == 'korwil' && isKorwilIn(resource.data.wilayah))
+      );
+      allow create: if isSignedIn() && isValidId(notifId) &&
+        isValidNotification(incoming()) &&
+        incoming().is_read == false &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            'sender_uid' in incoming() &&
+            incoming().sender_uid == request.auth.uid &&
+            (
+              (incoming().recipient_type == 'admin' && incoming().recipient_uid == 'staff_admin' && incoming().kategori == 'pendaftaran_agen') ||
+              (incoming().recipient_type == 'user' && incoming().recipient_uid == request.auth.uid && incoming().kategori == 'pendaftaran_agen') ||
+              (incoming().recipient_type == 'agen' && incoming().kategori in ['setoran', 'penarikan']) ||
+              ((isAgen() || isKorwil()) && incoming().recipient_type == 'user' && incoming().kategori in ['setoran', 'penarikan', 'kontrak'])
+            )
+          )
+        );
+      allow update: if isSignedIn() && isValidId(notifId) &&
+        isValidNotification(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['is_read', 'updatedAt']) &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          existing().recipient_uid == request.auth.uid ||
+          (existing().recipient_type == 'korwil' && isKorwilIn(existing().wilayah))
+        );
+      allow delete: if isAdmin() && isValidId(notifId);
     }
   }
 }

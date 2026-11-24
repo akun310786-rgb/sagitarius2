@@ -250,6 +250,54 @@ export interface AuditLogEntry {
   updatedAt?: unknown;
 }
 
+export type AgentApplicationStatus = 'pending' | 'approved' | 'rejected';
+
+export interface AgentApplication {
+  id: string;
+  applicant_uid: string;
+  nama: string;
+  username?: string;
+  no_wa: string;
+  email?: string;
+  wilayah: WilayahPriangan;
+  kecamatan: string;
+  catatan?: string;
+  status: AgentApplicationStatus;
+  assigned_kode_agen?: string;
+  review_note?: string;
+  reviewed_by?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export type NotificationRecipientType = 'user' | 'agen' | 'korwil' | 'admin' | 'broadcast';
+
+export type NotificationCategory =
+  | 'setoran'
+  | 'penarikan'
+  | 'pendaftaran_agen'
+  | 'kontrak'
+  | 'pengumuman'
+  | 'pesan_kontak'
+  | 'sistem';
+
+export interface RealtimeNotification {
+  id: string;
+  recipient_type: NotificationRecipientType;
+  recipient_uid: string;
+  wilayah?: WilayahPriangan;
+  kategori: NotificationCategory;
+  judul: string;
+  pesan: string;
+  tautan_view?: 'member' | 'operasional';
+  tautan_tab?: string;
+  sender_uid?: string;
+  sender_nama?: string;
+  is_read: boolean;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 export type PublicPage =
   | 'beranda'
   | 'katalog'

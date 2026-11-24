@@ -43,6 +43,7 @@ import {
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { formatRupiah, formatWhatsAppUrl } from '../data/catalogData';
 import {
+  AgentApplication,
   AgentDirectoryItem,
   AppPublicSettings,
   DeliveryStage,
@@ -70,10 +71,12 @@ interface MemberDashboardProps {
   appSettings: AppPublicSettings;
   doorPrizeDraws: DoorPrizeDraw[];
   productSubstitutions?: ProductSubstitution[];
+  agentApplications?: AgentApplication[];
   referralAgent?: AgentDirectoryItem | null;
   lockedSimulation: SimulationLock | null;
   onClearLockedSimulation: () => void;
   onNeedLogin: () => void;
+  onOpenAgentRegister?: () => void;
 }
 
 function getCreatedMillis(ts: unknown): number {
@@ -119,10 +122,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   appSettings,
   doorPrizeDraws,
   productSubstitutions = [],
+  agentApplications = [],
   referralAgent = null,
   lockedSimulation,
   onClearLockedSimulation,
   onNeedLogin,
+  onOpenAgentRegister,
 }) => {
   const [selectedSubId, setSelectedSubId] = useState<string>('');
   const [showNewContractForm, setShowNewContractForm] = useState<boolean>(!!lockedSimulation);
@@ -471,6 +476,32 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          recipient_type: 'agen',
+          recipient_uid: activeSub.agen_id,
+          wilayah: activeSub.wilayah,
+          kategori: txMode,
+          judul:
+            txMode === 'penarikan'
+              ? `Pengajuan Penarikan: ${userProfile.nama}`
+              : `Setoran Transfer Baru: ${userProfile.nama}`,
+          pesan: `${userProfile.nama} mengajukan ${
+            txMode === 'penarikan' ? 'penarikan dana' : 'setoran transfer'
+          } sebesar ${formatRupiah(finalNominal)} untuk paket ${activeSub.package_nama}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch {
+        // Non-blocking notification send
+      }
+
       setDepositNote('');
       setProofDataUrl('');
       setUniqueCodeSuffix(101 + Math.floor(Math.random() * 398));
@@ -498,13 +529,24 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           <p className="mt-3 text-sm text-stone-600">
             Masuk menggunakan Nomor WhatsApp, Username, Gmail, atau akun Google Anda untuk mengunci simulasi paket, memantau riwayat setoran digital, mengunggah bukti transfer, mengecek kupon Door Prize, dan mengunduh Tiket QR Pengambilan.
           </p>
-          <button
-            type="button"
-            onClick={onNeedLogin}
-            className="mt-6 rounded-xl bg-[#381E5A] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#492974] cursor-pointer"
-          >
-            Masuk / Daftar Member
-          </button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={onNeedLogin}
+              className="rounded-xl bg-[#381E5A] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#492974] cursor-pointer"
+            >
+              Masuk / Daftar Member
+            </button>
+            {onOpenAgentRegister && (
+              <button
+                type="button"
+                onClick={onOpenAgentRegister}
+                className="rounded-xl border border-[#0C3328] bg-white px-6 py-3 text-sm font-semibold text-[#0C3328] transition hover:bg-emerald-50 cursor-pointer"
+              >
+                Daftar Agen Baru
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -594,6 +636,31 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Agent Application Status Banner (if user registered via Daftar Agen Baru) */}
+      {agentApplications
+        .filter((a) => a.applicant_uid === userProfile.uid && a.status !== 'approved')
+        .map((app) => (
+          <div
+            key={app.id}
+            className={`no-print rounded-2xl border px-5 py-4 text-xs leading-relaxed ${
+              app.status === 'pending'
+                ? 'border-amber-300 bg-amber-50 text-amber-950'
+                : 'border-rose-200 bg-rose-50 text-rose-900'
+            }`}
+          >
+            <p className="font-bold">
+              {app.status === 'pending'
+                ? `Pengajuan Agen Wilayah ${app.wilayah} (${app.kecamatan}) — Menunggu Verifikasi Admin Pusat`
+                : `Pengajuan Agen Wilayah ${app.wilayah} Ditolak`}
+            </p>
+            <p className="mt-1">
+              {app.status === 'pending'
+                ? 'Tim Admin Pusat sedang meninjau pengajuan kemitraan agen Anda. Notifikasi realtime akan muncul pada ikon pesan di pojok kanan bawah segera setelah kode agen Anda aktif.'
+                : app.review_note || 'Silakan hubungi CS Resmi 0813 2438 3479 untuk informasi lebih lanjut.'}
+            </p>
+          </div>
+        ))}
 
       {/* Header Bar */}
       <div className="no-print flex flex-col gap-4 border-b border-[#E4DCCB] pb-6 sm:flex-row sm:items-center sm:justify-between">

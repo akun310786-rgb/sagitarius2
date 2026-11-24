@@ -39,8 +39,14 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { AgentKorwilAdminDashboard } from './components/AgentKorwilAdminDashboard';
-import { AuthModal, RegisterMemberInput } from './components/AuthModal';
+import {
+  AuthModal,
+  AuthModalMode,
+  RegisterAgentInput,
+  RegisterMemberInput,
+} from './components/AuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { FloatingNotificationWidget } from './components/FloatingNotificationWidget';
 import { LandingCatalog } from './components/LandingCatalog';
 import { MemberDashboard } from './components/MemberDashboard';
 import { OfflineIndicator } from './components/OfflineIndicator';
@@ -56,6 +62,7 @@ import {
 } from './data/catalogData';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import {
+  AgentApplication,
   AgentDirectoryItem,
   AgentSettlement,
   AppPublicSettings,
@@ -66,6 +73,7 @@ import {
   ParcelPackage,
   ProductSubstitution,
   PublicPage,
+  RealtimeNotification,
   SimulationLock,
   Subscription,
   UserProfile,
@@ -112,6 +120,11 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [authError, setAuthError] = useState<string>('');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
+  const [dashboardTargetTab, setDashboardTargetTab] = useState<{
+    tab: string;
+    nonce: number;
+  } | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editNama, setEditNama] = useState('');
   const [editUsername, setEditUsername] = useState('');
@@ -134,6 +147,8 @@ export default function App() {
   const [agentSettlements, setAgentSettlements] = useState<AgentSettlement[]>([]);
   const [warehouseInventory, setWarehouseInventory] = useState<WarehouseInventoryItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [agentApplications, setAgentApplications] = useState<AgentApplication[]>([]);
+  const [notifications, setNotifications] = useState<RealtimeNotification[]>([]);
 
   // Simulation Lock & Agent Selection + URL Referral (?agen= / ?ref=)
   const [lockedSimulation, setLockedSimulation] = useState<SimulationLock | null>(null);
@@ -260,6 +275,8 @@ export default function App() {
         setAgentSettlements([]);
         setWarehouseInventory([]);
         setAuditLogs([]);
+        setAgentApplications([]);
+        setNotifications([]);
         setDoorPrizeDraws([]);
         setAppSettings(DEFAULT_APP_SETTINGS);
         setAuthReady(true);
@@ -494,12 +511,128 @@ export default function App() {
       setAgentSettlements([]);
     }
 
+    const appsQuery = hasAdminAccess
+      ? query(collection(db, 'agent_applications'))
+      : userProfile.role === 'korwil'
+        ? query(collection(db, 'agent_applications'), where('wilayah', '==', userProfile.wilayah))
+        : query(
+            collection(db, 'agent_applications'),
+            where('applicant_uid', '==', firebaseUser.uid)
+          );
+
+    const unsubApps = onSnapshot(
+      appsQuery,
+      (snap) => {
+        setAgentApplications(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<AgentApplication, 'id'>),
+          }))
+        );
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'agent_applications')
+    );
+
+    // Real-time Notifications: merge personal/direct, broadcast, and role-scoped streams
+    const notifMap = new Map<string, RealtimeNotification>();
+    const syncNotificationsState = () => {
+      const getMs = (ts: unknown): number => {
+        if (!ts) return Date.now();
+        if (typeof ts === 'object' && ts !== null && 'toMillis' in ts && typeof (ts as { toMillis: () => number }).toMillis === 'function') {
+          return (ts as { toMillis: () => number }).toMillis();
+        }
+        if (typeof ts === 'object' && ts !== null && 'seconds' in ts) {
+          return Number((ts as { seconds?: unknown }).seconds || 0) * 1000;
+        }
+        return 0;
+      };
+      const merged = Array.from(notifMap.values()).sort(
+        (a, b) => getMs(b.createdAt) - getMs(a.createdAt)
+      );
+      setNotifications(merged.slice(0, 60));
+    };
+
+    const unsubNotifsDirect = onSnapshot(
+      query(collection(db, 'notifications'), where('recipient_uid', '==', firebaseUser.uid)),
+      (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'removed') notifMap.delete(change.doc.id);
+          else
+            notifMap.set(change.doc.id, {
+              id: change.doc.id,
+              ...(change.doc.data() as Omit<RealtimeNotification, 'id'>),
+            });
+        });
+        syncNotificationsState();
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
+    );
+
+    const unsubNotifsBroadcast = onSnapshot(
+      query(collection(db, 'notifications'), where('recipient_type', '==', 'broadcast')),
+      (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === 'removed') notifMap.delete(change.doc.id);
+          else
+            notifMap.set(change.doc.id, {
+              id: change.doc.id,
+              ...(change.doc.data() as Omit<RealtimeNotification, 'id'>),
+            });
+        });
+        syncNotificationsState();
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
+    );
+
+    let unsubNotifsRole: (() => void) | undefined;
+    if (hasAdminAccess) {
+      unsubNotifsRole = onSnapshot(
+        query(collection(db, 'notifications'), where('recipient_type', '==', 'admin')),
+        (snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'removed') notifMap.delete(change.doc.id);
+            else
+              notifMap.set(change.doc.id, {
+                id: change.doc.id,
+                ...(change.doc.data() as Omit<RealtimeNotification, 'id'>),
+              });
+          });
+          syncNotificationsState();
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
+      );
+    } else if (userProfile.role === 'korwil') {
+      unsubNotifsRole = onSnapshot(
+        query(
+          collection(db, 'notifications'),
+          where('recipient_type', '==', 'korwil'),
+          where('wilayah', '==', userProfile.wilayah)
+        ),
+        (snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'removed') notifMap.delete(change.doc.id);
+            else
+              notifMap.set(change.doc.id, {
+                id: change.doc.id,
+                ...(change.doc.data() as Omit<RealtimeNotification, 'id'>),
+              });
+          });
+          syncNotificationsState();
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
+      );
+    }
+
     return () => {
       unsubProfile();
       unsubSettings();
       unsubDoorPrize();
       unsubSubs();
       unsubDeps();
+      unsubApps();
+      unsubNotifsDirect();
+      unsubNotifsBroadcast();
+      if (unsubNotifsRole) unsubNotifsRole();
       if (unsubUsers) unsubUsers();
       if (unsubMessages) unsubMessages();
       if (unsubInventory) unsubInventory();
@@ -549,8 +682,9 @@ export default function App() {
     return err instanceof Error ? err.message : 'Gagal memproses autentikasi akun.';
   };
 
-  const openAuthModal = () => {
+  const openAuthModal = (initialMode: AuthModalMode = 'login') => {
     setAuthError('');
+    setAuthModalMode(initialMode);
     setShowAuthModal(true);
   };
 
@@ -673,6 +807,119 @@ export default function App() {
     }
   };
 
+  const handleRegisterAgent = async (input: RegisterAgentInput) => {
+    const normWa = normalizeWaDigits(input.no_wa);
+    const cleanUsername = input.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (normWa.length < 9) {
+      throw new Error('Nomor WhatsApp tidak valid.');
+    }
+    if (cleanUsername.length < 3) {
+      throw new Error('Username minimal 3 karakter huruf/angka.');
+    }
+    if (input.kecamatan.trim().length < 2) {
+      throw new Error('Kecamatan / area pemasaran calon agen wajib diisi.');
+    }
+
+    const waAliasRef = doc(db, 'login_aliases', `wa_${normWa}`);
+    const userAliasRef = doc(db, 'login_aliases', `u_${cleanUsername}`);
+
+    const [waSnap, userSnap] = await Promise.all([getDoc(waAliasRef), getDoc(userAliasRef)]);
+    if (waSnap.exists()) {
+      throw new Error('Nomor WhatsApp sudah terdaftar. Silakan masuk di tab Masuk Akun.');
+    }
+    if (userSnap.exists()) {
+      throw new Error('Username sudah dipakai pengguna lain. Pilih username lain.');
+    }
+
+    const authEmail = input.email
+      ? input.email.trim().toLowerCase()
+      : `wa.${normWa}@member.sagitariusparcel.com`;
+
+    isRegisteringRef.current = true;
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, authEmail, input.password);
+      await updateProfile(cred.user, { displayName: input.nama });
+
+      const newProfile: UserProfile = {
+        uid: cred.user.uid,
+        nama: input.nama,
+        username: cleanUsername,
+        no_wa: input.no_wa.trim(),
+        email: input.email ? input.email.trim().toLowerCase() : '',
+        role: 'member',
+        wilayah: input.wilayah,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', cred.user.uid), newProfile);
+      batch.set(waAliasRef, {
+        uid: cred.user.uid,
+        auth_email: authEmail,
+        alias_type: 'wa',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(userAliasRef, {
+        uid: cred.user.uid,
+        auth_email: authEmail,
+        alias_type: 'username',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(db, 'agent_applications', cred.user.uid), {
+        applicant_uid: cred.user.uid,
+        nama: input.nama,
+        username: cleanUsername,
+        no_wa: input.no_wa.trim(),
+        ...(input.email ? { email: input.email.trim().toLowerCase() } : {}),
+        wilayah: input.wilayah,
+        kecamatan: input.kecamatan.trim().slice(0, 80),
+        ...(input.catatan ? { catatan: input.catatan.trim().slice(0, 300) } : {}),
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(collection(db, 'notifications')), {
+        recipient_type: 'admin',
+        recipient_uid: 'staff_admin',
+        wilayah: input.wilayah,
+        kategori: 'pendaftaran_agen',
+        judul: 'Pendaftaran Agen Baru Masuk',
+        pesan: `${input.nama} (${input.no_wa.trim()}) mendaftar sebagai calon Agen wilayah ${input.wilayah} — ${input.kecamatan.trim()}.`,
+        tautan_view: 'operasional',
+        tautan_tab: 'users',
+        sender_uid: cred.user.uid,
+        sender_nama: input.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(collection(db, 'notifications')), {
+        recipient_type: 'user',
+        recipient_uid: cred.user.uid,
+        wilayah: input.wilayah,
+        kategori: 'pendaftaran_agen',
+        judul: 'Pendaftaran Agen Baru Terkirim',
+        pesan: `Pengajuan agen wilayah ${input.wilayah} (${input.kecamatan.trim()}) sedang ditinjau Admin Pusat. Anda akan menerima notifikasi realtime setelah disetujui.`,
+        tautan_view: 'member',
+        sender_uid: cred.user.uid,
+        sender_nama: input.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await batch.commit();
+      setUserProfile(newProfile);
+    } catch (err) {
+      throw new Error(mapFirebaseAuthError(err));
+    } finally {
+      isRegisteringRef.current = false;
+    }
+  };
+
   const handleSendPasswordReset = async (email: string) => {
     try {
       await sendPasswordResetEmail(auth, email.trim().toLowerCase());
@@ -691,6 +938,8 @@ export default function App() {
     setAgentSettlements([]);
     setWarehouseInventory([]);
     setAuditLogs([]);
+    setAgentApplications([]);
+    setNotifications([]);
     setDoorPrizeDraws([]);
     setAppSettings(DEFAULT_APP_SETTINGS);
     setLockedSimulation(null);
@@ -975,7 +1224,7 @@ export default function App() {
               ) : (
                 <button
                   type="button"
-                  onClick={openAuthModal}
+                  onClick={() => openAuthModal('login')}
                   className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3.5 py-2 text-xs font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
                 >
                   <LogIn className="h-3.5 w-3.5" />
@@ -1176,10 +1425,12 @@ export default function App() {
               appSettings={appSettings}
               doorPrizeDraws={doorPrizeDraws}
               productSubstitutions={productSubstitutions}
+              agentApplications={agentApplications}
               referralAgent={referralAgent}
               lockedSimulation={lockedSimulation}
               onClearLockedSimulation={() => setLockedSimulation(null)}
-              onNeedLogin={openAuthModal}
+              onNeedLogin={() => openAuthModal('login')}
+              onOpenAgentRegister={() => openAuthModal('register_agent')}
             />
           )}
 
@@ -1198,7 +1449,10 @@ export default function App() {
               warehouseInventory={warehouseInventory}
               productSubstitutions={productSubstitutions}
               auditLogs={auditLogs}
-              onNeedLogin={openAuthModal}
+              agentApplications={agentApplications}
+              externalTabRequest={dashboardTargetTab}
+              onNeedLogin={() => openAuthModal('login')}
+              onOpenAgentRegister={() => openAuthModal('register_agent')}
             />
           )}
         </main>
@@ -1601,11 +1855,35 @@ export default function App() {
 
         <AuthModal
           isOpen={showAuthModal}
+          initialMode={authModalMode}
           onClose={() => setShowAuthModal(false)}
           onLoginIdentifier={handleLoginWithIdentifier}
           onRegisterMember={handleRegisterMember}
+          onRegisterAgent={handleRegisterAgent}
           onLoginGoogle={handleLoginWithGoogle}
           onSendPasswordReset={handleSendPasswordReset}
+        />
+
+        <FloatingNotificationWidget
+          userProfile={userProfile}
+          notifications={notifications}
+          deposits={deposits}
+          agentApplications={agentApplications}
+          contactMessages={contactMessages}
+          appSettings={appSettings}
+          allUsers={allUsers}
+          onNavigateTarget={(view, tab) => {
+            if (view === 'operasional' && !canAccessOperational) {
+              setActiveView('member');
+              return;
+            }
+            setActiveView(view);
+            if (view === 'operasional' && tab) {
+              setDashboardTargetTab({ tab, nonce: Date.now() });
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          onOpenAuth={(mode) => openAuthModal(mode || 'login')}
         />
 
         <OfflineIndicator />
