@@ -429,6 +429,14 @@
           "minLength": 2,
           "maxLength": 100
         },
+        "qris_merchant": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "qris_kode": {
+          "type": "string",
+          "maxLength": 250000
+        },
         "qris_catatan": {
           "type": "string",
           "maxLength": 250

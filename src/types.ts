@@ -172,6 +172,8 @@ export interface AppPublicSettings {
   bank_nama: string;
   bank_rekening: string;
   bank_atas_nama: string;
+  qris_merchant?: string;
+  qris_kode?: string;
   qris_catatan: string;
   pengumuman_judul: string;
   pengumuman_isi: string;

@@ -198,10 +198,12 @@ service cloud.firestore {
 
     function isValidAppSettings(data) {
       return data.keys().hasAll(['bank_nama', 'bank_rekening', 'bank_atas_nama', 'qris_catatan', 'pengumuman_judul', 'pengumuman_isi', 'pengumuman_aktif', 'createdAt', 'updatedAt']) &&
-        data.keys().hasOnly(['bank_nama', 'bank_rekening', 'bank_atas_nama', 'qris_catatan', 'pengumuman_judul', 'pengumuman_isi', 'pengumuman_aktif', 'updated_by', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['bank_nama', 'bank_rekening', 'bank_atas_nama', 'qris_merchant', 'qris_kode', 'qris_catatan', 'pengumuman_judul', 'pengumuman_isi', 'pengumuman_aktif', 'updated_by', 'createdAt', 'updatedAt']) &&
         data.bank_nama is string && data.bank_nama.size() >= 2 && data.bank_nama.size() <= 60 &&
         data.bank_rekening is string && data.bank_rekening.size() >= 4 && data.bank_rekening.size() <= 50 &&
         data.bank_atas_nama is string && data.bank_atas_nama.size() >= 2 && data.bank_atas_nama.size() <= 100 &&
+        (!('qris_merchant' in data) || (data.qris_merchant is string && data.qris_merchant.size() <= 120)) &&
+        (!('qris_kode' in data) || (data.qris_kode is string && data.qris_kode.size() <= 250000)) &&
         data.qris_catatan is string && data.qris_catatan.size() <= 250 &&
         data.pengumuman_judul is string && data.pengumuman_judul.size() <= 120 &&
         data.pengumuman_isi is string && data.pengumuman_isi.size() <= 600 &&
@@ -667,11 +669,23 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       allow get: if isAdmin() && isValidId(logId);
       allow list: if isAdmin();
-      allow create: if isAdmin() && isValidId(logId) &&
+      allow create: if isSignedIn() && isValidId(logId) &&
         isValidAuditLog(incoming()) &&
         incoming().actor_uid == request.auth.uid &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          ((isAgen() || isKorwil()) && incoming().aksi in [
+            'VERIFIKASI_TRANSAKSI',
+            'TOLAK_TRANSAKSI',
+            'SETORAN_TUNAI_AGEN',
+            'PENARIKAN_TUNAI_AGEN',
+            'UPDATE_PENGIRIMAN',
+            'BATCH_MANIFEST_KIRIM',
+            'SERAH_TERIMA_QR'
+          ])
+        );
       allow update, delete: if false;
     }
 
@@ -714,12 +728,20 @@ service cloud.firestore {
         isAdmin() ||
         existing().recipient_uid == request.auth.uid ||
         existing().recipient_type == 'broadcast' ||
+        (existing().recipient_type == 'agen' && isAgen() && (
+          existing().recipient_uid == 'all_agents' ||
+          ('kode_agen' in requesterData() && existing().recipient_uid == requesterData().kode_agen)
+        )) ||
         (existing().recipient_type == 'korwil' && isKorwilIn(existing().wilayah))
       );
       allow list: if isSignedIn() && (
         isAdmin() ||
         resource.data.recipient_uid == request.auth.uid ||
         resource.data.recipient_type == 'broadcast' ||
+        (resource.data.recipient_type == 'agen' && isAgen() && (
+          resource.data.recipient_uid == 'all_agents' ||
+          ('kode_agen' in requesterData() && resource.data.recipient_uid == requesterData().kode_agen)
+        )) ||
         (resource.data.recipient_type == 'korwil' && isKorwilIn(resource.data.wilayah))
       );
       allow create: if isSignedIn() && isValidId(notifId) &&
@@ -733,10 +755,12 @@ service cloud.firestore {
             'sender_uid' in incoming() &&
             incoming().sender_uid == request.auth.uid &&
             (
-              (incoming().recipient_type == 'admin' && incoming().recipient_uid == 'staff_admin' && incoming().kategori == 'pendaftaran_agen') ||
-              (incoming().recipient_type == 'user' && incoming().recipient_uid == request.auth.uid && incoming().kategori == 'pendaftaran_agen') ||
-              (incoming().recipient_type == 'agen' && incoming().kategori in ['setoran', 'penarikan']) ||
-              ((isAgen() || isKorwil()) && incoming().recipient_type == 'user' && incoming().kategori in ['setoran', 'penarikan', 'kontrak'])
+              (incoming().recipient_type == 'admin' && incoming().recipient_uid == 'staff_admin' && incoming().kategori in ['pendaftaran_agen', 'setoran', 'penarikan', 'kontrak']) ||
+              (incoming().recipient_type == 'user' && incoming().recipient_uid == request.auth.uid && incoming().kategori in ['pendaftaran_agen', 'setoran', 'penarikan', 'kontrak']) ||
+              (incoming().recipient_type == 'agen' && incoming().recipient_uid != 'all_agents' && incoming().kategori in ['setoran', 'penarikan', 'kontrak']) ||
+              (incoming().recipient_type == 'korwil' && 'wilayah' in incoming() && incoming().kategori in ['setoran', 'penarikan', 'kontrak']) ||
+              ((isAgen() || isKorwil()) && incoming().recipient_type == 'user' && incoming().kategori in ['setoran', 'penarikan', 'kontrak']) ||
+              ((isAgen() || isKorwil()) && incoming().recipient_type == 'admin' && incoming().recipient_uid == 'staff_admin' && incoming().kategori in ['setoran', 'penarikan', 'kontrak', 'sistem'])
             )
           )
         );
@@ -747,6 +771,7 @@ service cloud.firestore {
         (
           isAdmin() ||
           existing().recipient_uid == request.auth.uid ||
+          (existing().recipient_type == 'agen' && isAgen() && 'kode_agen' in requesterData() && existing().recipient_uid == requesterData().kode_agen) ||
           (existing().recipient_type == 'korwil' && isKorwilIn(existing().wilayah))
         );
       allow delete: if isAdmin() && isValidId(notifId);

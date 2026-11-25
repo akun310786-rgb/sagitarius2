@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { LOGO_SAGITARIUS } from '../data/catalogData';
-import { WILAYAH_LIST, WilayahPriangan } from '../types';
+import { UserProfile, WILAYAH_LIST, WilayahPriangan } from '../types';
 
 export interface RegisterMemberInput {
   nama: string;
@@ -34,6 +34,7 @@ export type AuthModalMode = 'login' | 'register_member' | 'register_agent';
 interface AuthModalProps {
   isOpen: boolean;
   initialMode?: AuthModalMode;
+  userProfile?: UserProfile | null;
   onClose: () => void;
   onLoginIdentifier: (identifier: string, password: string) => Promise<void>;
   onRegisterMember: (input: RegisterMemberInput) => Promise<void>;
@@ -45,6 +46,7 @@ interface AuthModalProps {
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   initialMode = 'login',
+  userProfile = null,
   onClose,
   onLoginIdentifier,
   onRegisterMember,
@@ -74,25 +76,51 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regCatatan, setRegCatatan] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
+  const isMemberLoggedIn = userProfile?.role === 'member';
+  const isAgentLoggedIn = userProfile?.role === 'agen';
+
   React.useEffect(() => {
     if (isOpen) {
-      setMode(initialMode);
+      let resolvedMode = initialMode;
+      if (userProfile?.role === 'member' && resolvedMode === 'register_member') {
+        resolvedMode = 'login';
+      } else if (userProfile?.role === 'agen' && resolvedMode === 'register_agent') {
+        resolvedMode = 'login';
+      }
+      setMode(resolvedMode);
       setErrorMsg('');
       setInfoMsg('');
+      if (userProfile?.role === 'member' && resolvedMode === 'register_agent') {
+        setRegNama(userProfile.nama || '');
+        setRegUsername(userProfile.username || '');
+        setRegWa(userProfile.no_wa || '');
+        setRegEmail(userProfile.email || '');
+        setRegWilayah(userProfile.wilayah || 'Tasikmalaya');
+      }
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, userProfile]);
 
   if (!isOpen) return null;
 
   const isAgentMode = mode === 'register_agent';
   const isRegisterMode = mode === 'register_member' || mode === 'register_agent';
+  const isUpgradeMemberToAgent = Boolean(isMemberLoggedIn && isAgentMode);
 
   const switchMode = (nextMode: AuthModalMode) => {
+    if (isMemberLoggedIn && nextMode === 'register_member') return;
+    if (isAgentLoggedIn && nextMode === 'register_agent') return;
     setMode(nextMode);
     setErrorMsg('');
     setInfoMsg('');
     setShowResetHelp(false);
     setShowPassword(false);
+    if (isMemberLoggedIn && nextMode === 'register_agent' && userProfile) {
+      setRegNama(userProfile.nama || '');
+      setRegUsername(userProfile.username || '');
+      setRegWa(userProfile.no_wa || '');
+      setRegEmail(userProfile.email || '');
+      setRegWilayah(userProfile.wilayah || 'Tasikmalaya');
+    }
   };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -156,7 +184,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setErrorMsg('Masukkan Kecamatan / area pemasaran calon Agen (minimal 2 karakter).');
       return;
     }
-    if (regPassword.length < 6) {
+    if (!isUpgradeMemberToAgent && regPassword.length < 6) {
       setErrorMsg('Kata sandi minimal 6 karakter.');
       return;
     }
@@ -265,11 +293,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
           <button
             type="button"
+            disabled={isMemberLoggedIn}
+            title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
             onClick={() => switchMode('register_member')}
-            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition cursor-pointer ${
-              mode === 'register_member'
-                ? 'bg-white text-[#381E5A] shadow-xs'
-                : 'text-stone-600 hover:text-stone-900'
+            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition ${
+              isMemberLoggedIn
+                ? 'cursor-not-allowed opacity-45 text-stone-400'
+                : mode === 'register_member'
+                  ? 'bg-white text-[#381E5A] shadow-xs cursor-pointer'
+                  : 'text-stone-600 hover:text-stone-900 cursor-pointer'
             }`}
           >
             <UserPlus className="h-3.5 w-3.5 shrink-0" />
@@ -277,11 +309,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
           <button
             type="button"
+            disabled={isAgentLoggedIn}
+            title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
             onClick={() => switchMode('register_agent')}
-            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition cursor-pointer ${
-              mode === 'register_agent'
-                ? 'bg-[#0C3328] text-[#E8CA82] shadow-xs'
-                : 'text-stone-600 hover:text-stone-900'
+            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition ${
+              isAgentLoggedIn
+                ? 'cursor-not-allowed opacity-45 text-stone-400'
+                : mode === 'register_agent'
+                  ? 'bg-[#0C3328] text-[#E8CA82] shadow-xs cursor-pointer'
+                  : 'text-stone-600 hover:text-stone-900 cursor-pointer'
             }`}
           >
             <Briefcase className="h-3.5 w-3.5 shrink-0" />
@@ -424,7 +460,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     Pendaftaran Mitra Agen Resmi Priangan Timur
                   </p>
                   <p className="mt-1 text-[11px] leading-relaxed text-emerald-900">
-                    Setelah mendaftar, pengajuan agen Anda langsung dikirim ke Admin Pusat secara realtime untuk aktivasi kode agen resmi.
+                    {isUpgradeMemberToAgent
+                      ? `Pengajuan agen akan dikirim langsung menggunakan akun Member aktif Anda (${userProfile?.nama}) tanpa perlu membuat kata sandi baru.`
+                      : 'Setelah mendaftar, pengajuan agen Anda langsung dikirim ke Admin Pusat secara realtime untuk aktivasi kode agen resmi.'}
                   </p>
                 </div>
               )}
@@ -571,34 +609,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </>
               )}
 
-              <div>
-                <label
-                  htmlFor="reg-password"
-                  className="block text-xs font-semibold text-stone-700"
-                >
-                  Buat Kata Sandi (Min. 6 Karakter)
-                </label>
-                <div className="relative mt-1">
-                  <input
-                    id="reg-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={6}
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Minimal 6 huruf atau angka"
-                    className="w-full rounded-lg border border-stone-300 py-2 pr-10 pl-3 text-sm text-stone-900 focus:border-[#26124A] focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-1 text-stone-400 hover:text-stone-700 cursor-pointer"
-                    aria-label={showPassword ? 'Sembunyikan sandi' : 'Lihat sandi'}
+              {!isUpgradeMemberToAgent && (
+                <div>
+                  <label
+                    htmlFor="reg-password"
+                    className="block text-xs font-semibold text-stone-700"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    Buat Kata Sandi (Min. 6 Karakter)
+                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      id="reg-password"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Minimal 6 huruf atau angka"
+                      className="w-full rounded-lg border border-stone-300 py-2 pr-10 pl-3 text-sm text-stone-900 focus:border-[#26124A] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-1 text-stone-400 hover:text-stone-700 cursor-pointer"
+                      aria-label={showPassword ? 'Sembunyikan sandi' : 'Lihat sandi'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"
@@ -662,16 +702,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Belum punya akun?{' '}
                 <button
                   type="button"
+                  disabled={isMemberLoggedIn}
                   onClick={() => switchMode('register_member')}
-                  className="font-semibold text-[#26124A] hover:underline cursor-pointer"
+                  className={`font-semibold text-[#26124A] ${
+                    isMemberLoggedIn ? 'cursor-not-allowed opacity-45' : 'hover:underline cursor-pointer'
+                  }`}
                 >
                   Daftar Member
                 </button>{' '}
                 atau{' '}
                 <button
                   type="button"
+                  disabled={isAgentLoggedIn}
                   onClick={() => switchMode('register_agent')}
-                  className="font-semibold text-[#0C3328] hover:underline cursor-pointer"
+                  className={`font-semibold text-[#0C3328] ${
+                    isAgentLoggedIn ? 'cursor-not-allowed opacity-45' : 'hover:underline cursor-pointer'
+                  }`}
                 >
                   Daftar Agen Baru
                 </button>

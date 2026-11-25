@@ -89,6 +89,8 @@ const DEFAULT_APP_SETTINGS: AppPublicSettings = {
   bank_nama: 'BRI / BCA Resmi Pusat',
   bank_rekening: '0100-01-002345-30-8',
   bank_atas_nama: 'PT. SAGITARIUS TRINUNGGAL KARYA',
+  qris_merchant: '',
+  qris_kode: '',
   qris_catatan:
     'Cantumkan Nama Member & Wilayah pada berita transfer, atau titipkan tunai ke Agen Resmi terdekat.',
   pengumuman_judul: 'Info Layanan & Katalog 2026–2027',
@@ -590,6 +592,9 @@ export default function App() {
     );
 
     let unsubNotifsRole: (() => void) | undefined;
+    let unsubNotifsAgentGroup: (() => void) | undefined;
+    let unsubNotifsAgentCode: (() => void) | undefined;
+
     if (hasAdminAccess) {
       unsubNotifsRole = onSnapshot(
         query(collection(db, 'notifications'), where('recipient_type', '==', 'admin')),
@@ -626,6 +631,48 @@ export default function App() {
         },
         (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
       );
+    } else if (userProfile.role === 'agen') {
+      unsubNotifsAgentGroup = onSnapshot(
+        query(
+          collection(db, 'notifications'),
+          where('recipient_type', '==', 'agen'),
+          where('recipient_uid', '==', 'all_agents')
+        ),
+        (snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'removed') notifMap.delete(change.doc.id);
+            else
+              notifMap.set(change.doc.id, {
+                id: change.doc.id,
+                ...(change.doc.data() as Omit<RealtimeNotification, 'id'>),
+              });
+          });
+          syncNotificationsState();
+        },
+        (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
+      );
+
+      if (userProfile.kode_agen && userProfile.kode_agen !== firebaseUser.uid) {
+        unsubNotifsAgentCode = onSnapshot(
+          query(
+            collection(db, 'notifications'),
+            where('recipient_type', '==', 'agen'),
+            where('recipient_uid', '==', userProfile.kode_agen)
+          ),
+          (snap) => {
+            snap.docChanges().forEach((change) => {
+              if (change.type === 'removed') notifMap.delete(change.doc.id);
+              else
+                notifMap.set(change.doc.id, {
+                  id: change.doc.id,
+                  ...(change.doc.data() as Omit<RealtimeNotification, 'id'>),
+                });
+            });
+            syncNotificationsState();
+          },
+          (err) => handleFirestoreError(err, OperationType.LIST, 'notifications')
+        );
+      }
     }
 
     return () => {
@@ -638,13 +685,15 @@ export default function App() {
       unsubNotifsDirect();
       unsubNotifsBroadcast();
       if (unsubNotifsRole) unsubNotifsRole();
+      if (unsubNotifsAgentGroup) unsubNotifsAgentGroup();
+      if (unsubNotifsAgentCode) unsubNotifsAgentCode();
       if (unsubUsers) unsubUsers();
       if (unsubMessages) unsubMessages();
       if (unsubInventory) unsubInventory();
       if (unsubAuditLogs) unsubAuditLogs();
       if (unsubSettlements) unsubSettlements();
     };
-  }, [authReady, firebaseUser, userProfile?.role, userProfile?.wilayah]);
+  }, [authReady, firebaseUser, userProfile?.role, userProfile?.wilayah, userProfile?.kode_agen]);
 
   const normalizeWaDigits = (input: string): string => {
     const digits = input.replace(/\D/g, '');
@@ -688,6 +737,12 @@ export default function App() {
   };
 
   const openAuthModal = (initialMode: AuthModalMode = 'login') => {
+    if (userProfile?.role === 'member' && initialMode === 'register_member') {
+      return;
+    }
+    if (userProfile?.role === 'agen' && initialMode === 'register_agent') {
+      return;
+    }
     setAuthError('');
     setAuthModalMode(initialMode);
     setShowAuthModal(true);
@@ -813,6 +868,9 @@ export default function App() {
   };
 
   const handleRegisterAgent = async (input: RegisterAgentInput) => {
+    if (userProfile?.role === 'agen') {
+      throw new Error('Akun Anda sudah berstatus sebagai Agen.');
+    }
     const normWa = normalizeWaDigits(input.no_wa);
     const cleanUsername = input.username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
     if (normWa.length < 9) {
@@ -823,6 +881,71 @@ export default function App() {
     }
     if (input.kecamatan.trim().length < 2) {
       throw new Error('Kecamatan / area pemasaran calon agen wajib diisi.');
+    }
+
+    if (firebaseUser && userProfile) {
+      const appRef = doc(db, 'agent_applications', firebaseUser.uid);
+      const existingAppSnap = await getDoc(appRef);
+      if (existingAppSnap.exists()) {
+        const currentStatus = String(existingAppSnap.data().status || 'pending');
+        if (currentStatus === 'pending') {
+          throw new Error(
+            'Pengajuan agen Anda sebelumnya masih menunggu peninjauan Admin Pusat.'
+          );
+        }
+        if (currentStatus === 'approved') {
+          throw new Error('Pengajuan agen Anda sudah disetujui oleh Admin Pusat.');
+        }
+        throw new Error(
+          'Riwayat pengajuan agen untuk akun ini sudah tercatat. Hubungi Admin Pusat jika perlu aktivasi ulang.'
+        );
+      }
+
+      const batch = writeBatch(db);
+      batch.set(appRef, {
+        applicant_uid: firebaseUser.uid,
+        nama: input.nama,
+        username: cleanUsername,
+        no_wa: input.no_wa.trim(),
+        ...(input.email ? { email: input.email.trim().toLowerCase() } : {}),
+        wilayah: input.wilayah,
+        kecamatan: input.kecamatan.trim().slice(0, 80),
+        ...(input.catatan ? { catatan: input.catatan.trim().slice(0, 300) } : {}),
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(collection(db, 'notifications')), {
+        recipient_type: 'admin',
+        recipient_uid: 'staff_admin',
+        wilayah: input.wilayah,
+        kategori: 'pendaftaran_agen',
+        judul: 'Pendaftaran Agen Baru Masuk',
+        pesan: `${input.nama} (${input.no_wa.trim()}) mengajukan pendaftaran Agen wilayah ${input.wilayah} — ${input.kecamatan.trim()}.`,
+        tautan_view: 'operasional',
+        tautan_tab: 'users',
+        sender_uid: firebaseUser.uid,
+        sender_nama: input.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      batch.set(doc(collection(db, 'notifications')), {
+        recipient_type: 'user',
+        recipient_uid: firebaseUser.uid,
+        wilayah: input.wilayah,
+        kategori: 'pendaftaran_agen',
+        judul: 'Pendaftaran Agen Baru Terkirim',
+        pesan: `Pengajuan agen wilayah ${input.wilayah} (${input.kecamatan.trim()}) sedang ditinjau Admin Pusat. Anda akan menerima notifikasi realtime setelah disetujui.`,
+        tautan_view: 'member',
+        sender_uid: firebaseUser.uid,
+        sender_nama: input.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      await batch.commit();
+      return;
     }
 
     const waAliasRef = doc(db, 'login_aliases', `wa_${normWa}`);
@@ -1378,6 +1501,7 @@ export default function App() {
               focusSearchTrigger={focusSearchTrigger}
               referralAgent={referralAgent}
               onOpenAuth={openAuthModal}
+              userRole={userProfile?.role ?? null}
             />
           )}
 
@@ -1486,15 +1610,23 @@ export default function App() {
               <div className="flex flex-col items-start gap-1.5">
                 <button
                   type="button"
+                  disabled={userProfile?.role === 'member'}
+                  title={
+                    userProfile?.role === 'member' ? 'Anda sudah masuk sebagai Member' : undefined
+                  }
                   onClick={() => openAuthModal('register_member')}
-                  className="hover:text-[#E8CA82] cursor-pointer"
+                  className="hover:text-[#E8CA82] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:text-stone-200 cursor-pointer"
                 >
                   Gabung Member
                 </button>
                 <button
                   type="button"
+                  disabled={userProfile?.role === 'agen'}
+                  title={
+                    userProfile?.role === 'agen' ? 'Anda sudah masuk sebagai Agen' : undefined
+                  }
                   onClick={() => openAuthModal('register_agent')}
-                  className="hover:text-[#E8CA82] cursor-pointer"
+                  className="hover:text-[#E8CA82] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:text-stone-200 cursor-pointer"
                 >
                   Gabung Agen / Reseller
                 </button>
@@ -1794,6 +1926,7 @@ export default function App() {
         <AuthModal
           isOpen={showAuthModal}
           initialMode={authModalMode}
+          userProfile={userProfile}
           onClose={() => setShowAuthModal(false)}
           onLoginIdentifier={handleLoginWithIdentifier}
           onRegisterMember={handleRegisterMember}

@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BarChart3,
   Boxes,
+  Building2,
   Check,
   CheckCircle2,
   ClipboardCheck,
@@ -30,6 +31,7 @@ import {
   Trash2,
   Trophy,
   Truck,
+  Upload,
   UserCheck,
   UserPlus,
   Users,
@@ -42,12 +44,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
+  runTransaction,
   serverTimestamp,
-  setDoc,
-  updateDoc,
   writeBatch,
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
@@ -170,6 +170,45 @@ function downloadCsv(filename: string, headers: string[], rows: Array<Array<stri
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function isSafeImageSource(value: string): boolean {
+  const v = value.trim();
+  return (
+    v.startsWith('data:image/') ||
+    v.startsWith('https://') ||
+    v.startsWith('http://') ||
+    v.startsWith('/assets/')
+  );
+}
+
+async function compressQrisImageToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 560;
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas tidak tersedia'));
+          return;
+        }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.78));
+      };
+      img.onerror = () => reject(new Error('Gagal membaca gambar QRIS'));
+      img.src = String(reader.result);
+    };
+    reader.onerror = () => reject(new Error('Gagal membaca file QRIS'));
+    reader.readAsDataURL(file);
+  });
 }
 
 export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps> = ({
@@ -337,20 +376,26 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [drawingPrize, setDrawingPrize] = useState(false);
   const [confirmDeletePrizeId, setConfirmDeletePrizeId] = useState<string | null>(null);
 
-  // Tab Pengaturan Rekening & Pengumuman (app_settings/public)
+  // Tab Pengaturan Rekening, QRIS & Pengumuman (app_settings/public)
   const [setBankNama, setSetBankNama] = useState(appSettings.bank_nama);
   const [setBankRekening, setSetBankRekening] = useState(appSettings.bank_rekening);
   const [setBankAtasNama, setSetBankAtasNama] = useState(appSettings.bank_atas_nama);
+  const [setQrisMerchant, setSetQrisMerchant] = useState(appSettings.qris_merchant || '');
+  const [setQrisKode, setSetQrisKode] = useState(appSettings.qris_kode || '');
   const [setQrisCatatan, setSetQrisCatatan] = useState(appSettings.qris_catatan);
   const [setPengJudul, setSetPengJudul] = useState(appSettings.pengumuman_judul);
   const [setPengIsi, setSetPengIsi] = useState(appSettings.pengumuman_isi);
   const [setPengAktif, setSetPengAktif] = useState(appSettings.pengumuman_aktif);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [copiedBankSettle, setCopiedBankSettle] = useState(false);
+  const [copiedQrisSettle, setCopiedQrisSettle] = useState(false);
 
   useEffect(() => {
     setSetBankNama(appSettings.bank_nama);
     setSetBankRekening(appSettings.bank_rekening);
     setSetBankAtasNama(appSettings.bank_atas_nama);
+    setSetQrisMerchant(appSettings.qris_merchant || '');
+    setSetQrisKode(appSettings.qris_kode || '');
     setSetQrisCatatan(appSettings.qris_catatan);
     setSetPengJudul(appSettings.pengumuman_judul);
     setSetPengIsi(appSettings.pengumuman_isi);
@@ -380,25 +425,37 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   }, [userProfile?.kode_agen]);
 
-  const writeAuditLog = async (aksi: string, targetLabel: string, detail: string) => {
-    if (!isAdmin || !userProfile) return;
-    try {
-      const safeAksi = (aksi.trim() || 'ADMIN_ACTION').slice(0, 60);
-      const safeTarget = (targetLabel.trim() || 'Sistem').slice(0, 120);
-      const safeDetail = (detail.trim() || 'Perubahan data oleh admin').slice(0, 400);
-      const safeActor = (userProfile.nama.trim() || 'Admin').slice(0, 100);
-      await addDoc(collection(db, 'audit_logs'), {
-        aksi: safeAksi.length < 2 ? `${safeAksi}-` : safeAksi,
-        target_label: safeTarget.length < 2 ? `${safeTarget}-` : safeTarget,
-        detail: safeDetail.length < 2 ? `${safeDetail}-` : safeDetail,
-        actor_uid: userProfile.uid,
-        actor_nama: safeActor.length < 2 ? 'Admin' : safeActor,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      console.error('Audit log write skipped:', err);
-    }
+  const buildAuditLogPayload = (aksi: string, targetLabel: string, detail: string) => {
+    const safeAksi = (aksi.trim() || 'ADMIN_ACTION').slice(0, 60);
+    const safeTarget = (targetLabel.trim() || 'Sistem').slice(0, 120);
+    const safeDetail = (detail.trim() || 'Perubahan data sistem').slice(0, 400);
+    const safeActor = (userProfile?.nama.trim() || 'Petugas').slice(0, 100);
+    return {
+      aksi: safeAksi.length < 2 ? `${safeAksi}-` : safeAksi,
+      target_label: safeTarget.length < 2 ? `${safeTarget}-` : safeTarget,
+      detail: safeDetail.length < 2 ? `${safeDetail}-` : safeDetail,
+      actor_uid: userProfile?.uid || '',
+      actor_nama: safeActor.length < 2 ? 'Petugas' : safeActor,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+  };
+
+  const canWriteAuditAction = (aksi: string): boolean => {
+    if (!userProfile) return false;
+    if (isAdmin) return true;
+    return (
+      (userProfile.role === 'agen' || userProfile.role === 'korwil') &&
+      [
+        'VERIFIKASI_TRANSAKSI',
+        'TOLAK_TRANSAKSI',
+        'SETORAN_TUNAI_AGEN',
+        'PENARIKAN_TUNAI_AGEN',
+        'UPDATE_PENGIRIMAN',
+        'BATCH_MANIFEST_KIRIM',
+        'SERAH_TERIMA_QR',
+      ].includes(aksi)
+    );
   };
 
   // Visible subscriptions for current user role
@@ -788,7 +845,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       }));
   }, [subscriptions, doorPrizeDraws]);
 
-  // --- Handlers: Cash Deposit or Withdrawal ---
+  // --- Handlers: Cash Deposit or Withdrawal (Atomic Firestore Transaction + Audit Log) ---
   const handleRecordCashTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetSub =
@@ -797,83 +854,110 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       setStatusMessage('Pilih kontrak member yang valid terlebih dahulu.');
       return;
     }
-    const nominalNum = Number(cashNominal);
+    const nominalNum = Math.round(Number(cashNominal));
     if (!Number.isFinite(nominalNum) || nominalNum < 1000) {
       setStatusMessage('Nominal transaksi minimal Rp 1.000.');
       return;
     }
 
-    if (cashTxType === 'penarikan') {
-      if (targetSub.status === 'diambil' && !isAdmin) {
-        setStatusMessage('Kontrak berstatus Sudah Diambil dan tidak dapat ditarik lagi.');
-        return;
-      }
-      if (nominalNum > (targetSub.total_terkumpul || 0)) {
-        setStatusMessage(
-          `Nominal penarikan (${formatRupiah(nominalNum)}) melebihi saldo terkumpul member (${formatRupiah(
-            targetSub.total_terkumpul
-          )}).`
-        );
-        return;
-      }
-    }
-
     setSubmittingCash(true);
     setStatusMessage('');
     try {
-      const batch = writeBatch(db);
       const depRef = doc(collection(db, 'deposits'));
       const subRef = doc(db, 'subscriptions', targetSub.id);
-
-      const newTotal =
-        cashTxType === 'penarikan'
-          ? Math.max(0, (targetSub.total_terkumpul || 0) - nominalNum)
-          : (targetSub.total_terkumpul || 0) + nominalNum;
-
-      const newStatus: SubscriptionStatus =
-        targetSub.status === 'diambil'
-          ? 'diambil'
-          : newTotal >= targetSub.target_nominal
-            ? 'lunas'
-            : 'aktif';
-
+      const auditRef = doc(collection(db, 'audit_logs'));
       const metode: DepositMethod =
         cashTxType === 'penarikan' ? withdrawMethod : 'tunai_agen';
       const todayDate = new Date().toISOString().slice(0, 10);
-      const finalCatatan =
+      const finalCatatan = (
         cashNote.trim() ||
-        (cashTxType === 'penarikan' ? 'Penarikan Dana via Agen/Admin' : 'Setoran Tunai Agen');
+        (cashTxType === 'penarikan' ? 'Penarikan Dana via Agen/Admin' : 'Setoran Tunai Agen')
+      ).slice(0, 250);
 
-      batch.set(depRef, {
-        subscription_id: targetSub.id,
-        member_id: targetSub.member_id,
-        member_nama: targetSub.member_nama,
-        agen_id: targetSub.agen_id,
-        wilayah: targetSub.wilayah,
-        jenis_transaksi: cashTxType,
-        nominal: nominalNum,
-        metode,
-        catatan: finalCatatan,
-        status_verifikasi: 'verified',
-        validated_by: userProfile.nama,
-        tanggal: todayDate,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const txResult = await runTransaction(db, async (tx) => {
+        const subSnap = await tx.get(subRef);
+        if (!subSnap.exists()) {
+          throw new Error('SUB_NOT_FOUND');
+        }
+        const freshSub = subSnap.data() as Omit<Subscription, 'id'>;
+        const freshCurrentTotal = Number(freshSub.total_terkumpul) || 0;
+        const freshTargetNominal = Number(freshSub.target_nominal) || 0;
+
+        if (cashTxType === 'penarikan') {
+          if (freshSub.status === 'diambil' && !isAdmin) {
+            throw new Error('STATUS_DIAMBIL');
+          }
+          if (nominalNum > freshCurrentTotal) {
+            throw new Error(`INSUFFICIENT_BALANCE:${freshCurrentTotal}`);
+          }
+        }
+
+        const newTotal =
+          cashTxType === 'penarikan'
+            ? Math.max(0, freshCurrentTotal - nominalNum)
+            : freshCurrentTotal + nominalNum;
+
+        const newStatus: SubscriptionStatus =
+          freshSub.status === 'diambil'
+            ? 'diambil'
+            : newTotal >= freshTargetNominal
+              ? 'lunas'
+              : 'aktif';
+
+        tx.set(depRef, {
+          subscription_id: targetSub.id,
+          member_id: freshSub.member_id,
+          member_nama: freshSub.member_nama,
+          agen_id: freshSub.agen_id,
+          wilayah: freshSub.wilayah,
+          jenis_transaksi: cashTxType,
+          nominal: nominalNum,
+          metode,
+          catatan: finalCatatan,
+          status_verifikasi: 'verified',
+          validated_by: userProfile.nama,
+          tanggal: todayDate,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        tx.update(subRef, {
+          total_terkumpul: newTotal,
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        });
+
+        const auditAction =
+          cashTxType === 'penarikan' ? 'PENARIKAN_TUNAI_AGEN' : 'SETORAN_TUNAI_AGEN';
+        if (canWriteAuditAction(auditAction)) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              auditAction,
+              freshSub.member_nama,
+              `${cashTxType === 'penarikan' ? 'Penarikan' : 'Setoran tunai'} ${formatRupiah(
+                nominalNum
+              )} (${freshSub.package_nama}) · Saldo: ${formatRupiah(freshCurrentTotal)} -> ${formatRupiah(
+                newTotal
+              )}`
+            )
+          );
+        }
+
+        return { freshSub, newTotal, newStatus };
       });
 
-      batch.update(subRef, {
-        total_terkumpul: newTotal,
-        status: newStatus,
-        updatedAt: serverTimestamp(),
-      });
+      const { freshSub, newTotal, newStatus } = txResult;
+      const agentRecipientUid =
+        freshSub.agen_id.startsWith('agt_') && freshSub.agen_kode
+          ? freshSub.agen_kode
+          : freshSub.agen_id;
 
-      await batch.commit();
-
-      try {
-        await addDoc(collection(db, 'notifications'), {
+      const cashNotifs: Record<string, unknown>[] = [
+        {
           recipient_type: 'user',
-          recipient_uid: targetSub.member_id,
-          wilayah: targetSub.wilayah,
+          recipient_uid: freshSub.member_id,
+          wilayah: freshSub.wilayah,
           kategori: cashTxType,
           judul:
             cashTxType === 'penarikan'
@@ -881,25 +965,90 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               : `Setoran ${formatRupiah(nominalNum)} Dicatat`,
           pesan: `${userProfile.nama} telah memvalidasi ${
             cashTxType === 'penarikan' ? 'penarikan dana' : 'setoran tunai'
-          } pada paket ${targetSub.package_nama}. Saldo saat ini: ${formatRupiah(newTotal)}.`,
+          } pada paket ${freshSub.package_nama}. Saldo saat ini: ${formatRupiah(newTotal)}.`,
           tautan_view: 'member',
           sender_uid: userProfile.uid,
           sender_nama: userProfile.nama,
           is_read: false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
+        },
+        {
+          recipient_type: 'agen',
+          recipient_uid: agentRecipientUid,
+          wilayah: freshSub.wilayah,
+          kategori: cashTxType,
+          judul:
+            cashTxType === 'penarikan'
+              ? `Penarikan Tunai Tercatat: ${freshSub.member_nama}`
+              : `Setoran Tunai Tercatat: ${freshSub.member_nama}`,
+          pesan: `${
+            cashTxType === 'penarikan' ? 'Penarikan' : 'Setoran tunai'
+          } ${formatRupiah(nominalNum)} untuk ${freshSub.member_nama} (${freshSub.package_nama}) dicatat oleh ${userProfile.nama}. Saldo: ${formatRupiah(newTotal)}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+      ];
+
+      if (userProfile.role === 'agen') {
+        cashNotifs.push({
+          recipient_type: 'korwil',
+          recipient_uid: `korwil_${freshSub.wilayah}`,
+          wilayah: freshSub.wilayah,
+          kategori: cashTxType,
+          judul: `Aktivitas Kas Agen: ${userProfile.nama}`,
+          pesan: `Agen ${userProfile.nama} mencatat ${
+            cashTxType === 'penarikan' ? 'penarikan' : 'setoran tunai'
+          } ${formatRupiah(nominalNum)} untuk ${freshSub.member_nama} (${freshSub.package_nama}).`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
-      } catch {
-        // Non-blocking notification send
       }
+
+      if (!isAdmin) {
+        cashNotifs.push({
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: freshSub.wilayah,
+          kategori: cashTxType,
+          judul:
+            cashTxType === 'penarikan'
+              ? `Penarikan Agen (${freshSub.wilayah}): ${freshSub.member_nama}`
+              : `Setoran Tunai Agen (${freshSub.wilayah}): ${freshSub.member_nama}`,
+          pesan: `${userProfile.nama} mencatat ${
+            cashTxType === 'penarikan' ? 'penarikan' : 'setoran tunai'
+          } ${formatRupiah(nominalNum)} untuk ${freshSub.member_nama} (${freshSub.package_nama}).`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      await Promise.allSettled(
+        cashNotifs.map((n) => addDoc(collection(db, 'notifications'), n))
+      );
 
       const receiptItem: Deposit = {
         id: depRef.id,
         subscription_id: targetSub.id,
-        member_id: targetSub.member_id,
-        member_nama: targetSub.member_nama,
-        agen_id: targetSub.agen_id,
-        wilayah: targetSub.wilayah,
+        member_id: freshSub.member_id,
+        member_nama: freshSub.member_nama,
+        agen_id: freshSub.agen_id,
+        wilayah: freshSub.wilayah,
         jenis_transaksi: cashTxType,
         nominal: nominalNum,
         metode,
@@ -910,20 +1059,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       };
       setLastValidatedDeposit(receiptItem);
 
-      const memberObj = allUsers.find((u) => u.uid === targetSub.member_id);
-      const sisa = Math.max(0, targetSub.target_nominal - newTotal);
+      const memberObj = allUsers.find((u) => u.uid === freshSub.member_id);
+      const sisa = Math.max(0, freshSub.target_nominal - newTotal);
       setLastWaPayload({
         phone: memberObj?.no_wa || '081324383479',
         message:
           cashTxType === 'penarikan'
-            ? `Assalamu'alaikum ${targetSub.member_nama}, penarikan dana Anda sebesar ${formatRupiah(
+            ? `Assalamu'alaikum ${freshSub.member_nama}, penarikan dana Anda sebesar ${formatRupiah(
                 nominalNum
-              )} dari paket ${targetSub.package_nama} telah DIVALIDASI oleh ${userProfile.nama}. Saldo terbaru: ${formatRupiah(
+              )} dari paket ${freshSub.package_nama} telah DIVALIDASI oleh ${userProfile.nama}. Saldo terbaru: ${formatRupiah(
                 newTotal
               )}.`
-            : `Assalamu'alaikum ${targetSub.member_nama}, setoran tunai Anda sebesar ${formatRupiah(
+            : `Assalamu'alaikum ${freshSub.member_nama}, setoran tunai Anda sebesar ${formatRupiah(
                 nominalNum
-              )} untuk ${targetSub.package_nama} telah TERVALIDASI oleh ${userProfile.nama}. Saldo terkumpul: ${formatRupiah(
+              )} untuk ${freshSub.package_nama} telah TERVALIDASI oleh ${userProfile.nama}. Saldo terkumpul: ${formatRupiah(
                 newTotal
               )} (Sisa: ${formatRupiah(sisa)}). Status: ${newStatus.toUpperCase()}.`,
       });
@@ -931,92 +1080,202 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       setStatusMessage(
         `${
           cashTxType === 'penarikan' ? 'Penarikan' : 'Setoran tunai'
-        } ${formatRupiah(nominalNum)} untuk ${targetSub.member_nama} berhasil divalidasi & saldo terbarui.`
+        } ${formatRupiah(nominalNum)} untuk ${freshSub.member_nama} berhasil divalidasi & saldo terbarui.`
       );
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'SUB_NOT_FOUND') {
+        setStatusMessage('Kontrak member tidak ditemukan di database.');
+        return;
+      }
+      if (msg === 'STATUS_DIAMBIL') {
+        setStatusMessage('Kontrak berstatus Sudah Diambil dan tidak dapat ditarik lagi.');
+        return;
+      }
+      if (msg.startsWith('INSUFFICIENT_BALANCE:')) {
+        const latestBal = Number(msg.split(':')[1] || 0);
+        setStatusMessage(
+          `Nominal penarikan (${formatRupiah(nominalNum)}) melebihi saldo terbaru member (${formatRupiah(
+            latestBal
+          )}).`
+        );
+        return;
+      }
       handleFirestoreError(err, OperationType.WRITE, 'deposits/subscriptions');
     } finally {
       setSubmittingCash(false);
     }
   };
 
-  // --- Handler: Verify Pending Deposit or Withdrawal ---
+  // --- Handler: Verify Pending Deposit or Withdrawal (Race-Condition Safe Transaction) ---
   const handleVerifyDeposit = async (dep: Deposit, decision: 'verified' | 'rejected') => {
     if (!userProfile) return;
-    const targetSub = subscriptions.find((s) => s.id === dep.subscription_id);
-    if (!targetSub) return;
-
-    const isWithdraw = getTxType(dep) === 'penarikan';
-    if (decision === 'verified' && isWithdraw && dep.nominal > (targetSub.total_terkumpul || 0)) {
-      setStatusMessage(
-        `Tidak dapat memvalidasi penarikan ${formatRupiah(dep.nominal)} karena melebihi saldo ${targetSub.member_nama} (${formatRupiah(
-          targetSub.total_terkumpul
-        )}).`
-      );
-      return;
-    }
 
     try {
-      const batch = writeBatch(db);
       const depRef = doc(db, 'deposits', dep.id);
-      const nextNote =
-        decision === 'verified'
-          ? `${dep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Divalidasi (${userProfile.nama})`
-          : `${dep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Ditolak (${userProfile.nama})`;
-      batch.update(depRef, {
-        status_verifikasi: decision,
-        validated_by: userProfile.nama,
-        catatan: nextNote.slice(0, 250),
-        updatedAt: serverTimestamp(),
-      });
+      const subRef = doc(db, 'subscriptions', dep.subscription_id);
+      const auditRef = doc(collection(db, 'audit_logs'));
 
-      let newTotal = targetSub.total_terkumpul;
-      let newStatus: SubscriptionStatus = targetSub.status;
-      if (decision === 'verified') {
-        newTotal = isWithdraw
-          ? Math.max(0, (targetSub.total_terkumpul || 0) - dep.nominal)
-          : (targetSub.total_terkumpul || 0) + dep.nominal;
-        newStatus =
-          targetSub.status === 'diambil'
-            ? 'diambil'
-            : newTotal >= targetSub.target_nominal
-              ? 'lunas'
-              : 'aktif';
+      const txResult = await runTransaction(db, async (tx) => {
+        const [depSnap, subSnap] = await Promise.all([tx.get(depRef), tx.get(subRef)]);
+        if (!depSnap.exists()) {
+          throw new Error('DEP_NOT_FOUND');
+        }
+        if (!subSnap.exists()) {
+          throw new Error('SUB_NOT_FOUND');
+        }
 
-        const subRef = doc(db, 'subscriptions', targetSub.id);
-        batch.update(subRef, {
-          total_terkumpul: newTotal,
-          status: newStatus,
+        const freshDep = depSnap.data() as Omit<Deposit, 'id'>;
+        const freshSub = subSnap.data() as Omit<Subscription, 'id'>;
+
+        // Re-validate pending state inside transaction to prevent double-verification race condition
+        if (freshDep.status_verifikasi !== 'pending') {
+          throw new Error(`ALREADY_PROCESSED:${freshDep.status_verifikasi}`);
+        }
+
+        const isWithdraw =
+          (freshDep.jenis_transaksi ||
+            (freshDep.metode === 'pencairan_tunai' || freshDep.metode === 'transfer_keluar'
+              ? 'penarikan'
+              : 'setoran')) === 'penarikan';
+        const depNominal = Number(freshDep.nominal) || 0;
+        const freshCurrentTotal = Number(freshSub.total_terkumpul) || 0;
+        const freshTargetNominal = Number(freshSub.target_nominal) || 0;
+
+        if (decision === 'verified' && isWithdraw) {
+          if (freshSub.status === 'diambil' && !isAdmin) {
+            throw new Error('STATUS_DIAMBIL');
+          }
+          if (depNominal > freshCurrentTotal) {
+            throw new Error(`INSUFFICIENT_BALANCE:${freshCurrentTotal}`);
+          }
+        }
+
+        const nextNote = (
+          decision === 'verified'
+            ? `${freshDep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Divalidasi (${userProfile.nama})`
+            : `${freshDep.catatan || (isWithdraw ? 'Penarikan' : 'Transfer')} — Ditolak (${userProfile.nama})`
+        ).slice(0, 250);
+
+        tx.update(depRef, {
+          status_verifikasi: decision,
+          validated_by: userProfile.nama,
+          catatan: nextNote,
           updatedAt: serverTimestamp(),
         });
-      }
 
-      await batch.commit();
+        let newTotal = freshCurrentTotal;
+        let newStatus: SubscriptionStatus = freshSub.status;
+        if (decision === 'verified') {
+          newTotal = isWithdraw
+            ? Math.max(0, freshCurrentTotal - depNominal)
+            : freshCurrentTotal + depNominal;
+          newStatus =
+            freshSub.status === 'diambil'
+              ? 'diambil'
+              : newTotal >= freshTargetNominal
+                ? 'lunas'
+                : 'aktif';
 
-      try {
-        await addDoc(collection(db, 'notifications'), {
+          tx.update(subRef, {
+            total_terkumpul: newTotal,
+            status: newStatus,
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        const auditAction =
+          decision === 'verified' ? 'VERIFIKASI_TRANSAKSI' : 'TOLAK_TRANSAKSI';
+        if (canWriteAuditAction(auditAction)) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              auditAction,
+              freshSub.member_nama,
+              `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(depNominal)} (${
+                freshSub.package_nama
+              }) -> ${decision.toUpperCase()} · Saldo: ${formatRupiah(freshCurrentTotal)} -> ${formatRupiah(
+                newTotal
+              )}`
+            )
+          );
+        }
+
+        return { freshDep, freshSub, isWithdraw, depNominal, newTotal, newStatus, nextNote };
+      });
+
+      const { freshSub, isWithdraw, depNominal, newTotal, nextNote } = txResult;
+      const verifyAgentUid =
+        freshSub.agen_id.startsWith('agt_') && freshSub.agen_kode
+          ? freshSub.agen_kode
+          : freshSub.agen_id;
+
+      const verifyNotifs: Record<string, unknown>[] = [
+        {
           recipient_type: 'user',
-          recipient_uid: targetSub.member_id,
-          wilayah: targetSub.wilayah,
+          recipient_uid: freshSub.member_id,
+          wilayah: freshSub.wilayah,
           kategori: isWithdraw ? 'penarikan' : 'setoran',
           judul:
             decision === 'verified'
-              ? `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(dep.nominal)} Terverifikasi`
-              : `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(dep.nominal)} Ditolak`,
+              ? `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(depNominal)} Terverifikasi`
+              : `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(depNominal)} Ditolak`,
           pesan:
             decision === 'verified'
-              ? `Transaksi Anda untuk paket ${targetSub.package_nama} telah disetujui (${userProfile.nama}). Saldo terkumpul: ${formatRupiah(newTotal)}.`
-              : `Pengajuan transaksi Anda untuk paket ${targetSub.package_nama} ditolak oleh ${userProfile.nama}. Silakan periksa catatan atau hubungi agen.`,
+              ? `Transaksi Anda untuk paket ${freshSub.package_nama} telah disetujui (${userProfile.nama}). Saldo terkumpul: ${formatRupiah(newTotal)}.`
+              : `Pengajuan transaksi Anda untuk paket ${freshSub.package_nama} ditolak oleh ${userProfile.nama}. Silakan periksa catatan atau hubungi agen.`,
           tautan_view: 'member',
           sender_uid: userProfile.uid,
           sender_nama: userProfile.nama,
           is_read: false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
+        },
+        {
+          recipient_type: 'agen',
+          recipient_uid: verifyAgentUid,
+          wilayah: freshSub.wilayah,
+          kategori: isWithdraw ? 'penarikan' : 'setoran',
+          judul:
+            decision === 'verified'
+              ? `Validasi Berhasil: ${freshSub.member_nama}`
+              : `Transaksi Ditolak: ${freshSub.member_nama}`,
+          pesan: `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(depNominal)} (${freshSub.package_nama}) ${
+            decision === 'verified' ? 'diverifikasi' : 'ditolak'
+          } oleh ${userProfile.nama}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+      ];
+
+      if (!isAdmin) {
+        verifyNotifs.push({
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: freshSub.wilayah,
+          kategori: isWithdraw ? 'penarikan' : 'setoran',
+          judul: `${decision === 'verified' ? 'Verifikasi' : 'Penolakan'} oleh ${userProfile.nama}`,
+          pesan: `${userProfile.nama} ${decision === 'verified' ? 'menyetujui' : 'menolak'} ${
+            isWithdraw ? 'penarikan' : 'setoran'
+          } ${formatRupiah(depNominal)} dari ${freshSub.member_nama} (${freshSub.wilayah}).`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
         });
-      } catch {
-        // Non-blocking notification send
       }
+
+      await Promise.allSettled(
+        verifyNotifs.map((n) => addDoc(collection(db, 'notifications'), n))
+      );
 
       if (decision === 'verified') {
         setLastValidatedDeposit({
@@ -1025,19 +1284,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           validated_by: userProfile.nama,
           catatan: nextNote,
         });
-        const memberObj = allUsers.find((u) => u.uid === targetSub.member_id);
-        const sisa = Math.max(0, targetSub.target_nominal - newTotal);
+        const memberObj = allUsers.find((u) => u.uid === freshSub.member_id);
+        const sisa = Math.max(0, freshSub.target_nominal - newTotal);
         setLastWaPayload({
           phone: memberObj?.no_wa || '081324383479',
           message: isWithdraw
-            ? `Assalamu'alaikum ${targetSub.member_nama}, pengajuan penarikan Anda sebesar ${formatRupiah(
-                dep.nominal
-              )} pada ${targetSub.package_nama} telah DIVALIDASI oleh ${userProfile.nama}. Saldo tersisa: ${formatRupiah(
+            ? `Assalamu'alaikum ${freshSub.member_nama}, pengajuan penarikan Anda sebesar ${formatRupiah(
+                depNominal
+              )} pada ${freshSub.package_nama} telah DIVALIDASI oleh ${userProfile.nama}. Saldo tersisa: ${formatRupiah(
                 newTotal
               )}.`
-            : `Assalamu'alaikum ${targetSub.member_nama}, bukti transfer Anda sebesar ${formatRupiah(
-                dep.nominal
-              )} untuk ${targetSub.package_nama} telah DIVALIDASI oleh ${userProfile.nama}. Saldo terkumpul: ${formatRupiah(
+            : `Assalamu'alaikum ${freshSub.member_nama}, bukti transfer Anda sebesar ${formatRupiah(
+                depNominal
+              )} untuk ${freshSub.package_nama} telah DIVALIDASI oleh ${userProfile.nama}. Saldo terkumpul: ${formatRupiah(
                 newTotal
               )} (Sisa: ${formatRupiah(sisa)}).`,
         });
@@ -1045,26 +1304,58 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
       setStatusMessage(
         decision === 'verified'
-          ? `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(dep.nominal)} telah divalidasi oleh ${userProfile.nama}.`
-          : `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(dep.nominal)} ditolak.`
+          ? `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(depNominal)} telah divalidasi oleh ${userProfile.nama}. Saldo terbaru: ${formatRupiah(newTotal)}.`
+          : `${isWithdraw ? 'Penarikan' : 'Setoran'} ${formatRupiah(depNominal)} ditolak.`
       );
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'DEP_NOT_FOUND' || msg === 'SUB_NOT_FOUND') {
+        setStatusMessage('Transaksi atau kontrak terkait tidak ditemukan di database.');
+        return;
+      }
+      if (msg.startsWith('ALREADY_PROCESSED:')) {
+        const cur = msg.split(':')[1] || 'diproses';
+        setStatusMessage(
+          `Transaksi ini sudah diproses sebelumnya oleh petugas lain (status: ${cur.toUpperCase()}).`
+        );
+        return;
+      }
+      if (msg === 'STATUS_DIAMBIL') {
+        setStatusMessage('Kontrak sudah berstatus Sudah Diambil sehingga penarikan tidak dapat divalidasi.');
+        return;
+      }
+      if (msg.startsWith('INSUFFICIENT_BALANCE:')) {
+        const latestBal = Number(msg.split(':')[1] || 0);
+        setStatusMessage(
+          `Tidak dapat memvalidasi penarikan ${formatRupiah(dep.nominal)} karena melebihi saldo terbaru member (${formatRupiah(
+            latestBal
+          )}).`
+        );
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, `deposits/${dep.id}`);
     }
   };
 
-  // --- Handlers: Contracts Management & Delivery Tracking ---
+  // --- Handlers: Contracts Management & Delivery Tracking (Atomic with Audit Log) ---
   const handleUpdateContractStatus = async (sub: Subscription, newStatus: SubscriptionStatus) => {
     try {
-      await updateDoc(doc(db, 'subscriptions', sub.id), {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'subscriptions', sub.id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       });
-      await writeAuditLog(
-        'UBAH_STATUS_KONTRAK',
-        sub.member_nama,
-        `Status kontrak ${sub.package_nama} diubah ${sub.status} -> ${newStatus}`
-      );
+      if (canWriteAuditAction('UBAH_STATUS_KONTRAK')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'UBAH_STATUS_KONTRAK',
+            sub.member_nama,
+            `Status kontrak ${sub.package_nama} diubah ${sub.status} -> ${newStatus}`
+          )
+        );
+      }
+      await batch.commit();
       setStatusMessage(
         `Status kontrak ${sub.member_nama} (${sub.package_nama}) diperbarui menjadi ${newStatus.toUpperCase()}.`
       );
@@ -1086,12 +1377,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       if (nextStage === 'selesai' && sub.status === 'lunas') {
         updates.status = 'diambil';
       }
-      await updateDoc(doc(db, 'subscriptions', sub.id), updates);
-      await writeAuditLog(
-        'UPDATE_PENGIRIMAN',
-        sub.member_nama,
-        `Tahap pengiriman ${sub.package_nama} diperbarui menjadi ${nextStage}`
-      );
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'subscriptions', sub.id), updates);
+      if (canWriteAuditAction('UPDATE_PENGIRIMAN')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'UPDATE_PENGIRIMAN',
+            sub.member_nama,
+            `Tahap pengiriman ${sub.package_nama} diperbarui menjadi ${nextStage}`
+          )
+        );
+      }
+      await batch.commit();
       setStatusMessage(
         `Tahap pengiriman paket ${sub.member_nama} (${sub.package_nama}) diperbarui menjadi ${
           DELIVERY_STAGE_OPTIONS.find((o) => o.value === nextStage)?.label || nextStage
@@ -1120,12 +1418,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         }
         batch.update(doc(db, 'subscriptions', s.id), updates);
       });
+      if (canWriteAuditAction('BATCH_MANIFEST_KIRIM')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'BATCH_MANIFEST_KIRIM',
+            `${eligible.length} Paket`,
+            `Memperbarui tahap pengiriman massal ${eligible.length} kontrak ke ${nextStage}`
+          )
+        );
+      }
       await batch.commit();
-      await writeAuditLog(
-        'BATCH_MANIFEST_KIRIM',
-        `${eligible.length} Paket`,
-        `Memperbarui tahap pengiriman massal ${eligible.length} kontrak ke ${nextStage}`
-      );
       setStatusMessage(
         `${eligible.length} paket berhasil diperbarui tahap pengirimannya menjadi "${
           DELIVERY_STAGE_OPTIONS.find((o) => o.value === nextStage)?.label || nextStage
@@ -1137,54 +1440,102 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   };
 
   const handleSaveManualBalance = async (sub: Subscription) => {
-    const val = Number(editBalanceValue);
+    const val = Math.round(Number(editBalanceValue));
     if (!Number.isFinite(val) || val < 0) {
       setStatusMessage('Nominal koreksi saldo tidak valid.');
       return;
     }
     try {
-      const nextStatus: SubscriptionStatus =
-        sub.status === 'diambil'
-          ? 'diambil'
-          : val >= sub.target_nominal
-            ? 'lunas'
-            : 'aktif';
-      await updateDoc(doc(db, 'subscriptions', sub.id), {
-        total_terkumpul: Math.round(val),
-        status: nextStatus,
-        updatedAt: serverTimestamp(),
+      const subRef = doc(db, 'subscriptions', sub.id);
+      const auditRef = doc(collection(db, 'audit_logs'));
+      const result = await runTransaction(db, async (tx) => {
+        const subSnap = await tx.get(subRef);
+        if (!subSnap.exists()) {
+          throw new Error('SUB_NOT_FOUND');
+        }
+        const freshSub = subSnap.data() as Omit<Subscription, 'id'>;
+        const nextStatus: SubscriptionStatus =
+          freshSub.status === 'diambil'
+            ? 'diambil'
+            : val >= freshSub.target_nominal
+              ? 'lunas'
+              : 'aktif';
+
+        tx.update(subRef, {
+          total_terkumpul: val,
+          status: nextStatus,
+          updatedAt: serverTimestamp(),
+        });
+        if (canWriteAuditAction('KOREKSI_SALDO')) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              'KOREKSI_SALDO',
+              freshSub.member_nama,
+              `Koreksi saldo ${freshSub.package_nama}: ${formatRupiah(
+                freshSub.total_terkumpul
+              )} -> ${formatRupiah(val)}`
+            )
+          );
+        }
+        return { freshSub, nextStatus };
       });
-      await writeAuditLog(
-        'KOREKSI_SALDO',
-        sub.member_nama,
-        `Koreksi saldo ${sub.package_nama}: ${formatRupiah(sub.total_terkumpul)} -> ${formatRupiah(val)}`
-      );
       setEditingBalanceSubId(null);
       setStatusMessage(
-        `Saldo kontrak ${sub.member_nama} dikoreksi menjadi ${formatRupiah(val)} (${nextStatus.toUpperCase()}).`
+        `Saldo kontrak ${result.freshSub.member_nama} dikoreksi menjadi ${formatRupiah(
+          val
+        )} (${result.nextStatus.toUpperCase()}).`
       );
     } catch (err) {
+      if (err instanceof Error && err.message === 'SUB_NOT_FOUND') {
+        setStatusMessage('Kontrak member tidak ditemukan di database.');
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${sub.id}`);
     }
   };
 
   const handleDeleteContract = async (subId: string) => {
-    const subObj = subscriptions.find((s) => s.id === subId);
-    if ((subObj?.total_terkumpul || 0) > 0) {
-      setConfirmDeleteSubId(null);
-      setStatusMessage('Kontrak dengan saldo terkumpul (> Rp 0) tidak dapat dihapus demi menjaga integritas audit keuangan.');
-      return;
-    }
     try {
-      await deleteDoc(doc(db, 'subscriptions', subId));
-      await writeAuditLog(
-        'HAPUS_KONTRAK',
-        subObj?.member_nama || subId,
-        `Menghapus kontrak kosong ${subObj?.package_nama || subId}`
-      );
+      const subRef = doc(db, 'subscriptions', subId);
+      const auditRef = doc(collection(db, 'audit_logs'));
+      await runTransaction(db, async (tx) => {
+        const subSnap = await tx.get(subRef);
+        if (!subSnap.exists()) {
+          throw new Error('SUB_NOT_FOUND');
+        }
+        const freshSub = subSnap.data() as Omit<Subscription, 'id'>;
+        if ((freshSub.total_terkumpul || 0) > 0) {
+          throw new Error('NON_ZERO_BALANCE');
+        }
+        tx.delete(subRef);
+        if (canWriteAuditAction('HAPUS_KONTRAK')) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              'HAPUS_KONTRAK',
+              freshSub.member_nama || subId,
+              `Menghapus kontrak kosong ${freshSub.package_nama || subId}`
+            )
+          );
+        }
+      });
       setConfirmDeleteSubId(null);
       setStatusMessage('Kontrak kosong berhasil dihapus dari Firestore.');
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'NON_ZERO_BALANCE') {
+        setConfirmDeleteSubId(null);
+        setStatusMessage(
+          'Kontrak dengan saldo terkumpul (> Rp 0) tidak dapat dihapus demi menjaga integritas audit keuangan.'
+        );
+        return;
+      }
+      if (msg === 'SUB_NOT_FOUND') {
+        setConfirmDeleteSubId(null);
+        setStatusMessage('Kontrak tidak ditemukan atau sudah dihapus.');
+        return;
+      }
       handleFirestoreError(err, OperationType.DELETE, `subscriptions/${subId}`);
     }
   };
@@ -1248,7 +1599,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         ? existingSnap.data().createdAt
         : serverTimestamp();
 
-      await setDoc(ref, {
+      const batch = writeBatch(db);
+      batch.set(ref, {
         nama_paket: pkgFormNama.trim().slice(0, 120),
         kategori: pkgFormKategori,
         sub_kategori: (pkgFormSubKategori.trim() || pkgFormKategori).slice(0, 60),
@@ -1264,6 +1616,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
       });
+      if (canWriteAuditAction(editingPkgId ? 'UBAH_PAKET' : 'TAMBAH_PAKET')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            editingPkgId ? 'UBAH_PAKET' : 'TAMBAH_PAKET',
+            pkgFormNama.trim() || docId,
+            `Simpan katalog paket ${pkgFormKategori} (${formatRupiah(Math.max(1000, Number(pkgFormHarga) || 1000))}).`
+          )
+        );
+      }
+      await batch.commit();
 
       setShowPkgForm(false);
       setStatusMessage(
@@ -1280,7 +1643,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
   const handleDeletePackage = async (pkgId: string) => {
     try {
-      await deleteDoc(doc(db, 'packages', pkgId));
+      const targetPkg = packages.find((p) => p.id === pkgId);
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'packages', pkgId));
+      if (canWriteAuditAction('HAPUS_PAKET')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'HAPUS_PAKET',
+            targetPkg?.nama_paket || pkgId,
+            `Hapus paket katalog (${pkgId}).`
+          )
+        );
+      }
+      await batch.commit();
       setConfirmDeletePkgId(null);
       setStatusMessage('Paket berhasil dihapus dari Firestore.');
     } catch (err) {
@@ -1327,7 +1703,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         ? existingSnap.data().createdAt
         : serverTimestamp();
 
-      await setDoc(ref, {
+      const batch = writeBatch(db);
+      batch.set(ref, {
         kode_agen: agentFormKode.trim().toUpperCase().slice(0, 32),
         nama: agentFormNama.trim().slice(0, 100),
         wilayah: agentFormWilayah,
@@ -1338,6 +1715,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
       });
+      if (canWriteAuditAction(editingAgentId ? 'UBAH_DIREKTORI_AGEN' : 'TAMBAH_DIREKTORI_AGEN')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            editingAgentId ? 'UBAH_DIREKTORI_AGEN' : 'TAMBAH_DIREKTORI_AGEN',
+            agentFormNama.trim() || docId,
+            `Direktori agen ${agentFormKode.trim().toUpperCase()} (${agentFormWilayah}).`
+          )
+        );
+      }
+      await batch.commit();
 
       setShowAgentForm(false);
       setStatusMessage(
@@ -1359,7 +1747,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       const createdAtVal = existingSnap.exists()
         ? existingSnap.data().createdAt
         : serverTimestamp();
-      await setDoc(ref, {
+      const batch = writeBatch(db);
+      batch.set(ref, {
         kode_agen: agt.kode_agen,
         nama: agt.nama,
         wilayah: agt.wilayah,
@@ -1370,6 +1759,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
       });
+      if (canWriteAuditAction('TOGGLE_STATUS_AGEN')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'TOGGLE_STATUS_AGEN',
+            agt.nama,
+            `Ubah status agen ${agt.kode_agen} menjadi ${!agt.aktif ? 'AKTIF' : 'NONAKTIF'}.`
+          )
+        );
+      }
+      await batch.commit();
       setStatusMessage(
         `Status agen ${agt.nama} diubah menjadi ${!agt.aktif ? 'AKTIF' : 'NONAKTIF'}.`
       );
@@ -1380,7 +1780,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
   const handleDeleteAgent = async (agentId: string) => {
     try {
-      await deleteDoc(doc(db, 'agents', agentId));
+      const targetAgent = agents.find((a) => a.id === agentId);
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'agents', agentId));
+      if (canWriteAuditAction('HAPUS_DIREKTORI_AGEN')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'HAPUS_DIREKTORI_AGEN',
+            targetAgent?.nama || agentId,
+            `Hapus agen ${targetAgent?.kode_agen || agentId} dari direktori.`
+          )
+        );
+      }
+      await batch.commit();
       setConfirmDeleteAgentId(null);
       setStatusMessage('Agen berhasil dihapus dari direktori Firestore.');
     } catch (err) {
@@ -1388,7 +1801,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  // --- Handler: Warehouse QR Pickup ---
+  // --- Handler: Warehouse QR Pickup (Atomic Firestore Transaction) ---
   const handleMarkQrPickedUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = qrInput.trim();
@@ -1399,22 +1812,49 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       setStatusMessage(`Token QR "${token}" tidak ditemukan dalam database kontrak.`);
       return;
     }
-    if (matched.status !== 'lunas') {
-      setStatusMessage(
-        `Kontrak ${matched.member_nama} berstatus "${matched.status}" (belum lunas atau sudah diambil).`
-      );
-      return;
-    }
     try {
-      await updateDoc(doc(db, 'subscriptions', matched.id), {
-        status: 'diambil',
-        updatedAt: serverTimestamp(),
+      const subRef = doc(db, 'subscriptions', matched.id);
+      await runTransaction(db, async (tx) => {
+        const subSnap = await tx.get(subRef);
+        if (!subSnap.exists()) {
+          throw new Error('SUBSCRIPTION_NOT_FOUND');
+        }
+        const freshSub = subSnap.data() as Subscription;
+        if (freshSub.status !== 'lunas') {
+          throw new Error(`NOT_LUNAS:${freshSub.status}`);
+        }
+        tx.update(subRef, {
+          status: 'diambil',
+          updatedAt: serverTimestamp(),
+        });
+        if (canWriteAuditAction('SERAH_TERIMA_QR')) {
+          tx.set(
+            doc(collection(db, 'audit_logs')),
+            buildAuditLogPayload(
+              'SERAH_TERIMA_QR',
+              freshSub.member_nama,
+              `Serah terima paket ${freshSub.package_nama} via QR (${freshSub.qr_code_token}).`
+            )
+          );
+        }
       });
       setQrInput('');
       setStatusMessage(
         `Serah terima paket ${matched.package_nama} atas nama ${matched.member_nama} selesai!`
       );
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'SUBSCRIPTION_NOT_FOUND') {
+        setStatusMessage('Kontrak member tidak ditemukan di database.');
+        return;
+      }
+      if (msg.startsWith('NOT_LUNAS:')) {
+        const currentStatus = msg.split(':')[1] || matched.status;
+        setStatusMessage(
+          `Kontrak ${matched.member_nama} berstatus "${currentStatus}" (belum lunas atau sudah diambil).`
+        );
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${matched.id}`);
     }
   };
@@ -1422,10 +1862,23 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   // --- Handler: Contact Messages Inbox ---
   const handleMarkMessageReplied = async (msg: ContactMessage) => {
     try {
-      await updateDoc(doc(db, 'contact_messages', msg.id), {
-        status: msg.status === 'baru' ? 'dibalas' : 'baru',
+      const nextStatus = msg.status === 'baru' ? 'dibalas' : 'baru';
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'contact_messages', msg.id), {
+        status: nextStatus,
         updatedAt: serverTimestamp(),
       });
+      if (canWriteAuditAction('UPDATE_PESAN_KONTAK')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'UPDATE_PESAN_KONTAK',
+            msg.nama,
+            `Ubah status pesan kontak menjadi ${nextStatus.toUpperCase()}.`
+          )
+        );
+      }
+      await batch.commit();
       setStatusMessage(
         `Status pesan dari ${msg.nama} diperbarui menjadi ${
           msg.status === 'baru' ? 'DIBALAS' : 'BARU'
@@ -1438,7 +1891,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
   const handleDeleteContactMessage = async (msgId: string) => {
     try {
-      await deleteDoc(doc(db, 'contact_messages', msgId));
+      const targetMsg = contactMessages.find((m) => m.id === msgId);
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'contact_messages', msgId));
+      if (canWriteAuditAction('HAPUS_PESAN_KONTAK')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'HAPUS_PESAN_KONTAK',
+            targetMsg?.nama || msgId,
+            `Hapus pesan kotak masuk kontak (${msgId}).`
+          )
+        );
+      }
+      await batch.commit();
       setConfirmDeleteMsgId(null);
       setStatusMessage('Pesan kontak berhasil dihapus dari Firestore.');
     } catch (err) {
@@ -1446,7 +1912,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  // --- Handler: User RBAC Role & Kode Agen ---
+  // --- Handler: User RBAC Role & Kode Agen (Atomic with Audit Log) ---
   const handleUpdateUserRole = async (
     targetUser: UserProfile,
     newRole: UserRole,
@@ -1461,17 +1927,24 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             ? `AGT-${newWilayah.slice(0, 3).toUpperCase()}-${targetUser.uid.slice(0, 3).toUpperCase()}`
             : targetUser.kode_agen || '';
 
-      await updateDoc(doc(db, 'users', targetUser.uid), {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'users', targetUser.uid), {
         role: newRole,
         wilayah: newWilayah,
         kode_agen: nextKode,
         updatedAt: serverTimestamp(),
       });
-      await writeAuditLog(
-        'UBAH_ROLE_RBAC',
-        targetUser.nama,
-        `Role ${targetUser.role} -> ${newRole} | Wilayah ${targetUser.wilayah} -> ${newWilayah}`
-      );
+      if (canWriteAuditAction('UBAH_ROLE_RBAC')) {
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'UBAH_ROLE_RBAC',
+            targetUser.nama,
+            `Role ${targetUser.role} -> ${newRole} | Wilayah ${targetUser.wilayah} -> ${newWilayah}`
+          )
+        );
+      }
+      await batch.commit();
       setStatusMessage(
         `Peran ${targetUser.nama} diperbarui menjadi ${newRole.toUpperCase()} (${newWilayah}).`
       );
@@ -1480,7 +1953,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  // --- Handler: Approve / Reject New Agent Application ---
+  // --- Handler: Approve / Reject New Agent Application (Atomic with Audit Log) ---
   const handleApproveAgentApplication = async (app: AgentApplication) => {
     if (!userProfile || !isAdmin) return;
     const suggested = `AGT-${app.wilayah.slice(0, 3).toUpperCase()}-${app.applicant_uid.slice(0, 4).toUpperCase()}`;
@@ -1535,13 +2008,16 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'SETUJUI_AGEN_BARU',
+          app.nama,
+          `Disetujui menjadi Agen ${app.wilayah} (${app.kecamatan}) dengan kode ${kodeAgen}`
+        )
+      );
       await batch.commit();
 
-      await writeAuditLog(
-        'SETUJUI_AGEN_BARU',
-        app.nama,
-        `Disetujui menjadi Agen ${app.wilayah} (${app.kecamatan}) dengan kode ${kodeAgen}`
-      );
       setStatusMessage(
         `${app.nama} resmi disetujui sebagai Agen ${app.wilayah} (${kodeAgen}) & ditambahkan ke direktori publik.`
       );
@@ -1577,13 +2053,16 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'TOLAK_AGEN_BARU',
+          app.nama,
+          `Pengajuan agen ${app.wilayah} (${app.kecamatan}) ditolak`
+        )
+      );
       await batch.commit();
 
-      await writeAuditLog(
-        'TOLAK_AGEN_BARU',
-        app.nama,
-        `Pengajuan agen ${app.wilayah} (${app.kecamatan}) ditolak`
-      );
       setStatusMessage(`Pengajuan agen ${app.nama} ditandai ditolak.`);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `agent_applications/${app.id}`);
@@ -1725,6 +2204,48 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         payload.grup_arisan = offGrupArisan.trim().slice(0, 80);
       }
       const createdRef = await addDoc(collection(db, 'subscriptions'), payload);
+
+      const offlineNotifs: Record<string, unknown>[] = [
+        {
+          recipient_type: 'agen',
+          recipient_uid:
+            assignedAgenId.startsWith('agt_') && assignedAgenKode
+              ? assignedAgenKode
+              : assignedAgenId,
+          wilayah: effectiveWilayah,
+          kategori: 'kontrak',
+          judul: `Kontrak Offline Baru: ${cleanName}`,
+          pesan: `Member offline ${cleanName} (${pkg.nama_paket}, ${formatRupiah(setoranNominal)}/${offFrekuensi}) terdaftar dengan QR ${qrToken}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+      ];
+      if (!isAdmin) {
+        offlineNotifs.push({
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: effectiveWilayah,
+          kategori: 'kontrak',
+          judul: `Pendaftaran Offline Agen: ${cleanName}`,
+          pesan: `${userProfile.nama} (${effectiveWilayah}) mendaftarkan member offline ${cleanName} untuk paket ${pkg.nama_paket}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'kontrak',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await Promise.allSettled(
+        offlineNotifs.map((n) => addDoc(collection(db, 'notifications'), n))
+      );
+
       setSelectedSubId(createdRef.id);
       setShowOfflineModal(false);
       setStatusMessage(
@@ -1762,6 +2283,42 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+
+      const settleLabel =
+        settleJenis === 'setor_tunai_pusat' ? 'Setor Tunai ke Pusat' : 'Klaim Pencairan Komisi';
+      await Promise.allSettled([
+        addDoc(collection(db, 'notifications'), {
+          recipient_type: 'agen',
+          recipient_uid: userProfile.uid,
+          wilayah: userProfile.wilayah,
+          kategori: 'setoran',
+          judul: `${settleLabel} Terkirim`,
+          pesan: `Pengajuan ${settleLabel} sebesar ${formatRupiah(nominal)} sedang menunggu validasi Admin Pusat.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }),
+        addDoc(collection(db, 'notifications'), {
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: userProfile.wilayah,
+          kategori: 'setoran',
+          judul: `${settleLabel}: ${userProfile.nama}`,
+          pesan: `Agen ${userProfile.nama} (${userProfile.wilayah}) mengajukan ${settleLabel} sebesar ${formatRupiah(nominal)}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'komisi',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }),
+      ]);
+
       setStatusMessage(
         `Pengajuan ${
           settleJenis === 'setor_tunai_pusat' ? 'Setor Tunai Pusat' : 'Klaim Pencairan Komisi'
@@ -1780,22 +2337,76 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   ) => {
     if (!userProfile) return;
     try {
-      await updateDoc(doc(db, 'agent_settlements', item.id), {
-        status: decision,
-        validated_by: userProfile.nama.slice(0, 100),
-        updatedAt: serverTimestamp(),
+      const settlementRef = doc(db, 'agent_settlements', item.id);
+      const auditRef = doc(collection(db, 'audit_logs'));
+
+      const freshItem = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(settlementRef);
+        if (!snap.exists()) {
+          throw new Error('SETTLEMENT_NOT_FOUND');
+        }
+        const fresh = snap.data() as Omit<AgentSettlement, 'id'>;
+        if (fresh.status !== 'pending') {
+          throw new Error(`ALREADY_PROCESSED:${fresh.status}`);
+        }
+
+        tx.update(settlementRef, {
+          status: decision,
+          validated_by: userProfile.nama.slice(0, 100),
+          updatedAt: serverTimestamp(),
+        });
+        if (canWriteAuditAction('VALIDASI_KAS_AGEN')) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              'VALIDASI_KAS_AGEN',
+              fresh.agen_nama,
+              `${fresh.jenis} sebesar ${formatRupiah(fresh.nominal)} -> ${decision.toUpperCase()}`
+            )
+          );
+        }
+        return fresh;
       });
-      await writeAuditLog(
-        'VALIDASI_KAS_AGEN',
-        item.agen_nama,
-        `${item.jenis} sebesar ${formatRupiah(item.nominal)} -> ${decision.toUpperCase()}`
-      );
+
+      const settleLabel =
+        freshItem.jenis === 'setor_tunai_pusat' ? 'Setor Tunai Pusat' : 'Pencairan Komisi';
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          recipient_type: 'agen',
+          recipient_uid: freshItem.agen_id,
+          wilayah: freshItem.wilayah,
+          kategori: 'setoran',
+          judul: `${settleLabel} ${decision === 'verified' ? 'Divalidasi' : 'Ditolak'}`,
+          pesan: `Pengajuan ${settleLabel} sebesar ${formatRupiah(freshItem.nominal)} telah ${
+            decision === 'verified' ? 'disetujui' : 'ditolak'
+          } oleh ${userProfile.nama}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'komisi',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch {
+        // Non-blocking notification send
+      }
       setStatusMessage(
-        `Pengajuan ${item.agen_nama} (${formatRupiah(item.nominal)}) telah ${
+        `Pengajuan ${freshItem.agen_nama} (${formatRupiah(freshItem.nominal)}) telah ${
           decision === 'verified' ? 'DIVALIDASI' : 'DITOLAK'
         }.`
       );
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'SETTLEMENT_NOT_FOUND') {
+        setStatusMessage('Data settlement agen tidak ditemukan.');
+        return;
+      }
+      if (msg.startsWith('ALREADY_PROCESSED:')) {
+        const cur = msg.split(':')[1] || 'diproses';
+        setStatusMessage(`Pengajuan kas agen ini sudah diproses sebelumnya (${cur.toUpperCase()}).`);
+        return;
+      }
       handleFirestoreError(err, OperationType.UPDATE, `agent_settlements/${item.id}`);
     }
   };
@@ -1816,8 +2427,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
     setSavingInv(true);
     try {
+      const batch = writeBatch(db);
       if (invEditId) {
-        await updateDoc(doc(db, 'warehouse_inventory', invEditId), {
+        batch.update(doc(db, 'warehouse_inventory', invEditId), {
           item_nama: cleanName,
           stok_tersedia: stokNum,
           harga_beli_satuan: hargaNum,
@@ -1826,14 +2438,18 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           updated_by: userProfile.nama.slice(0, 100),
           updatedAt: serverTimestamp(),
         });
-        await writeAuditLog(
-          'UPDATE_STOK_HPP',
-          cleanName,
-          `Stok: ${stokNum} ${cleanSatuan}, HPP: ${formatRupiah(hargaNum)}`
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'UPDATE_STOK_HPP',
+            cleanName,
+            `Stok: ${stokNum} ${cleanSatuan}, HPP: ${formatRupiah(hargaNum)}`
+          )
         );
+        await batch.commit();
         setStatusMessage(`Stok & HPP "${cleanName}" berhasil diperbarui.`);
       } else {
-        await addDoc(collection(db, 'warehouse_inventory'), {
+        batch.set(doc(collection(db, 'warehouse_inventory')), {
           item_nama: cleanName,
           stok_tersedia: stokNum,
           harga_beli_satuan: hargaNum,
@@ -1843,11 +2459,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-        await writeAuditLog(
-          'TAMBAH_STOK_HPP',
-          cleanName,
-          `Stok awal: ${stokNum} ${cleanSatuan}, HPP: ${formatRupiah(hargaNum)}`
+        batch.set(
+          doc(collection(db, 'audit_logs')),
+          buildAuditLogPayload(
+            'TAMBAH_STOK_HPP',
+            cleanName,
+            `Stok awal: ${stokNum} ${cleanSatuan}, HPP: ${formatRupiah(hargaNum)}`
+          )
         );
+        await batch.commit();
         setStatusMessage(`Barang gudang "${cleanName}" berhasil ditambahkan.`);
       }
       setInvEditId(null);
@@ -1866,12 +2486,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const handleDeleteInventoryItem = async (id: string) => {
     const item = warehouseInventory.find((w) => w.id === id);
     try {
-      await deleteDoc(doc(db, 'warehouse_inventory', id));
-      await writeAuditLog(
-        'HAPUS_STOK_HPP',
-        item?.item_nama || id,
-        `Menghapus item stok gudang ${item?.item_nama || id}`
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'warehouse_inventory', id));
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'HAPUS_STOK_HPP',
+          item?.item_nama || id,
+          `Menghapus item stok gudang ${item?.item_nama || id}`
+        )
       );
+      await batch.commit();
       setConfirmDeleteInvId(null);
       setStatusMessage('Item stok gudang berhasil dihapus.');
     } catch (err) {
@@ -1897,7 +2522,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
     setSavingSubNotice(true);
     try {
-      await addDoc(collection(db, 'product_substitutions'), {
+      const batch = writeBatch(db);
+      batch.set(doc(collection(db, 'product_substitutions')), {
         package_id: pkgId || 'all',
         package_nama: pkgNama,
         produk_lama: lama,
@@ -1908,11 +2534,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await writeAuditLog(
-        'SUBSTITUSI_PRODUK',
-        pkgNama,
-        `${lama} -> ${baru} (${alasan})`
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload('SUBSTITUSI_PRODUK', pkgNama, `${lama} -> ${baru} (${alasan})`)
       );
+      await batch.commit();
       setSubNoticeLama('');
       setSubNoticeBaru('');
       setSubNoticeAlasan('');
@@ -1927,12 +2553,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const handleDeleteSubstitutionNotice = async (id: string) => {
     const item = productSubstitutions.find((s) => s.id === id);
     try {
-      await deleteDoc(doc(db, 'product_substitutions', id));
-      await writeAuditLog(
-        'HAPUS_SUBSTITUSI',
-        item?.package_nama || id,
-        `Menghapus info substitusi ${item?.produk_lama || ''} -> ${item?.produk_pengganti || ''}`
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'product_substitutions', id));
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'HAPUS_SUBSTITUSI',
+          item?.package_nama || id,
+          `Menghapus info substitusi ${item?.produk_lama || ''} -> ${item?.produk_pengganti || ''}`
+        )
       );
+      await batch.commit();
       setConfirmDeleteSubNoticeId(null);
       setStatusMessage('Info substitusi produk berhasil dihapus.');
     } catch (err) {
@@ -1960,7 +2591,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     setDrawingPrize(true);
     try {
       const winner = pool[Math.floor(Math.random() * pool.length)];
-      await addDoc(collection(db, 'door_prize_draws'), {
+      const batch = writeBatch(db);
+      batch.set(doc(collection(db, 'door_prize_draws')), {
         hadiah: cleanHadiah.slice(0, 100),
         kupon_kode: winner.kuponKode,
         subscription_id: winner.sub.id,
@@ -1972,11 +2604,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await writeAuditLog(
-        'UNDI_DOOR_PRIZE',
-        winner.sub.member_nama,
-        `Hadiah ${cleanHadiah} (Kupon ${winner.kuponKode})`
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'UNDI_DOOR_PRIZE',
+          winner.sub.member_nama,
+          `Hadiah ${cleanHadiah} (Kupon ${winner.kuponKode})`
+        )
       );
+      await batch.commit();
       setStatusMessage(
         `Selamat! Pemenang ${cleanHadiah}: ${winner.sub.member_nama} (${winner.kuponKode} · ${winner.sub.wilayah}).`
       );
@@ -1990,12 +2626,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const handleDeleteDoorPrize = async (id: string) => {
     const dp = doorPrizeDraws.find((d) => d.id === id);
     try {
-      await deleteDoc(doc(db, 'door_prize_draws', id));
-      await writeAuditLog(
-        'HAPUS_DOOR_PRIZE',
-        dp?.member_nama || id,
-        `Menghapus pemenang Door Prize ${dp?.hadiah || ''} (${dp?.kupon_kode || id})`
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'door_prize_draws', id));
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'HAPUS_DOOR_PRIZE',
+          dp?.member_nama || id,
+          `Menghapus pemenang Door Prize ${dp?.hadiah || ''} (${dp?.kupon_kode || id})`
+        )
       );
+      await batch.commit();
       setConfirmDeletePrizeId(null);
       setStatusMessage('Data pemenang Door Prize berhasil dihapus.');
     } catch (err) {
@@ -2003,10 +2644,38 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  // --- Handler: Save App Public Settings (Bank & Broadcast) ---
+  const handleQrisFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const compressed = await compressQrisImageToDataUrl(file);
+      if (compressed.length > 245000) {
+        setStatusMessage(
+          'Ukuran gambar QRIS terlalu besar setelah kompresi. Gunakan gambar dengan resolusi lebih kecil.'
+        );
+        return;
+      }
+      setSetQrisKode(compressed);
+      setStatusMessage(
+        'Gambar QRIS siap disimpan. Klik "Simpan & Publikasikan" agar aktif di dashboard Agen & Member.'
+      );
+    } catch {
+      setStatusMessage('Gagal memproses file gambar QRIS.');
+    }
+  };
+
+  // --- Handler: Save App Public Settings (Bank, QRIS & Broadcast) ---
   const handleSaveAppSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userProfile || !isAdmin) return;
+    const trimmedQrisKode = setQrisKode.trim();
+    if (trimmedQrisKode.length > 250000) {
+      setStatusMessage(
+        'Ukuran kode atau gambar QRIS melebihi batas (maks 250KB). Perkecil gambar atau gunakan string/URL QRIS.'
+      );
+      return;
+    }
     setSavingSettings(true);
     try {
       const ref = doc(db, 'app_settings', 'public');
@@ -2015,11 +2684,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         ? existingSnap.data().createdAt
         : serverTimestamp();
 
-      await setDoc(ref, {
+      const cleanMerchant = setQrisMerchant.trim().slice(0, 120);
+      const batch = writeBatch(db);
+      batch.set(ref, {
         bank_nama: setBankNama.trim().slice(0, 60) || 'BRI / BCA Resmi',
         bank_rekening: setBankRekening.trim().slice(0, 50) || '0100-01-002345-30-8',
         bank_atas_nama:
           setBankAtasNama.trim().slice(0, 100) || 'PT. SAGITARIUS TRINUNGGAL KARYA',
+        qris_merchant: cleanMerchant,
+        qris_kode: trimmedQrisKode.slice(0, 250000),
         qris_catatan: setQrisCatatan.trim().slice(0, 250),
         pengumuman_judul: setPengJudul.trim().slice(0, 120),
         pengumuman_isi: setPengIsi.trim().slice(0, 600),
@@ -2028,13 +2701,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         createdAt: createdAtVal,
         updatedAt: serverTimestamp(),
       });
-      await writeAuditLog(
-        'UPDATE_PENGATURAN_PUBLIK',
-        setBankNama.trim() || 'Rekening & Info',
-        `Rekening ${setBankRekening.trim()} | Pengumuman aktif: ${setPengAktif ? 'YA' : 'TIDAK'}`
+      batch.set(
+        doc(collection(db, 'audit_logs')),
+        buildAuditLogPayload(
+          'UPDATE_PENGATURAN_PUBLIK',
+          setBankNama.trim() || 'Rekening & QRIS',
+          `Rekening ${setBankRekening.trim()} | QRIS: ${
+            trimmedQrisKode ? (cleanMerchant || 'AKTIF') : 'KOSONG'
+          } | Pengumuman aktif: ${setPengAktif ? 'YA' : 'TIDAK'}`
+        )
       );
+      await batch.commit();
       setStatusMessage(
-        'Pengaturan rekening transfer resmi & papan pengumuman berhasil dipublikasikan ke seluruh dashboard member.'
+        'Pengaturan rekening, kode QRIS resmi & pengumuman berhasil dipublikasikan ke dashboard Member dan Agen.'
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'app_settings/public');
@@ -3809,6 +4488,103 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 />
               </div>
 
+              {settleJenis === 'setor_tunai_pusat' && (
+                <div className="space-y-3 rounded-xl border border-[#C8A053]/50 bg-[#FAF7F2] p-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#381E5A]">
+                      <Building2 className="h-3.5 w-3.5 text-[#C8A053]" />
+                      Rekening &amp; QRIS Resmi Pusat
+                    </span>
+                    <span className="rounded bg-[#0C3328] px-2 py-0.5 text-[10px] font-semibold text-[#E8CA82]">
+                      {appSettings.bank_nama}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-mono-nums text-sm font-bold text-[#381E5A]">
+                        {appSettings.bank_rekening}
+                      </p>
+                      <p className="text-[11px] text-stone-600">
+                        a.n. <strong>{appSettings.bank_atas_nama}</strong>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(appSettings.bank_rekening);
+                        setCopiedBankSettle(true);
+                        setTimeout(() => setCopiedBankSettle(false), 1800);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg border border-[#E4DCCB] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-stone-50 cursor-pointer"
+                    >
+                      {copiedBankSettle ? (
+                        <>
+                          <Check className="h-3 w-3 text-emerald-700" />
+                          <span>Tersalin</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3 w-3" />
+                          <span>Salin Rekening</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {appSettings.qris_kode && appSettings.qris_kode.trim() && (
+                    <div className="flex flex-col gap-2.5 border-t border-[#EFE8D8] pt-2.5 sm:flex-row sm:items-center">
+                      {isSafeImageSource(appSettings.qris_kode) ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewProof(appSettings.qris_kode || null)}
+                          className="shrink-0 self-start rounded-lg border border-[#E4DCCB] bg-white p-1.5 cursor-pointer"
+                          title="Klik untuk memperbesar QRIS"
+                        >
+                          <img
+                            src={appSettings.qris_kode.trim()}
+                            alt="QRIS Resmi Setoran Agen"
+                            className="h-24 w-24 object-contain"
+                          />
+                        </button>
+                      ) : (
+                        <div className="shrink-0 self-start rounded-lg border border-[#E4DCCB] bg-white p-1.5">
+                          <QRCodeSVG value={appSettings.qris_kode.trim()} size={92} level="M" />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1 space-y-1 text-[11px]">
+                        <p className="font-bold text-[#0C3328]">
+                          QRIS Setoran Agen:{' '}
+                          {appSettings.qris_merchant?.trim() || appSettings.bank_atas_nama}
+                        </p>
+                        <p className="text-stone-600">
+                          Scan QRIS resmi ini bila melakukan penyetoran non-tunai/e-wallet ke kas pusat.
+                        </p>
+                        {!isSafeImageSource(appSettings.qris_kode) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(appSettings.qris_kode?.trim() || '');
+                              setCopiedQrisSettle(true);
+                              setTimeout(() => setCopiedQrisSettle(false), 1800);
+                            }}
+                            className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-white px-2 py-0.5 font-semibold text-[#381E5A] cursor-pointer"
+                          >
+                            <Copy className="h-3 w-3" />
+                            <span>{copiedQrisSettle ? 'QRIS Disalin' : 'Salin String QRIS'}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {appSettings.qris_catatan && (
+                    <p className="border-t border-[#EFE8D8] pt-2 text-[11px] text-stone-600">
+                      {appSettings.qris_catatan}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={savingSettlement}
@@ -5258,7 +6034,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         />
       )}
 
-      {/* TAB: PENGATURAN REKENING & PENGUMUMAN PUBLIK (ADMIN ONLY) */}
+      {/* TAB: PENGATURAN REKENING, QRIS & PENGUMUMAN PUBLIK (ADMIN ONLY) */}
       {activeTab === 'pengaturan' && isAdmin && (
         <form
           onSubmit={handleSaveAppSettings}
@@ -5269,10 +6045,10 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               <Settings className="h-5 w-5 text-emerald-900" />
               <div>
                 <h2 className="font-display text-lg font-bold text-stone-900">
-                  Rekening Transfer Resmi Perusahaan
+                  Rekening &amp; QRIS Resmi Perusahaan
                 </h2>
                 <p className="text-xs text-stone-600">
-                  Ditampilkan otomatis di kotak Setor Transfer Bank pada Dashboard Member.
+                  Ditampilkan otomatis untuk setoran di Dashboard Member &amp; Setor Kas Agen. Ganti kapan saja jika rekening atau QRIS mencapai limit.
                 </p>
               </div>
             </div>
@@ -5313,6 +6089,104 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900"
               />
             </div>
+
+            {/* Official QRIS Input (Merchant / NMID + Payload String / Image Upload + Live Preview) */}
+            <div className="space-y-3 rounded-xl border border-[#C8A053]/50 bg-[#FAF7F2] p-4">
+              <div className="flex items-center gap-2">
+                <QrCode className="h-4 w-4 text-[#0C3328]" />
+                <div>
+                  <h3 className="text-xs font-bold text-[#381E5A]">
+                    Kode QRIS Resmi (Setoran Member &amp; Agen)
+                  </h3>
+                  <p className="text-[11px] text-stone-600">
+                    Tempel string payload QRIS (000201...), URL gambar QRIS, atau unggah langsung foto/PNG QRIS cadangan.
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">
+                  Nama Merchant / NMID QRIS <span className="font-normal text-stone-400">(Opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  value={setQrisMerchant}
+                  onChange={(e) => setSetQrisMerchant(e.target.value)}
+                  placeholder="Contoh: PT SAGITARIUS TRINUNGGAL KARYA (ID1025...)"
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700">
+                  Kode Payload QRIS / Link Gambar / File QRIS
+                </label>
+                <textarea
+                  rows={3}
+                  value={
+                    setQrisKode.startsWith('data:image/')
+                      ? '[Gambar QRIS terunggah — klik Hapus atau unggah ulang di bawah untuk mengganti]'
+                      : setQrisKode
+                  }
+                  readOnly={setQrisKode.startsWith('data:image/')}
+                  onChange={(e) => setSetQrisKode(e.target.value)}
+                  placeholder="Tempel kode string QRIS (000201010211...) atau tautan https://..."
+                  className="mt-1 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono-nums text-xs text-stone-900"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#C8A053] bg-white px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-[#EFE8D8]">
+                    <Upload className="h-3.5 w-3.5 text-[#0C3328]" />
+                    <span>{setQrisKode ? 'Ganti Gambar QRIS' : 'Unggah Gambar QRIS (JPG/PNG)'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleQrisFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {setQrisKode.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => setSetQrisKode('')}
+                      className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>Kosongkan QRIS</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {setQrisKode.trim() && (
+                <div className="flex flex-col gap-3 rounded-lg border border-[#E4DCCB] bg-white p-3 sm:flex-row sm:items-center">
+                  {isSafeImageSource(setQrisKode) ? (
+                    <img
+                      src={setQrisKode.trim()}
+                      alt="Pratinjau QRIS Resmi"
+                      className="h-28 w-28 shrink-0 rounded border border-stone-200 object-contain"
+                    />
+                  ) : (
+                    <div className="shrink-0 rounded border border-stone-200 bg-white p-1.5">
+                      <QRCodeSVG value={setQrisKode.trim()} size={112} level="M" />
+                    </div>
+                  )}
+                  <div className="min-w-0 text-xs">
+                    <p className="font-bold text-[#0C3328]">Pratinjau QRIS Aktif</p>
+                    <p className="mt-0.5 text-[11px] text-stone-600">
+                      Merchant:{' '}
+                      <strong>
+                        {setQrisMerchant.trim() || setBankAtasNama.trim() || 'Sagitarius Parcel'}
+                      </strong>
+                    </p>
+                    <p className="mt-1 text-[11px] text-stone-500">
+                      Klik tombol Simpan di sebelah kanan agar QRIS ini langsung muncul untuk Member &amp; Agen.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-stone-700">
                 Catatan / Instruksi Transfer &amp; QRIS
@@ -5382,7 +6256,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 <span>
                   {savingSettings
                     ? 'Menyimpan Perubahan...'
-                    : 'Simpan & Publikasikan ke Dashboard Member'}
+                    : 'Simpan & Publikasikan ke Member & Agen'}
                 </span>
               </button>
             </div>

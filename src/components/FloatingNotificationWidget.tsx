@@ -15,6 +15,8 @@ import {
   MessageSquare,
   Send,
   ShieldCheck,
+  UserCheck,
+  Users,
   Wallet,
   X,
 } from 'lucide-react';
@@ -44,8 +46,12 @@ interface FloatingNotificationWidgetProps {
   onOpenAuth: (mode?: 'login' | 'register_member' | 'register_agent') => void;
 }
 
+type AudienceChannel = 'pengunjung' | 'member' | 'agen';
+
 interface DerivedLiveAlert {
   id: string;
+  channel: AudienceChannel;
+  audienceLabel: string;
   judul: string;
   pesan: string;
   kategori: NotificationCategory;
@@ -56,7 +62,12 @@ interface DerivedLiveAlert {
 function getTimestampMs(ts: unknown): number {
   if (!ts) return 0;
   if (typeof ts === 'number') return ts;
-  if (typeof ts === 'object' && ts !== null && 'toMillis' in ts && typeof (ts as { toMillis: () => number }).toMillis === 'function') {
+  if (
+    typeof ts === 'object' &&
+    ts !== null &&
+    'toMillis' in ts &&
+    typeof (ts as { toMillis: () => number }).toMillis === 'function'
+  ) {
     return (ts as { toMillis: () => number }).toMillis();
   }
   if (typeof ts === 'object' && ts !== null && 'seconds' in ts) {
@@ -78,6 +89,60 @@ function formatRelativeTime(ts: unknown): string {
   });
 }
 
+function getNotificationChannel(n: RealtimeNotification): AudienceChannel {
+  if (
+    n.recipient_type === 'agen' ||
+    n.recipient_type === 'korwil' ||
+    n.recipient_type === 'admin'
+  ) {
+    return 'agen';
+  }
+  if (n.recipient_type === 'broadcast') {
+    return n.recipient_uid === 'all_members' ? 'member' : 'pengunjung';
+  }
+  if (
+    n.kategori === 'setoran' ||
+    n.kategori === 'penarikan' ||
+    n.kategori === 'kontrak'
+  ) {
+    return 'member';
+  }
+  return 'pengunjung';
+}
+
+function getAudienceBadge(n: RealtimeNotification): { label: string; tone: string } {
+  if (n.recipient_type === 'agen') {
+    return {
+      label: 'Agen / Reseller',
+      tone: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+    };
+  }
+  if (n.recipient_type === 'korwil') {
+    return {
+      label: n.wilayah ? `Korwil ${n.wilayah}` : 'Korwil Wilayah',
+      tone: 'border-teal-200 bg-teal-50 text-teal-900',
+    };
+  }
+  if (n.recipient_type === 'admin') {
+    return {
+      label: 'Admin Pusat',
+      tone: 'border-amber-300 bg-amber-50 text-amber-900',
+    };
+  }
+  if (
+    getNotificationChannel(n) === 'member'
+  ) {
+    return {
+      label: 'Member',
+      tone: 'border-purple-200 bg-purple-50 text-[#381E5A]',
+    };
+  }
+  return {
+    label: 'Pengunjung Login',
+    tone: 'border-stone-200 bg-stone-100 text-stone-700',
+  };
+}
+
 export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProps> = ({
   userProfile,
   notifications,
@@ -89,12 +154,38 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
   onNavigateTarget,
   onOpenAuth,
 }) => {
+  const isStaff =
+    userProfile?.role === 'agen' ||
+    userProfile?.role === 'korwil' ||
+    userProfile?.role === 'admin';
+  const isAdmin = userProfile?.role === 'admin';
+
   const [isOpen, setIsOpen] = useState(false);
+  const [audienceTab, setAudienceTab] = useState<AudienceChannel>('member');
   const [filterTab, setFilterTab] = useState<'all' | 'unread'>('all');
   const [showComposer, setShowComposer] = useState(false);
 
+  // Sync default audience tab when account role changes
+  useEffect(() => {
+    if (!userProfile) {
+      setAudienceTab('pengunjung');
+      return;
+    }
+    if (
+      userProfile.role === 'agen' ||
+      userProfile.role === 'korwil' ||
+      userProfile.role === 'admin'
+    ) {
+      setAudienceTab('agen');
+    } else {
+      setAudienceTab('member');
+    }
+  }, [userProfile?.uid, userProfile?.role]);
+
   // Admin quick notification composer state
-  const [targetMode, setTargetMode] = useState<'broadcast' | 'korwil' | 'user'>('broadcast');
+  const [targetMode, setTargetMode] = useState<
+    'broadcast_visitor' | 'broadcast_member' | 'all_agents' | 'korwil' | 'user'
+  >('broadcast_visitor');
   const [targetWilayah, setTargetWilayah] = useState<WilayahPriangan>('Tasikmalaya');
   const [targetUserId, setTargetUserId] = useState('');
   const [notifTitle, setNotifTitle] = useState('');
@@ -102,7 +193,7 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
   const [sendingNotif, setSendingNotif] = useState(false);
   const [composerFeedback, setComposerFeedback] = useState('');
 
-  // Track locally read IDs for broadcast notifications (and dismissed live banners)
+  // Track locally read IDs for shared broadcast notifications (and dismissed live banners)
   const storageKey = userProfile
     ? `sagitarius_read_notifs_${userProfile.uid}`
     : 'sagitarius_read_notifs_guest';
@@ -126,7 +217,7 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
   }, [storageKey]);
 
   const persistLocalRead = (ids: string[]) => {
-    const unique = Array.from(new Set(ids)).slice(-100);
+    const unique = Array.from(new Set(ids)).slice(-150);
     setLocalReadIds(unique);
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(unique));
@@ -136,23 +227,40 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
   };
 
   // Real-time pop-up toast when new notifications arrive after initial snapshot
-  const [toastNotif, setToastNotif] = useState<{ judul: string; pesan: string } | null>(null);
+  const [toastNotif, setToastNotif] = useState<{
+    channelLabel: string;
+    channel: AudienceChannel;
+    judul: string;
+    pesan: string;
+  } | null>(null);
   const seenIdsRef = useRef<Set<string>>(new Set());
   const initializedRef = useRef(false);
 
-  const isStaff =
-    userProfile?.role === 'agen' ||
-    userProfile?.role === 'korwil' ||
-    userProfile?.role === 'admin';
-  const isAdmin = userProfile?.role === 'admin';
+  useEffect(() => {
+    seenIdsRef.current = new Set();
+    initializedRef.current = false;
+  }, [userProfile?.uid]);
 
-  // Live operational alerts derived from existing real-time onSnapshot streams
+  // Strictly gate Firestore notifications based on user login & role
+  const allowedNotifications = useMemo(() => {
+    if (!userProfile) return [];
+    return notifications.filter((n) => {
+      const ch = getNotificationChannel(n);
+      if (ch === 'agen' && !isStaff) return false;
+      return true;
+    });
+  }, [notifications, userProfile, isStaff]);
+
+  // Live operational & public announcement alerts separated by audience channel
   const liveAlerts = useMemo<DerivedLiveAlert[]>(() => {
+    if (!userProfile) return [];
     const alerts: DerivedLiveAlert[] = [];
 
     if (appSettings.pengumuman_aktif && appSettings.pengumuman_judul) {
       alerts.push({
         id: `live_pengumuman_${appSettings.pengumuman_judul.slice(0, 24)}`,
+        channel: 'pengunjung',
+        audienceLabel: 'Pengunjung Login',
         judul: appSettings.pengumuman_judul,
         pesan: appSettings.pengumuman_isi,
         kategori: 'pengumuman',
@@ -160,18 +268,31 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
       });
     }
 
-    if (isStaff && userProfile) {
+    if (isStaff) {
       const pendingDeps = deposits.filter((d) => {
         if (d.status_verifikasi !== 'pending') return false;
-        if (userProfile.role === 'agen') return d.agen_id === userProfile.uid;
+        if (userProfile.role === 'agen') {
+          return (
+            d.agen_id === userProfile.uid ||
+            (Boolean(userProfile.kode_agen) && d.agen_id === userProfile.kode_agen)
+          );
+        }
         if (userProfile.role === 'korwil') return d.wilayah === userProfile.wilayah;
         return true;
       });
       if (pendingDeps.length > 0) {
         alerts.push({
           id: `live_pending_deps_${pendingDeps.length}`,
+          channel: 'agen',
+          audienceLabel:
+            userProfile.role === 'agen'
+              ? 'Agen / Reseller'
+              : userProfile.role === 'korwil'
+                ? 'Korwil'
+                : 'Admin Pusat',
           judul: `${pendingDeps.length} Transaksi Menunggu Validasi`,
-          pesan: 'Ada pengajuan setoran/penarikan dari member yang perlu diverifikasi di Dashboard.',
+          pesan:
+            'Ada pengajuan setoran/penarikan dari member yang perlu diverifikasi di Dashboard.',
           kategori: 'setoran',
           tautan_view: 'operasional',
           tautan_tab: 'agen',
@@ -184,6 +305,8 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
       if (pendingApps.length > 0) {
         alerts.push({
           id: `live_agent_apps_${pendingApps.length}`,
+          channel: 'agen',
+          audienceLabel: 'Admin Pusat',
           judul: `${pendingApps.length} Pendaftar Agen Baru Menunggu Persetujuan`,
           pesan: `Calon agen terbaru: ${pendingApps[0].nama} (${pendingApps[0].wilayah}). Buka Tab Pengguna & Agen untuk menyetujui.`,
           kategori: 'pendaftaran_agen',
@@ -195,6 +318,8 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
       if (newMsgs.length > 0) {
         alerts.push({
           id: `live_contact_msgs_${newMsgs.length}`,
+          channel: 'agen',
+          audienceLabel: 'Admin Pusat',
           judul: `${newMsgs.length} Pesan Kontak Pengunjung Belum Dibalas`,
           pesan: `Pesan terbaru dari ${newMsgs[0].nama}.`,
           kategori: 'pesan_kontak',
@@ -207,41 +332,64 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
     return alerts;
   }, [appSettings, isStaff, isAdmin, userProfile, deposits, agentApplications, contactMessages]);
 
+  const isSharedBroadcast = (n: RealtimeNotification): boolean =>
+    n.recipient_type === 'broadcast' || n.recipient_uid === 'all_agents';
+
   const isNotifRead = (n: RealtimeNotification): boolean => {
-    if (n.recipient_type === 'broadcast') {
+    if (isSharedBroadcast(n)) {
       return localReadIds.includes(n.id);
     }
     return Boolean(n.is_read) || localReadIds.includes(n.id);
   };
 
-  const unreadFirestoreNotifs = useMemo(
-    () => notifications.filter((n) => !isNotifRead(n)),
-    [notifications, localReadIds]
-  );
+  // Channel unread & total counts for clearly separated tabs
+  const channelCounts = useMemo(() => {
+    const countFor = (ch: AudienceChannel) => {
+      const fsAll = allowedNotifications.filter((n) => getNotificationChannel(n) === ch);
+      const fsUnread = fsAll.filter((n) => !isNotifRead(n));
+      const lvAll = liveAlerts.filter((a) => a.channel === ch);
+      const lvUnread = lvAll.filter((a) => !localReadIds.includes(a.id));
+      return {
+        total: fsAll.length + lvAll.length,
+        unread: fsUnread.length + lvUnread.length,
+      };
+    };
 
-  const unreadLiveAlerts = useMemo(
-    () => liveAlerts.filter((a) => !localReadIds.includes(a.id)),
-    [liveAlerts, localReadIds]
-  );
+    const pengunjung = countFor('pengunjung');
+    const member = countFor('member');
+    const agen = isStaff ? countFor('agen') : { total: 0, unread: 0 };
 
-  const totalUnread = unreadFirestoreNotifs.length + unreadLiveAlerts.length;
+    return {
+      pengunjung,
+      member,
+      agen,
+      totalUnread: pengunjung.unread + member.unread + agen.unread,
+    };
+  }, [allowedNotifications, liveAlerts, localReadIds, isStaff]);
 
   useEffect(() => {
+    if (!userProfile) return;
     if (!initializedRef.current) {
-      notifications.forEach((n) => seenIdsRef.current.add(n.id));
+      allowedNotifications.forEach((n) => seenIdsRef.current.add(n.id));
       initializedRef.current = true;
       return;
     }
 
-    const newlyArrived = notifications.find(
+    const newlyArrived = allowedNotifications.find(
       (n) => !seenIdsRef.current.has(n.id) && !isNotifRead(n)
     );
-    notifications.forEach((n) => seenIdsRef.current.add(n.id));
+    allowedNotifications.forEach((n) => seenIdsRef.current.add(n.id));
 
     if (newlyArrived) {
-      setToastNotif({ judul: newlyArrived.judul, pesan: newlyArrived.pesan });
+      const badge = getAudienceBadge(newlyArrived);
+      setToastNotif({
+        channelLabel: badge.label,
+        channel: getNotificationChannel(newlyArrived),
+        judul: newlyArrived.judul,
+        pesan: newlyArrived.pesan,
+      });
     }
-  }, [notifications]);
+  }, [allowedNotifications, userProfile]);
 
   useEffect(() => {
     if (!toastNotif) return;
@@ -252,7 +400,7 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
   const handleMarkAsRead = async (n: RealtimeNotification) => {
     if (isNotifRead(n)) return;
     persistLocalRead([...localReadIds, n.id]);
-    if (n.recipient_type !== 'broadcast') {
+    if (!isSharedBroadcast(n)) {
       try {
         await updateDoc(doc(db, 'notifications', n.id), {
           is_read: true,
@@ -264,14 +412,17 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
     }
   };
 
-  const handleMarkAllRead = async () => {
-    const allIds = [
-      ...notifications.map((n) => n.id),
-      ...liveAlerts.map((a) => a.id),
-    ];
+  const handleMarkChannelRead = async () => {
+    const channelNotifs = allowedNotifications.filter(
+      (n) => getNotificationChannel(n) === audienceTab
+    );
+    const channelAlerts = liveAlerts.filter((a) => a.channel === audienceTab);
+    const allIds = [...channelNotifs.map((n) => n.id), ...channelAlerts.map((a) => a.id)];
     persistLocalRead([...localReadIds, ...allIds]);
 
-    const updatable = unreadFirestoreNotifs.filter((n) => n.recipient_type !== 'broadcast');
+    const updatable = channelNotifs.filter(
+      (n) => !isSharedBroadcast(n) && !isNotifRead(n)
+    );
     await Promise.all(
       updatable.map(async (n) => {
         try {
@@ -299,11 +450,30 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
     let recipientType: NotificationRecipientType = 'broadcast';
     let recipientUid = 'all_signed_in';
     let wilayahVal: WilayahPriangan | undefined;
+    let kategoriVal: NotificationCategory = 'pengumuman';
+    let viewTarget: 'member' | 'operasional' = 'member';
 
-    if (targetMode === 'korwil') {
+    if (targetMode === 'broadcast_visitor') {
+      recipientType = 'broadcast';
+      recipientUid = 'all_signed_in';
+      kategoriVal = 'pengumuman';
+      viewTarget = 'member';
+    } else if (targetMode === 'broadcast_member') {
+      recipientType = 'broadcast';
+      recipientUid = 'all_members';
+      kategoriVal = 'pengumuman';
+      viewTarget = 'member';
+    } else if (targetMode === 'all_agents') {
+      recipientType = 'agen';
+      recipientUid = 'all_agents';
+      kategoriVal = 'sistem';
+      viewTarget = 'operasional';
+    } else if (targetMode === 'korwil') {
       recipientType = 'korwil';
       recipientUid = `korwil_${targetWilayah}`;
       wilayahVal = targetWilayah;
+      kategoriVal = 'sistem';
+      viewTarget = 'operasional';
     } else if (targetMode === 'user') {
       const selected = allUsers.find((u) => u.uid === targetUserId) || allUsers[0];
       if (!selected) {
@@ -313,6 +483,8 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
       recipientType = selected.role === 'agen' ? 'agen' : 'user';
       recipientUid = selected.uid;
       wilayahVal = selected.wilayah;
+      kategoriVal = selected.role === 'agen' ? 'sistem' : 'kontrak';
+      viewTarget = selected.role === 'agen' ? 'operasional' : 'member';
     }
 
     setSendingNotif(true);
@@ -322,10 +494,10 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
         recipient_type: recipientType,
         recipient_uid: recipientUid,
         ...(wilayahVal ? { wilayah: wilayahVal } : {}),
-        kategori: recipientType === 'broadcast' ? 'pengumuman' : 'sistem',
+        kategori: kategoriVal,
         judul: cleanTitle,
         pesan: cleanBody,
-        tautan_view: recipientType === 'user' ? 'member' : 'operasional',
+        tautan_view: viewTarget,
         sender_uid: userProfile.uid,
         sender_nama: userProfile.nama,
         is_read: false,
@@ -356,37 +528,59 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
     if (kat === 'pesan_kontak') {
       return <MessageSquare className="h-4 w-4 text-sky-700" />;
     }
+    if (kat === 'kontrak') {
+      return <UserCheck className="h-4 w-4 text-[#0C3328]" />;
+    }
     return <ShieldCheck className="h-4 w-4 text-[#0C3328]" />;
   };
 
-  const visibleNotifications = useMemo(() => {
-    if (filterTab === 'unread') return unreadFirestoreNotifs;
-    return notifications;
-  }, [filterTab, notifications, unreadFirestoreNotifs]);
-
   const visibleLiveAlerts = useMemo(() => {
-    if (filterTab === 'unread') return unreadLiveAlerts;
-    return liveAlerts;
-  }, [filterTab, liveAlerts, unreadLiveAlerts]);
+    return liveAlerts.filter((a) => {
+      if (a.channel !== audienceTab) return false;
+      if (filterTab === 'unread') return !localReadIds.includes(a.id);
+      return true;
+    });
+  }, [liveAlerts, audienceTab, filterTab, localReadIds]);
+
+  const visibleNotifications = useMemo(() => {
+    return allowedNotifications.filter((n) => {
+      if (getNotificationChannel(n) !== audienceTab) return false;
+      if (filterTab === 'unread') return !isNotifRead(n);
+      return true;
+    });
+  }, [allowedNotifications, audienceTab, filterTab, localReadIds]);
+
+  const activeChannelUnread = channelCounts[audienceTab].unread;
+  const activeChannelTotal = channelCounts[audienceTab].total;
+
+  const emptyChannelText =
+    audienceTab === 'agen'
+      ? 'Belum ada notifikasi transaksi agen, validasi setoran member, atau kas operasional.'
+      : audienceTab === 'member'
+        ? 'Belum ada notifikasi setoran, penarikan, atau kontrak tabungan member Anda.'
+        : 'Belum ada info umum, pengumuman, atau status akun untuk pengunjung login.';
 
   return (
     <div className="fixed right-4 bottom-4 z-40 flex flex-col items-end gap-2.5 sm:right-6 sm:bottom-6 no-print">
       {/* Real-time pop-up alert bubble when a new message arrives */}
-      {toastNotif && !isOpen && (
+      {toastNotif && !isOpen && userProfile && (
         <div className="w-72 sm:w-80 rounded-2xl border border-[#C8A053] bg-white p-3.5 shadow-xl">
           <div className="flex items-start justify-between gap-2">
             <button
               type="button"
               onClick={() => {
+                setAudienceTab(toastNotif.channel);
                 setToastNotif(null);
                 setIsOpen(true);
               }}
               className="flex-1 text-left cursor-pointer"
             >
-              <p className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#0C3328]">
+              <div className="flex items-center gap-1.5">
                 <Bell className="h-3.5 w-3.5 text-[#C8A053]" />
-                Notifikasi Baru
-              </p>
+                <span className="text-[10px] font-bold text-[#0C3328]">
+                  Notifikasi {toastNotif.channelLabel}
+                </span>
+              </div>
               <p className="mt-1 text-xs font-bold text-[#381E5A]">{toastNotif.judul}</p>
               <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-stone-600">
                 {toastNotif.pesan}
@@ -407,7 +601,7 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
       {/* Floating Notification Drawer / Panel */}
       {isOpen && (
         <div
-          className="flex max-h-[76vh] w-[calc(100vw-2rem)] sm:w-96 flex-col overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-white shadow-2xl"
+          className="flex max-h-[78vh] w-[calc(100vw-2rem)] sm:w-[410px] flex-col overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-white shadow-2xl"
           role="dialog"
           aria-label="Pusat Pesan & Notifikasi Realtime"
         >
@@ -419,12 +613,20 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
               </span>
               <div>
                 <h3 className="font-display text-sm font-bold text-[#E8CA82]">
-                  Pesan &amp; Notifikasi Realtime
+                  Notifikasi Realtime
                 </h3>
                 <p className="text-[10px] text-stone-300">
                   {userProfile
-                    ? `${userProfile.nama} · ${userProfile.role.toUpperCase()}`
-                    : 'Info & Pengumuman Resmi'}
+                    ? `${userProfile.nama} · ${
+                        userProfile.role === 'agen'
+                          ? 'Agen / Reseller'
+                          : userProfile.role === 'korwil'
+                            ? 'Korwil'
+                            : userProfile.role === 'admin'
+                              ? 'Admin Pusat'
+                              : 'Pengunjung & Member Login'
+                      }`
+                    : 'Pengunjung Belum Login'}
                 </p>
               </div>
             </div>
@@ -438,51 +640,142 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
             </button>
           </div>
 
-          {/* Filter & Actions Bar */}
-          <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#FAF7F2] px-4 py-2 text-[11px]">
-            <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-white p-0.5 font-semibold">
-              <button
-                type="button"
-                onClick={() => setFilterTab('all')}
-                className={`rounded-md px-2.5 py-1 cursor-pointer ${
-                  filterTab === 'all' ? 'bg-[#381E5A] text-white' : 'text-stone-600'
-                }`}
-              >
-                Semua ({notifications.length + liveAlerts.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('unread')}
-                className={`rounded-md px-2.5 py-1 cursor-pointer ${
-                  filterTab === 'unread' ? 'bg-[#381E5A] text-white' : 'text-stone-600'
-                }`}
-              >
-                Belum Dibaca ({totalUnread})
-              </button>
-            </div>
+          {/* Separated Audience Channel Tabs (Signed-in Users Only) */}
+          {userProfile && (
+            <div className="border-b border-[#E4DCCB] bg-white px-3 pt-2.5 pb-2">
+              <div className={`grid gap-1.5 ${isStaff ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                <button
+                  type="button"
+                  onClick={() => setAudienceTab('pengunjung')}
+                  className={`flex items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition cursor-pointer ${
+                    audienceTab === 'pengunjung'
+                      ? 'border-[#381E5A] bg-[#381E5A] text-white shadow-xs'
+                      : 'border-[#E4DCCB] bg-[#FAF7F2] text-stone-700 hover:bg-stone-100'
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Pengunjung</span>
+                  {channelCounts.pengunjung.unread > 0 && (
+                    <span
+                      className={`ml-0.5 rounded-full px-1.5 py-0.5 font-mono-nums text-[9px] font-bold ${
+                        audienceTab === 'pengunjung'
+                          ? 'bg-[#C8A053] text-[#1E1032]'
+                          : 'bg-rose-600 text-white'
+                      }`}
+                    >
+                      {channelCounts.pengunjung.unread}
+                    </span>
+                  )}
+                </button>
 
-            <div className="flex items-center gap-2">
-              {totalUnread > 0 && (
                 <button
                   type="button"
-                  onClick={() => void handleMarkAllRead()}
-                  className="inline-flex items-center gap-1 font-semibold text-[#0C3328] hover:underline cursor-pointer"
+                  onClick={() => setAudienceTab('member')}
+                  className={`flex items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition cursor-pointer ${
+                    audienceTab === 'member'
+                      ? 'border-[#381E5A] bg-[#381E5A] text-white shadow-xs'
+                      : 'border-[#E4DCCB] bg-[#FAF7F2] text-stone-700 hover:bg-stone-100'
+                  }`}
                 >
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  <span>Baca Semua</span>
+                  <Wallet className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Member</span>
+                  {channelCounts.member.unread > 0 && (
+                    <span
+                      className={`ml-0.5 rounded-full px-1.5 py-0.5 font-mono-nums text-[9px] font-bold ${
+                        audienceTab === 'member'
+                          ? 'bg-[#C8A053] text-[#1E1032]'
+                          : 'bg-rose-600 text-white'
+                      }`}
+                    >
+                      {channelCounts.member.unread}
+                    </span>
+                  )}
                 </button>
-              )}
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setShowComposer((v) => !v)}
-                  className="rounded-md bg-[#0C3328] px-2 py-1 font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
-                >
-                  {showComposer ? 'Tutup' : '+ Kirim'}
-                </button>
-              )}
+
+                {isStaff && (
+                  <button
+                    type="button"
+                    onClick={() => setAudienceTab('agen')}
+                    className={`flex items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-bold transition cursor-pointer ${
+                      audienceTab === 'agen'
+                        ? 'border-[#0C3328] bg-[#0C3328] text-[#E8CA82] shadow-xs'
+                        : 'border-[#E4DCCB] bg-[#FAF7F2] text-stone-700 hover:bg-stone-100'
+                    }`}
+                  >
+                    <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Agen / Reseller</span>
+                    {channelCounts.agen.unread > 0 && (
+                      <span
+                        className={`ml-0.5 rounded-full px-1.5 py-0.5 font-mono-nums text-[9px] font-bold ${
+                          audienceTab === 'agen'
+                            ? 'bg-[#C8A053] text-[#1E1032]'
+                            : 'bg-rose-600 text-white'
+                        }`}
+                      >
+                        {channelCounts.agen.unread}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              <p className="mt-1.5 text-[10px] text-stone-500">
+                {audienceTab === 'pengunjung'
+                  ? 'Info umum, pengumuman resmi & status akun pengunjung yang sudah login.'
+                  : audienceTab === 'member'
+                    ? 'Aktivitas transaksi pembayaran, setoran, penarikan & kontrak tabungan Member.'
+                    : 'Setoran masuk member, validasi pembayaran, kontrak baru & settlement Agen/Reseller.'}
+              </p>
             </div>
-          </div>
+          )}
+
+          {/* Filter & Actions Bar (Signed-in Users Only) */}
+          {userProfile && (
+            <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#FAF7F2] px-4 py-2 text-[11px]">
+              <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-white p-0.5 font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('all')}
+                  className={`rounded-md px-2.5 py-1 cursor-pointer ${
+                    filterTab === 'all' ? 'bg-[#381E5A] text-white' : 'text-stone-600'
+                  }`}
+                >
+                  Semua ({activeChannelTotal})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterTab('unread')}
+                  className={`rounded-md px-2.5 py-1 cursor-pointer ${
+                    filterTab === 'unread' ? 'bg-[#381E5A] text-white' : 'text-stone-600'
+                  }`}
+                >
+                  Belum Dibaca ({activeChannelUnread})
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {activeChannelUnread > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void handleMarkChannelRead()}
+                    className="inline-flex items-center gap-1 font-semibold text-[#0C3328] hover:underline cursor-pointer"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                    <span>Baca Tab Ini</span>
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setShowComposer((v) => !v)}
+                    className="rounded-md bg-[#0C3328] px-2 py-1 font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                  >
+                    {showComposer ? 'Tutup' : '+ Kirim'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Admin Quick Realtime Broadcast / Direct Message Composer */}
           {isAdmin && showComposer && (
@@ -495,11 +788,20 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
                 <select
                   value={targetMode}
                   onChange={(e) =>
-                    setTargetMode(e.target.value as 'broadcast' | 'korwil' | 'user')
+                    setTargetMode(
+                      e.target.value as
+                        | 'broadcast_visitor'
+                        | 'broadcast_member'
+                        | 'all_agents'
+                        | 'korwil'
+                        | 'user'
+                    )
                   }
                   className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-[11px] font-semibold"
                 >
-                  <option value="broadcast">Semua Pengguna</option>
+                  <option value="broadcast_visitor">Pengunjung Login (Umum)</option>
+                  <option value="broadcast_member">Semua Member</option>
+                  <option value="all_agents">Semua Agen / Reseller</option>
                   <option value="korwil">Korwil Wilayah</option>
                   <option value="user">Member / Agen Spesifik</option>
                 </select>
@@ -567,166 +869,187 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
 
           {/* Scrollable Notification Feed */}
           <div className="flex-1 divide-y divide-stone-100 overflow-y-auto">
-            {!userProfile && (
-              <div className="bg-[#FAF7F2] p-4 text-xs">
-                <p className="font-bold text-[#381E5A]">
-                  Masuk untuk Notifikasi Tabungan &amp; Pendaftaran Agen Realtime
-                </p>
-                <p className="mt-1 text-[11px] text-stone-600">
-                  Dapatkan pemberitahuan langsung saat setoran diverifikasi, status agen disetujui, atau ada pengumuman wilayah.
-                </p>
-                <div className="mt-2.5 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOpen(false);
-                      onOpenAuth('login');
-                    }}
-                    className="rounded-lg bg-[#381E5A] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#492974] cursor-pointer"
-                  >
-                    Masuk Akun
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsOpen(false);
-                      onOpenAuth('register_agent');
-                    }}
-                    className="rounded-lg border border-[#0C3328] px-3 py-1.5 text-[11px] font-semibold text-[#0C3328] hover:bg-emerald-50 cursor-pointer"
-                  >
-                    Daftar Agen Baru
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {visibleLiveAlerts.map((alert) => {
-              const read = localReadIds.includes(alert.id);
-              return (
-                <div
-                  key={alert.id}
-                  className={`p-3.5 transition ${read ? 'bg-white' : 'bg-amber-50/60'}`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#E4DCCB] bg-[#FAF7F2]">
-                      {renderCategoryIcon(alert.kategori)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold text-[#381E5A]">{alert.judul}</p>
-                        <span className="shrink-0 text-[10px] font-semibold text-amber-800">
-                          Langsung
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-stone-600">
-                        {alert.pesan}
-                      </p>
-                      <div className="mt-2 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            persistLocalRead([...localReadIds, alert.id]);
-                            setIsOpen(false);
-                            onNavigateTarget(alert.tautan_view, alert.tautan_tab);
-                          }}
-                          className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#0C3328] hover:underline cursor-pointer"
-                        >
-                          <span>Buka Menu</span>
-                          <ChevronRight className="h-3 w-3" />
-                        </button>
-                        {!read && (
-                          <button
-                            type="button"
-                            onClick={() => persistLocalRead([...localReadIds, alert.id])}
-                            className="text-[11px] text-stone-500 hover:text-stone-800 cursor-pointer"
-                          >
-                            Tandai dibaca
-                          </button>
-                        )}
-                      </div>
-                    </div>
+            {!userProfile ? (
+              <div className="space-y-3 bg-[#FAF7F2] p-5 text-xs">
+                <div className="rounded-xl border border-[#E4DCCB] bg-white p-3.5">
+                  <p className="font-bold text-[#381E5A]">
+                    Silakan Masuk untuk Mengaktifkan Notifikasi Realtime
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-stone-600">
+                    Notifikasi dipisahkan otomatis sesuai akun Anda: info umum pengunjung yang sudah login, transaksi setoran/penarikan Member, serta validasi pembayaran khusus Agen &amp; Reseller.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOpen(false);
+                        onOpenAuth('login');
+                      }}
+                      className="rounded-lg bg-[#381E5A] px-3.5 py-2 text-[11px] font-semibold text-white hover:bg-[#492974] cursor-pointer"
+                    >
+                      Masuk Akun
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOpen(false);
+                        onOpenAuth('register_member');
+                      }}
+                      className="rounded-lg border border-[#C8A053] bg-white px-3 py-2 text-[11px] font-semibold text-[#381E5A] hover:bg-stone-50 cursor-pointer"
+                    >
+                      Gabung Member
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsOpen(false);
+                        onOpenAuth('register_agent');
+                      }}
+                      className="rounded-lg border border-[#0C3328] px-3 py-2 text-[11px] font-semibold text-[#0C3328] hover:bg-emerald-50 cursor-pointer"
+                    >
+                      Daftar Agen Baru
+                    </button>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              <>
+                {visibleLiveAlerts.map((alert) => {
+                  const read = localReadIds.includes(alert.id);
+                  return (
+                    <div
+                      key={alert.id}
+                      className={`p-3.5 transition ${read ? 'bg-white' : 'bg-amber-50/60'}`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#E4DCCB] bg-[#FAF7F2]">
+                          {renderCategoryIcon(alert.kategori)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-900">
+                              {alert.audienceLabel}
+                            </span>
+                            <span className="shrink-0 text-[10px] font-semibold text-amber-800">
+                              Langsung
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs font-bold text-[#381E5A]">{alert.judul}</p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-stone-600">
+                            {alert.pesan}
+                          </p>
+                          <div className="mt-2 flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                persistLocalRead([...localReadIds, alert.id]);
+                                setIsOpen(false);
+                                onNavigateTarget(alert.tautan_view, alert.tautan_tab);
+                              }}
+                              className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#0C3328] hover:underline cursor-pointer"
+                            >
+                              <span>Buka Menu</span>
+                              <ChevronRight className="h-3 w-3" />
+                            </button>
+                            {!read && (
+                              <button
+                                type="button"
+                                onClick={() => persistLocalRead([...localReadIds, alert.id])}
+                                className="text-[11px] text-stone-500 hover:text-stone-800 cursor-pointer"
+                              >
+                                Tandai dibaca
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
 
-            {visibleNotifications.map((n) => {
-              const read = isNotifRead(n);
-              return (
-                <div
-                  key={n.id}
-                  className={`p-3.5 transition ${read ? 'bg-white' : 'bg-emerald-50/45'}`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#E4DCCB] bg-[#FAF7F2]">
-                      {renderCategoryIcon(n.kategori)}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs font-bold text-stone-900">
-                          {!read && (
+                {visibleNotifications.map((n) => {
+                  const read = isNotifRead(n);
+                  const badge = getAudienceBadge(n);
+                  return (
+                    <div
+                      key={n.id}
+                      className={`p-3.5 transition ${read ? 'bg-white' : 'bg-emerald-50/45'}`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#E4DCCB] bg-[#FAF7F2]">
+                          {renderCategoryIcon(n.kategori)}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
                             <span
-                              className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-600 align-middle"
-                              aria-label="Belum dibaca"
-                            />
-                          )}
-                          {n.judul}
-                        </p>
-                        <span className="shrink-0 text-[10px] text-stone-400">
-                          {formatRelativeTime(n.createdAt)}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-stone-600">
-                        {n.pesan}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-3">
-                        {n.sender_nama && (
-                          <span className="text-[10px] font-medium text-stone-400">
-                            Dari: {n.sender_nama}
-                          </span>
-                        )}
-                        {n.tautan_view && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void handleMarkAsRead(n);
-                              setIsOpen(false);
-                              onNavigateTarget(n.tautan_view!, n.tautan_tab);
-                            }}
-                            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#381E5A] hover:underline cursor-pointer"
-                          >
-                            <span>Lihat Detail</span>
-                            <ChevronRight className="h-3 w-3" />
-                          </button>
-                        )}
-                        {!read && (
-                          <button
-                            type="button"
-                            onClick={() => void handleMarkAsRead(n)}
-                            className="text-[11px] font-medium text-stone-500 hover:text-stone-800 cursor-pointer"
-                          >
-                            Tandai dibaca
-                          </button>
-                        )}
+                              className={`rounded border px-1.5 py-0.5 text-[9px] font-bold ${badge.tone}`}
+                            >
+                              {badge.label}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-stone-400">
+                              {formatRelativeTime(n.createdAt)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs font-bold text-stone-900">
+                            {!read && (
+                              <span
+                                className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-600 align-middle"
+                                aria-label="Belum dibaca"
+                              />
+                            )}
+                            {n.judul}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-relaxed text-stone-600">
+                            {n.pesan}
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
+                            {n.sender_nama && (
+                              <span className="text-[10px] font-medium text-stone-400">
+                                Dari: {n.sender_nama}
+                              </span>
+                            )}
+                            {n.tautan_view && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleMarkAsRead(n);
+                                  setIsOpen(false);
+                                  onNavigateTarget(n.tautan_view!, n.tautan_tab);
+                                }}
+                                className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#381E5A] hover:underline cursor-pointer"
+                              >
+                                <span>Lihat Detail</span>
+                                <ChevronRight className="h-3 w-3" />
+                              </button>
+                            )}
+                            {!read && (
+                              <button
+                                type="button"
+                                onClick={() => void handleMarkAsRead(n)}
+                                className="text-[11px] font-medium text-stone-500 hover:text-stone-800 cursor-pointer"
+                              >
+                                Tandai dibaca
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
 
-            {visibleLiveAlerts.length === 0 && visibleNotifications.length === 0 && (
-              <div className="p-8 text-center">
-                <MessageSquare className="mx-auto h-8 w-8 text-[#C8A053]" />
-                <p className="mt-2 text-xs font-bold text-[#381E5A]">
-                  {filterTab === 'unread'
-                    ? 'Semua pesan & notifikasi sudah dibaca'
-                    : 'Belum ada pesan notifikasi baru'}
-                </p>
-                <p className="mt-1 text-[11px] text-stone-500">
-                  Pembaruan setoran, persetujuan agen, dan pengumuman akan muncul otomatis di sini secara realtime.
-                </p>
-              </div>
+                {visibleLiveAlerts.length === 0 && visibleNotifications.length === 0 && (
+                  <div className="p-8 text-center">
+                    <MessageSquare className="mx-auto h-8 w-8 text-[#C8A053]" />
+                    <p className="mt-2 text-xs font-bold text-[#381E5A]">
+                      {filterTab === 'unread'
+                        ? 'Semua notifikasi di tab ini sudah dibaca'
+                        : 'Belum ada notifikasi di tab ini'}
+                    </p>
+                    <p className="mt-1 text-[11px] text-stone-500">{emptyChannelText}</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -739,10 +1062,10 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
           setToastNotif(null);
           setIsOpen((prev) => !prev);
         }}
-        aria-label={`Notifikasi Realtime (${totalUnread} belum dibaca)`}
+        aria-label={`Notifikasi Realtime (${channelCounts.totalUnread} belum dibaca)`}
         className="group relative flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#C8A053] bg-[#381E5A] text-[#E8CA82] shadow-xl transition hover:scale-105 hover:bg-[#492974] cursor-pointer"
       >
-        {totalUnread > 0 && !isOpen && (
+        {userProfile && channelCounts.totalUnread > 0 && !isOpen && (
           <span className="absolute inset-0 rounded-full border-2 border-[#E8CA82] animate-ping opacity-35" />
         )}
         {isOpen ? (
@@ -750,9 +1073,9 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
         ) : (
           <MessageSquare className="h-6 w-6 transition-transform group-hover:scale-105" />
         )}
-        {totalUnread > 0 && (
+        {userProfile && channelCounts.totalUnread > 0 && (
           <span className="absolute -top-1 -right-1 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-white bg-rose-600 px-1.5 font-mono-nums text-[11px] font-bold text-white shadow-xs">
-            {totalUnread > 99 ? '99+' : totalUnread}
+            {channelCounts.totalUnread > 99 ? '99+' : channelCounts.totalUnread}
           </span>
         )}
       </button>

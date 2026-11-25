@@ -30,6 +30,7 @@ import {
 import {
   AgentDirectoryItem,
   PublicPage,
+  UserRole,
   WILAYAH_LIST,
   WilayahPriangan,
 } from '../types';
@@ -40,6 +41,7 @@ interface TentangKamiPageProps {
   onSelectAgent: (id: string) => void;
   onNavigate: (page: PublicPage) => void;
   onOpenAuth: (mode: 'login' | 'register_member' | 'register_agent') => void;
+  userRole?: UserRole | null;
 }
 
 export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
@@ -48,7 +50,10 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
   onSelectAgent,
   onNavigate,
   onOpenAuth,
+  userRole = null,
 }) => {
+  const isMemberLoggedIn = userRole === 'member';
+  const isAgentLoggedIn = userRole === 'agen';
   const [wilayahFilter, setWilayahFilter] = useState<'Semua' | WilayahPriangan>('Semua');
   const [activeResellerGroup, setActiveResellerGroup] = useState<'anak' | 'ibu' | 'pilihan'>('anak');
   const [showPosterModal, setShowPosterModal] = useState(false);
@@ -302,16 +307,20 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
             <div className="flex flex-wrap gap-3 pt-1">
               <button
                 type="button"
+                disabled={isAgentLoggedIn}
+                title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
                 onClick={() => onOpenAuth('register_agent')}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#0C3328] cursor-pointer"
               >
                 <UserCheck className="h-4 w-4" />
                 <span>Gabung Agen / Reseller</span>
               </button>
               <button
                 type="button"
+                disabled={isMemberLoggedIn}
+                title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
                 onClick={() => onOpenAuth('register_member')}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white cursor-pointer"
               >
                 <UserPlus className="h-4 w-4 text-[#0C3328]" />
                 <span>Gabung Member</span>
@@ -384,10 +393,6 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredAgents.map((agent) => {
             const isSelected = selectedAgentId === agent.id;
-            const waUrl = formatWhatsAppUrl(
-              agent.no_wa,
-              `Halo ${agent.nama} (${agent.kode_agen}), saya ingin bertanya & mendaftar tabungan parcel Lebaran Sagitarius Parcel wilayah ${agent.wilayah}.`
-            );
             return (
               <div
                 key={agent.id}
@@ -418,11 +423,11 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2">
+                <div className="mt-4">
                   <button
                     type="button"
                     onClick={() => onSelectAgent(agent.id)}
-                    className={`flex-1 rounded-xl px-3 py-2 text-xs font-semibold transition cursor-pointer ${
+                    className={`w-full rounded-xl px-3 py-2 text-xs font-semibold transition cursor-pointer ${
                       isSelected
                         ? 'bg-[#0C3328] text-white'
                         : 'border border-[#E4DCCB] text-stone-800 hover:bg-[#FAF7F2]'
@@ -430,15 +435,6 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
                   >
                     {isSelected ? 'Agen Dipilih' : 'Pilih Agen Ini'}
                   </button>
-                  <a
-                    href={waUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#16A34A] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#15803D]"
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    <span>WhatsApp</span>
-                  </a>
                 </div>
               </div>
             );

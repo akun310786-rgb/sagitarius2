@@ -46,6 +46,7 @@ import {
   ParcelPackage,
   PublicPage,
   SimulationLock,
+  UserRole,
 } from '../types';
 import { KontakPage, TentangKamiPage } from './ContactAndPages';
 
@@ -69,6 +70,7 @@ interface LandingCatalogProps {
   focusSearchTrigger?: number;
   referralAgent?: AgentDirectoryItem | null;
   onOpenAuth: (mode: 'login' | 'register_member' | 'register_agent') => void;
+  userRole?: UserRole | null;
 }
 
 const BROCHURE_GALLERY = [
@@ -128,7 +130,10 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   focusSearchTrigger,
   referralAgent,
   onOpenAuth,
+  userRole = null,
 }) => {
+  const isMemberLoggedIn = userRole === 'member';
+  const isAgentLoggedIn = userRole === 'agen';
   const [lebaranSubCategory, setLebaranSubCategory] =
     useState<PaketLebaranSubFilter>('all_lebaran');
   const [priceRange, setPriceRange] =
@@ -301,6 +306,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         onSelectAgent={onSelectAgent}
         onNavigate={onNavigate}
         onOpenAuth={onOpenAuth}
+        userRole={userRole}
       />
     );
   }
@@ -919,8 +925,10 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
               </button>
               <button
                 type="button"
+                disabled={isMemberLoggedIn}
+                title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
                 onClick={() => onOpenAuth('register_member')}
-                className="inline-flex min-h-[42px] items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#0C3328] cursor-pointer"
               >
                 <UserPlus className="h-4 w-4" />
                 <span>Gabung Member</span>
@@ -1558,16 +1566,20 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             <div className="grid grid-cols-1 gap-2.5 pt-1 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
               <button
                 type="button"
+                disabled={isMemberLoggedIn}
+                title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
                 onClick={() => onOpenAuth('register_member')}
-                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#144738] sm:w-auto cursor-pointer"
+                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#144738] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#0C3328] sm:w-auto cursor-pointer"
               >
                 <UserPlus className="h-4 w-4 text-[#E8CA82]" />
                 <span>Gabung Member</span>
               </button>
               <button
                 type="button"
+                disabled={isAgentLoggedIn}
+                title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
                 onClick={() => onOpenAuth('register_agent')}
-                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-3 text-sm font-bold text-[#1D122B] shadow-xs transition hover:brightness-105 sm:w-auto cursor-pointer"
+                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-3 text-sm font-bold text-[#1D122B] shadow-xs transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 sm:w-auto cursor-pointer"
               >
                 <UserCheck className="h-4 w-4" />
                 <span>Gabung Agen</span>
@@ -1805,16 +1817,20 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 type="button"
+                disabled={isAgentLoggedIn}
+                title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
                 onClick={() => onOpenAuth('register_agent')}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#0C3328] cursor-pointer"
               >
                 <UserCheck className="h-4 w-4" />
                 <span>Gabung Agen Sekarang</span>
               </button>
               <button
                 type="button"
+                disabled={isMemberLoggedIn}
+                title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
                 onClick={() => onOpenAuth('register_member')}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white cursor-pointer"
               >
                 <UserPlus className="h-4 w-4 text-[#0C3328]" />
                 <span>Gabung Member</span>

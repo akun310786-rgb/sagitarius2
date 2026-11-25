@@ -113,6 +113,16 @@ async function compressImageToDataUrl(file: File): Promise<string> {
   });
 }
 
+function isSafeImageSource(value: string): boolean {
+  const v = value.trim();
+  return (
+    v.startsWith('data:image/') ||
+    v.startsWith('https://') ||
+    v.startsWith('http://') ||
+    v.startsWith('/assets/')
+  );
+}
+
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   userProfile,
   packages,
@@ -169,6 +179,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [receiptDeposit, setReceiptDeposit] = useState<Deposit | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string>('');
   const [copiedBank, setCopiedBank] = useState(false);
+  const [copiedQris, setCopiedQris] = useState(false);
 
   // Contract Controls: Expand Package Items / Change Agent / Grup Arisan / Cancel Contract
   const [showPackageContents, setShowPackageContents] = useState(false);
@@ -328,6 +339,61 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       };
 
       const docRef = await addDoc(collection(db, 'subscriptions'), payload);
+
+      const contractWilayah = selectedAgentForNew.wilayah || wilayah;
+      const contractNotifs = [
+        {
+          recipient_type: 'user',
+          recipient_uid: userProfile.uid,
+          wilayah: contractWilayah,
+          kategori: 'kontrak',
+          judul: 'Kontrak Tabungan Baru Aktif',
+          pesan: `Kontrak ${selectedPkgForNew.nama_paket} (Target ${formatRupiah(targetNominal)}) bersama ${selectedAgentForNew.nama} berhasil didaftarkan.`,
+          tautan_view: 'member',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        {
+          recipient_type: 'agen',
+          recipient_uid:
+            selectedAgentForNew.id.startsWith('agt_') && selectedAgentForNew.kode_agen
+              ? selectedAgentForNew.kode_agen
+              : selectedAgentForNew.id,
+          wilayah: contractWilayah,
+          kategori: 'kontrak',
+          judul: `Member Baru: ${userProfile.nama}`,
+          pesan: `${userProfile.nama} membuka kontrak ${selectedPkgForNew.nama_paket} (${formatRupiah(setoranNom)}/${frekuensi}) di bawah binaan Anda.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        {
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: contractWilayah,
+          kategori: 'kontrak',
+          judul: `Kontrak Baru: ${userProfile.nama}`,
+          pesan: `${userProfile.nama} mendaftar paket ${selectedPkgForNew.nama_paket} (${contractWilayah}) melalui agen ${selectedAgentForNew.nama}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'kontrak',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+      ];
+      await Promise.allSettled(
+        contractNotifs.map((n) => addDoc(collection(db, 'notifications'), n))
+      );
+
       setSelectedSubId(docRef.id);
       setNewGrupArisan('');
       setShowNewContractForm(false);
@@ -477,10 +543,37 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         updatedAt: serverTimestamp(),
       });
 
-      try {
-        await addDoc(collection(db, 'notifications'), {
+      const agentRecipientUid =
+        activeSub.agen_id.startsWith('agt_') && activeSub.agen_kode
+          ? activeSub.agen_kode
+          : activeSub.agen_id;
+
+      const txNotifs = [
+        {
+          recipient_type: 'user',
+          recipient_uid: userProfile.uid,
+          wilayah: activeSub.wilayah,
+          kategori: txMode,
+          judul:
+            txMode === 'penarikan'
+              ? `Pengajuan Penarikan ${formatRupiah(finalNominal)} Terkirim`
+              : `Pengajuan Setoran ${formatRupiah(finalNominal)} Terkirim`,
+          pesan:
+            txMode === 'penarikan'
+              ? `Pengajuan penarikan saldo untuk paket ${activeSub.package_nama} sedang menunggu validasi Agen/Admin.`
+              : `Bukti transfer setoran paket ${activeSub.package_nama} (${
+                  useUniqueInvoice ? invoiceRef : 'Transfer'
+                }) berhasil dikirim dan menunggu verifikasi.`,
+          tautan_view: 'member',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        {
           recipient_type: 'agen',
-          recipient_uid: activeSub.agen_id,
+          recipient_uid: agentRecipientUid,
           wilayah: activeSub.wilayah,
           kategori: txMode,
           judul:
@@ -497,10 +590,52 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           is_read: false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
-        });
-      } catch {
-        // Non-blocking notification send
-      }
+        },
+        {
+          recipient_type: 'korwil',
+          recipient_uid: `korwil_${activeSub.wilayah}`,
+          wilayah: activeSub.wilayah,
+          kategori: txMode,
+          judul:
+            txMode === 'penarikan'
+              ? `Aktivitas Penarikan Wilayah: ${userProfile.nama}`
+              : `Setoran Transfer Wilayah: ${userProfile.nama}`,
+          pesan: `Member ${userProfile.nama} (${activeSub.wilayah}) mengajukan ${
+            txMode === 'penarikan' ? 'penarikan' : 'setoran transfer'
+          } ${formatRupiah(finalNominal)} pada paket ${activeSub.package_nama}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        {
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: activeSub.wilayah,
+          kategori: txMode,
+          judul:
+            txMode === 'penarikan'
+              ? `Penarikan Member: ${userProfile.nama}`
+              : `Setoran Masuk Member: ${userProfile.nama}`,
+          pesan: `${userProfile.nama} (${activeSub.wilayah}) mengirim ${
+            txMode === 'penarikan' ? 'pengajuan penarikan' : 'bukti transfer setoran'
+          } ${formatRupiah(finalNominal)} (${activeSub.package_nama}).`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+      ];
+
+      await Promise.allSettled(
+        txNotifs.map((n) => addDoc(collection(db, 'notifications'), n))
+      );
 
       setDepositNote('');
       setProofDataUrl('');
@@ -1471,6 +1606,84 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         </button>
                       </div>
 
+                      {appSettings.qris_kode && appSettings.qris_kode.trim() && (
+                        <div className="border-t border-[#EFE8D8] pt-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-[#381E5A]">
+                              <QrCode className="h-4 w-4 text-[#0C3328]" />
+                              <span>QRIS Resmi Perusahaan</span>
+                            </div>
+                            <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-[#0C3328]">
+                              {appSettings.qris_merchant?.trim() || appSettings.bank_atas_nama}
+                            </span>
+                          </div>
+                          <div className="mt-2.5 flex flex-col gap-3 rounded-xl border border-[#C8A053]/50 bg-white p-3 sm:flex-row sm:items-center">
+                            {isSafeImageSource(appSettings.qris_kode) ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewProofUrl(appSettings.qris_kode || null)}
+                                className="group relative shrink-0 self-start overflow-hidden rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-1.5 cursor-pointer"
+                                title="Klik untuk memperbesar gambar QRIS"
+                              >
+                                <img
+                                  src={appSettings.qris_kode.trim()}
+                                  alt="QRIS Resmi Sagitarius Parcel"
+                                  className="h-28 w-28 object-contain"
+                                />
+                                <span className="mt-1 block text-center text-[10px] font-semibold text-[#381E5A] group-hover:underline">
+                                  Perbesar QRIS
+                                </span>
+                              </button>
+                            ) : (
+                              <div className="shrink-0 self-start rounded-lg border border-[#E4DCCB] bg-white p-2">
+                                <QRCodeSVG
+                                  value={appSettings.qris_kode.trim()}
+                                  size={112}
+                                  level="M"
+                                />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1 space-y-1.5 text-xs">
+                              <p className="font-semibold text-[#381E5A]">
+                                Scan QRIS untuk setoran instan via m-Banking / e-Wallet
+                              </p>
+                              <p className="text-[11px] leading-relaxed text-stone-600">
+                                Pastikan nama penerima sesuai{' '}
+                                <strong>
+                                  {appSettings.qris_merchant?.trim() || appSettings.bank_atas_nama}
+                                </strong>
+                                , lalu unggah bukti bayar di bawah ini.
+                              </p>
+                              {!isSafeImageSource(appSettings.qris_kode) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void navigator.clipboard.writeText(
+                                      appSettings.qris_kode?.trim() || ''
+                                    );
+                                    setCopiedQris(true);
+                                    setTimeout(() => setCopiedQris(false), 1800);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2.5 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8D8] cursor-pointer"
+                                >
+                                  {copiedQris ? (
+                                    <>
+                                      <Check className="h-3 w-3 text-emerald-700" />
+                                      <span>Kode QRIS Disalin</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="h-3 w-3" />
+                                      <span>Salin String QRIS</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="border-t border-[#EFE8D8] pt-3">
                         <label className="inline-flex items-center gap-2 text-xs font-semibold text-[#381E5A] cursor-pointer">
                           <input
@@ -1488,7 +1701,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[#C8A053]/60 bg-white p-3 sm:flex-row sm:items-center">
                             <div className="shrink-0 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-2">
                               <QRCodeSVG
-                                value={`QRIS-SAGITARIUS|${currentInvoiceCode}|NOMINAL:${exactTransferTotal}|REK:${appSettings.bank_rekening}|MEMBER:${userProfile.nama}`}
+                                value={
+                                  appSettings.qris_kode?.trim() &&
+                                  !isSafeImageSource(appSettings.qris_kode)
+                                    ? appSettings.qris_kode.trim()
+                                    : `QRIS-SAGITARIUS|${currentInvoiceCode}|NOMINAL:${exactTransferTotal}|REK:${appSettings.bank_rekening}|MEMBER:${userProfile.nama}`
+                                }
                                 size={88}
                                 level="M"
                               />
