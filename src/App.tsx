@@ -189,15 +189,27 @@ export default function App() {
   );
   const showDashboardNav = !userProfile || canAccessOperational;
   const isAgenOnlySession = userProfile?.role === 'agen';
-  const isDashboardOnlySession =
-    userProfile?.role === 'admin' || userProfile?.role === 'agen';
+  const isDashboardOnlySession = Boolean(
+    userProfile &&
+      (userProfile.role === 'admin' ||
+        userProfile.role === 'agen' ||
+        userProfile.role === 'member')
+  );
 
-  // Enforce strict role guard & direct dashboard mode for Admin and Agen/Reseller
+  // Enforce strict role guard & direct dashboard mode for Admin, Agen/Reseller, and Member
   useEffect(() => {
     if (!authReady || !userProfile) return;
     if (userProfile.role === 'admin' || userProfile.role === 'agen') {
       if (activeView !== 'operasional') {
         setActiveView('operasional');
+      }
+      setMobileMenuOpen(false);
+      setShowWishlistDrawer(false);
+      return;
+    }
+    if (userProfile.role === 'member') {
+      if (activeView !== 'member') {
+        setActiveView('member');
       }
       setMobileMenuOpen(false);
       setShowWishlistDrawer(false);
@@ -1202,11 +1214,17 @@ export default function App() {
                 />
                 <div className="min-w-0">
                   <p className="font-display truncate text-sm sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
-                    {isAgenOnlySession ? 'Dashboard Agen & Reseller' : 'Dashboard Admin Pusat'}
+                    {userProfile.role === 'agen'
+                      ? 'Dashboard Agen & Reseller'
+                      : userProfile.role === 'member'
+                      ? 'Dashboard Member Sagitarius'
+                      : 'Dashboard Admin Pusat'}
                   </p>
                   <p className="truncate text-[10px] sm:text-[11px] font-medium text-stone-300 leading-tight">
-                    {isAgenOnlySession
+                    {userProfile.role === 'agen'
                       ? `${userProfile.kode_agen ? `${userProfile.kode_agen} · ` : ''}Wilayah ${userProfile.wilayah} · ${COMPANY_INFO.brandName}`
+                      : userProfile.role === 'member'
+                      ? `Wilayah ${userProfile.wilayah} · ${COMPANY_INFO.brandName}`
                       : `Sagitarius Parcel · ${COMPANY_INFO.legalName}`}
                   </p>
                 </div>
@@ -1543,29 +1561,7 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1">
-          {!isDashboardOnlySession && activeView === 'landing' && (
-            <LandingCatalog
-              activePage={publicPage}
-              onNavigate={navigatePublicPage}
-              catalogCategory={catalogCategory}
-              onSelectCatalogCategory={setCatalogCategory}
-              packages={packages}
-              agents={agents}
-              onLockSimulation={handleLockSimulation}
-              selectedAgentId={selectedAgentId}
-              onSelectAgent={setSelectedAgentId}
-              detailPackageId={detailPackageId}
-              onOpenDetail={handleOpenDetail}
-              wishlistIds={wishlistIds}
-              onToggleWishlist={handleToggleWishlist}
-              focusSearchTrigger={focusSearchTrigger}
-              referralAgent={referralAgent}
-              onOpenAuth={openAuthModal}
-              userRole={userProfile?.role ?? null}
-            />
-          )}
-
-          {!isDashboardOnlySession && activeView === 'member' && (
+          {userProfile?.role === 'member' ? (
             <MemberDashboard
               userProfile={userProfile}
               packages={packages}
@@ -1582,9 +1578,7 @@ export default function App() {
               onNeedLogin={() => openAuthModal('login')}
               onOpenAgentRegister={() => openAuthModal('register_agent')}
             />
-          )}
-
-          {(isDashboardOnlySession || activeView === 'operasional') && (
+          ) : userProfile?.role === 'admin' || userProfile?.role === 'agen' ? (
             <AgentKorwilAdminDashboard
               userProfile={userProfile}
               allUsers={allUsers}
@@ -1604,6 +1598,71 @@ export default function App() {
               onNeedLogin={() => openAuthModal('login')}
               onOpenAgentRegister={() => openAuthModal('register_agent')}
             />
+          ) : (
+            <>
+              {!isDashboardOnlySession && activeView === 'landing' && (
+                <LandingCatalog
+                  activePage={publicPage}
+                  onNavigate={navigatePublicPage}
+                  catalogCategory={catalogCategory}
+                  onSelectCatalogCategory={setCatalogCategory}
+                  packages={packages}
+                  agents={agents}
+                  onLockSimulation={handleLockSimulation}
+                  selectedAgentId={selectedAgentId}
+                  onSelectAgent={setSelectedAgentId}
+                  detailPackageId={detailPackageId}
+                  onOpenDetail={handleOpenDetail}
+                  wishlistIds={wishlistIds}
+                  onToggleWishlist={handleToggleWishlist}
+                  focusSearchTrigger={focusSearchTrigger}
+                  referralAgent={referralAgent}
+                  onOpenAuth={openAuthModal}
+                  userRole={userProfile?.role ?? null}
+                />
+              )}
+
+              {!isDashboardOnlySession && activeView === 'member' && (
+                <MemberDashboard
+                  userProfile={userProfile}
+                  packages={packages}
+                  agents={agents}
+                  subscriptions={subscriptions}
+                  deposits={deposits}
+                  appSettings={appSettings}
+                  doorPrizeDraws={doorPrizeDraws}
+                  productSubstitutions={productSubstitutions}
+                  agentApplications={agentApplications}
+                  referralAgent={referralAgent}
+                  lockedSimulation={lockedSimulation}
+                  onClearLockedSimulation={() => setLockedSimulation(null)}
+                  onNeedLogin={() => openAuthModal('login')}
+                  onOpenAgentRegister={() => openAuthModal('register_agent')}
+                />
+              )}
+
+              {activeView === 'operasional' && (
+                <AgentKorwilAdminDashboard
+                  userProfile={userProfile}
+                  allUsers={allUsers}
+                  packages={packages}
+                  agents={agents}
+                  subscriptions={subscriptions}
+                  deposits={deposits}
+                  contactMessages={contactMessages}
+                  appSettings={appSettings}
+                  doorPrizeDraws={doorPrizeDraws}
+                  agentSettlements={agentSettlements}
+                  warehouseInventory={warehouseInventory}
+                  productSubstitutions={productSubstitutions}
+                  auditLogs={auditLogs}
+                  agentApplications={agentApplications}
+                  externalTabRequest={dashboardTargetTab}
+                  onNeedLogin={() => openAuthModal('login')}
+                  onOpenAgentRegister={() => openAuthModal('register_agent')}
+                />
+              )}
+            </>
           )}
         </main>
 
