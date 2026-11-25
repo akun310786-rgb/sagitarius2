@@ -1,53 +1,193 @@
 import { AgentDirectoryItem, ParcelPackage } from '../types';
 
-export const IMG_HERO = '/src/assets/images/hero_lebaran_parcel_1795079090213.jpg';
-export const IMG_BUNDA = '/src/assets/images/paket_bunda_sembako_1795079090089.jpg';
-export const IMG_BUNDA_BOX = '/src/assets/images/paket_bunda_box_silver_gold_1795598009338.jpg';
-export const IMG_BUNDA_KOPER = '/src/assets/images/paket_bunda_koper_platinum_1795598010326.jpg';
-export const IMG_ANAK = '/src/assets/images/paket_anak_lebaran_1795079090980.jpg';
-export const IMG_ANAK_KOPER = '/src/assets/images/paket_anak_koper_ceria_1795598010163.jpg';
-export const IMG_DIAMOND_MUKENA = '/src/assets/images/paket_diamond_mukena_1795598011067.jpg';
-export const IMG_SULTAN = '/src/assets/images/paket_sultan_diamond_1795079089961.jpg';
-export const IMG_UANG_DAGING = '/src/assets/images/paket_uang_daging_1795079090348.jpg';
-export const IMG_RESELLER = '/src/assets/images/reseller_mitra_agen_1795598011859.jpg';
+// Official Cropped Canva Package & Page Assets (2026-2027)
+export const IMG_HERO = '/assets/catalog/hero_canva_parcel.png';
+export const IMG_BUNDA_REGULER = '/assets/catalog/pkg_bunda_reguler.png';
+export const IMG_BUNDA_SILVER = '/assets/catalog/pkg_bunda_silver.png';
+export const IMG_BUNDA_GOLD = '/assets/catalog/pkg_bunda_gold.png';
+export const IMG_BUNDA_PLATINUM = '/assets/catalog/pkg_bunda_platinum.png';
+export const IMG_ANAK_HEMAT = '/assets/catalog/pkg_anak_hemat.png';
+export const IMG_ANAK_ASYIK = '/assets/catalog/pkg_anak_asyik.png';
+export const IMG_ANAK_CERIA = '/assets/catalog/pkg_anak_ceria.png';
+export const IMG_ANAK_HEBAT = '/assets/catalog/pkg_anak_hebat.png';
+export const IMG_DIAMOND = '/assets/catalog/pkg_diamond.png';
+export const IMG_SULTAN = '/assets/catalog/pkg_sultan.png';
 
-// Official Sagitarius Parcel Assets uploaded by user
+// Backward-compatible named exports mapped to official Canva assets
+export const IMG_BUNDA = IMG_BUNDA_REGULER;
+export const IMG_BUNDA_BOX = IMG_BUNDA_GOLD;
+export const IMG_BUNDA_KOPER = IMG_BUNDA_PLATINUM;
+export const IMG_ANAK = IMG_ANAK_HEMAT;
+export const IMG_ANAK_KOPER = IMG_ANAK_CERIA;
+export const IMG_DIAMOND_MUKENA = IMG_DIAMOND;
+export const IMG_UANG_DAGING = '/assets/catalog/canva_uang_page.png';
+export const IMG_SATUAN = '/assets/catalog/canva_satuan_page.png';
+export const IMG_RESELLER_POSTER = '/assets/aistudio/PROGRAM_RESELLER_EKSKLUSIF_e7e2f609.png';
+export const IMG_RESELLER = IMG_RESELLER_POSTER;
+
+// Official Sagitarius Parcel Logo & Full Canva Brochure Pages
 export const LOGO_SAGITARIUS = '/assets/aistudio/file_00000000ca58820ba2ac5348f000d329_d1d25037.png';
-export const BROCHURE_COVER = '/assets/aistudio/Screenshot_20261022_113919_baf772c1.jpg';
-export const BROCHURE_BUNDA = '/assets/aistudio/Screenshot_20261022_113929_75f3ccaa.jpg';
-export const BROCHURE_ANAK = '/assets/aistudio/Screenshot_20261022_113924_ef1753aa.jpg';
-export const BROCHURE_PILIHAN = '/assets/aistudio/Screenshot_20261022_113934_78453c2e.jpg';
-export const BROCHURE_UANG = '/assets/aistudio/Screenshot_20261022_113906_7abaaaea.jpg';
-export const BROCHURE_SATUAN = '/assets/aistudio/Screenshot_20261022_113857_3eccd7c1.jpg';
+export const BROCHURE_COVER = '/assets/catalog/canva_cover.png';
+export const BROCHURE_BUNDA = '/assets/catalog/canva_bunda_page.png';
+export const BROCHURE_ANAK = '/assets/catalog/canva_anak_page.png';
+export const BROCHURE_PILIHAN = '/assets/catalog/canva_pilihan_page.png';
+export const BROCHURE_UANG = '/assets/catalog/canva_uang_page.png';
+export const BROCHURE_SATUAN = '/assets/catalog/canva_satuan_page.png';
+
+export interface ResellerCommissionRow {
+  no: number;
+  nama: string;
+  harian: string;
+  komisi: number;
+  bonus20: number;
+  bonus50: number;
+  bonus100: number;
+  bonus200: number;
+}
+
+export interface ResellerCommissionGroup {
+  id: 'anak' | 'ibu' | 'pilihan';
+  title: string;
+  komisiLabel: string;
+  rows: ResellerCommissionRow[];
+}
 
 export const RESELLER_PROGRAM = {
-  headline: 'Program Reseller & Mitra Agen Resmi Sagitarius Parcel',
+  headline: 'Komisi Reseller Eksklusif Sagitarius Parcel',
   subheadline:
-    'Buka peluang penghasilan jelang Ramadhan & Idul Fitri bersama PT. Sagitarius Trinunggal Karya di wilayah Priangan Timur.',
-  tiers: [
+    'Raih komisi tetap Rp 50.000 – Rp 75.000 per paket serta bonus target bertingkat (20, 50, 100, hingga 200 paket) bersama PT. Sagitarius Trinunggal Karya.',
+  posterImage: IMG_RESELLER_POSTER,
+  groups: [
     {
-      label: 'Agen Pemula',
-      syarat: '< 10 Member Aktif',
-      komisi: '4%',
-      detail: 'Tautan referral pribadi & pencatatan setoran digital.',
+      id: 'anak',
+      title: 'Paket Anak',
+      komisiLabel: 'Komisi Rp 50.000 / Paket',
+      rows: [
+        {
+          no: 1,
+          nama: 'Hemat',
+          harian: 'Rp 1.500/hari',
+          komisi: 50000,
+          bonus20: 117000,
+          bonus50: 292500,
+          bonus100: 585000,
+          bonus200: 1170000,
+        },
+        {
+          no: 2,
+          nama: 'Asyik',
+          harian: 'Rp 2.500/hari',
+          komisi: 50000,
+          bonus20: 195000,
+          bonus50: 487500,
+          bonus100: 975000,
+          bonus200: 1950000,
+        },
+        {
+          no: 3,
+          nama: 'Ceria',
+          harian: 'Rp 4.000/hari',
+          komisi: 50000,
+          bonus20: 312000,
+          bonus50: 780000,
+          bonus100: 1560000,
+          bonus200: 3120000,
+        },
+        {
+          no: 4,
+          nama: 'Hebat',
+          harian: 'Rp 5.000/hari',
+          komisi: 50000,
+          bonus20: 390000,
+          bonus50: 975000,
+          bonus100: 1950000,
+          bonus200: 3900000,
+        },
+      ],
     },
     {
-      label: 'Agen Aktif',
-      syarat: '10 – 24 Member Aktif',
-      komisi: '5,5%',
-      detail: 'Bonus kenaikan tier & prioritas alokasi paket wilayah.',
+      id: 'ibu',
+      title: 'Paket Ibu (Bunda)',
+      komisiLabel: 'Komisi Rp 60.000 / Paket',
+      rows: [
+        {
+          no: 1,
+          nama: 'Reguler',
+          harian: 'Rp 2.000/hari',
+          komisi: 60000,
+          bonus20: 156000,
+          bonus50: 390000,
+          bonus100: 780000,
+          bonus200: 1560000,
+        },
+        {
+          no: 2,
+          nama: 'Silver',
+          harian: 'Rp 3.000/hari',
+          komisi: 60000,
+          bonus20: 234000,
+          bonus50: 585000,
+          bonus100: 1170000,
+          bonus200: 2340000,
+        },
+        {
+          no: 3,
+          nama: 'Gold',
+          harian: 'Rp 4.000/hari',
+          komisi: 60000,
+          bonus20: 312000,
+          bonus50: 780000,
+          bonus100: 1560000,
+          bonus200: 3120000,
+        },
+        {
+          no: 4,
+          nama: 'Platinum',
+          harian: 'Rp 5.000/hari',
+          komisi: 60000,
+          bonus20: 390000,
+          bonus50: 975000,
+          bonus100: 1950000,
+          bonus200: 3900000,
+        },
+      ],
     },
     {
-      label: 'Agen Prioritas',
-      syarat: '≥ 25 Member Aktif',
-      komisi: '7%',
-      detail: 'Komisi maksimal + dukungan penuh Korwil & Pusat.',
+      id: 'pilihan',
+      title: 'Paket Pilihan',
+      komisiLabel: 'Komisi Rp 75.000 / Paket',
+      rows: [
+        {
+          no: 1,
+          nama: 'Diamond',
+          harian: 'Rp 7.000/hari',
+          komisi: 75000,
+          bonus20: 546000,
+          bonus50: 1365000,
+          bonus100: 2730000,
+          bonus200: 5460000,
+        },
+        {
+          no: 2,
+          nama: 'Sultan',
+          harian: 'Rp 10.000/hari',
+          komisi: 75000,
+          bonus20: 780000,
+          bonus50: 1950000,
+          bonus100: 3900000,
+          bonus200: 7800000,
+        },
+      ],
     },
-  ],
-  benefits: [
-    'Tanpa stok barang di rumah — cukup kelola pendaftaran dan setoran member via aplikasi.',
-    'Tautan undangan member otomatis (kode agen terhubung langsung saat member mendaftar).',
-    'Laporan komisi, kwitansi digital, dan pengajuan pencairan transparan langsung di Dashboard.',
+  ] as ResellerCommissionGroup[],
+  ketentuan: [
+    'Reseller wajib memiliki minimal 5 konsumen aktif.',
+    'Komisi reseller untuk setiap paket adalah sesuai Tabel Terlampir (Rp 50.000 Paket Anak, Rp 60.000 Paket Ibu, Rp 75.000 Paket Pilihan).',
+    'Komisi diberikan apabila Anggota telah membayar Full minimal 150 Hari.',
+    'Reseller berhak mendapatkan BONUS komisi bertarget (20, 50, 100, dan 200 Paket sesuai Tabel Terlampir).',
+    'Pengiriman barang minimal 10 paket dalam satu Wilayah.',
+    'Apabila terdapat konsumen yang tidak menyelesaikan pembayaran sampai ke-150, maka akan dilakukan penyesuaian komisi.',
+    'Reseller yang mendapatkan lebih dari 200 anggota Aktif berhak mendapatkan kesempatan untuk menjadi AGEN RESMI Sagitarius Parcel dengan komisi dan BONUS yang sudah ditentukan, dan bisa merekrut Minimal 10 Reseller.',
   ],
 };
 
@@ -189,7 +329,7 @@ export const PAKET_UANG_TABLES = {
   ],
 };
 
-// Exact packages matching the uploaded brochures
+// Exact packages matching the uploaded Canva catalogs
 export const CORE_PACKAGES: ParcelPackage[] = [
   // PAKET BUNDA (4 Varian - 325 Hari)
   {
@@ -218,7 +358,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Monde Butter 150g',
     ],
     bonus_thr: 200000,
-    foto_url: IMG_BUNDA,
+    foto_url: IMG_BUNDA_REGULER,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 2.000/hari selama 325 hari · Bonus Travel Bag & THR Rp 200.000.',
   },
@@ -253,7 +393,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Kapal Api 10x6g & Good Day Mocacino 10pcs',
     ],
     bonus_thr: 350000,
-    foto_url: IMG_BUNDA_BOX,
+    foto_url: IMG_BUNDA_SILVER,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 3.000/hari selama 325 hari · Container Box & THR Rp 350.000.',
   },
@@ -285,7 +425,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       "Fox's Kaleng 170g",
     ],
     bonus_thr: 600000,
-    foto_url: IMG_BUNDA_BOX,
+    foto_url: IMG_BUNDA_GOLD,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 4.000/hari selama 325 hari · Khong Guan 1600g & THR Rp 600.000.',
   },
@@ -316,7 +456,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Marjan Syrup 460ml',
     ],
     bonus_thr: 800000,
-    foto_url: IMG_BUNDA_KOPER,
+    foto_url: IMG_BUNDA_PLATINUM,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 5.000/hari selama 325 hari · Koper Dewasa & THR Rp 800.000.',
   },
@@ -348,7 +488,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Pop Mie Cup 75g, Chiki Twist 75g & Fox Candy 170g',
     ],
     bonus_thr: 100000,
-    foto_url: IMG_ANAK,
+    foto_url: IMG_ANAK_HEMAT,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 1.500/hari selama 325 hari · Travel Bag & THR Rp 100.000.',
   },
@@ -375,7 +515,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Ultra UHT 1L, Pulpy 1L, Buavita 245ml & Kental Manis 370g',
     ],
     bonus_thr: 300000,
-    foto_url: IMG_ANAK,
+    foto_url: IMG_ANAK_ASYIK,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 2.500/hari selama 325 hari · Container Box & THR Rp 300.000.',
   },
@@ -402,7 +542,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Kental Manis 545g',
     ],
     bonus_thr: 600000,
-    foto_url: IMG_ANAK_KOPER,
+    foto_url: IMG_ANAK_CERIA,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 4.000/hari selama 325 hari · Koper Karakter & THR Rp 600.000.',
   },
@@ -429,7 +569,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Koko Krunch Box 150g',
     ],
     bonus_thr: 900000,
-    foto_url: IMG_ANAK_KOPER,
+    foto_url: IMG_ANAK_HEBAT,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 5.000/hari selama 325 hari · Koper Dewasa & THR Rp 900.000.',
   },
@@ -458,7 +598,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Indomie Mi Goreng 10pcs & Indomie AB 69g 10pcs',
     ],
     bonus_thr: 1000000,
-    foto_url: IMG_DIAMOND_MUKENA,
+    foto_url: IMG_DIAMOND,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 7.000/hari · Mukena Silky, Container Box & THR Rp 1.000.000.',
   },
@@ -507,7 +647,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Paket Uang dibagikan lebih awal menjelang Munggahan',
     ],
     bonus_thr: 0,
-    foto_url: IMG_UANG_DAGING,
+    foto_url: BROCHURE_UANG,
     jadwal_ambil: 'Lebih Awal (Menjelang Munggahan)',
     deskripsi_singkat: 'Tabungan uang tunai Munggahan 295 hari (tersedia Rp 1 rb – Rp 20 rb/hari).',
   },
@@ -528,7 +668,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Paket Uang dibagikan lebih awal menjelang Munggahan',
     ],
     bonus_thr: 0,
-    foto_url: IMG_UANG_DAGING,
+    foto_url: BROCHURE_UANG,
     jadwal_ambil: 'Lebih Awal (Menjelang Munggahan)',
     deskripsi_singkat: 'Tabungan uang mingguan Munggahan 42 minggu (Rp 20 rb – Rp 200 rb/mg).',
   },
@@ -549,7 +689,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Dibagikan lebih awal sebelum Hari Raya Idul Fitri',
     ],
     bonus_thr: 0,
-    foto_url: IMG_UANG_DAGING,
+    foto_url: BROCHURE_UANG,
     jadwal_ambil: 'Lebih Awal (Sebelum Lebaran)',
     deskripsi_singkat: 'Tabungan uang Lebaran 325 hari (Rp 5 rb – Rp 20 rb/hari).',
   },
@@ -570,7 +710,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Dibagikan lebih awal sebelum Hari Raya Idul Fitri',
     ],
     bonus_thr: 0,
-    foto_url: IMG_UANG_DAGING,
+    foto_url: BROCHURE_UANG,
     jadwal_ambil: 'Lebih Awal (Sebelum Lebaran)',
     deskripsi_singkat: 'Tabungan uang mingguan Lebaran 45 minggu (Rp 20 rb – Rp 200 rb/mg).',
   },
@@ -644,10 +784,10 @@ export const SATUAN_PACKAGES: ParcelPackage[] = RAW_SATUAN_50.map((item) => {
   const weekly = Math.max(500, item.daily * 7);
   const photo =
     item.sub === 'Daging & Telur' || item.sub === 'Bumbu & Dapur'
-      ? IMG_UANG_DAGING
+      ? IMG_SATUAN
       : item.sub === 'Kue & Minuman'
         ? IMG_HERO
-        : IMG_BUNDA_BOX;
+        : IMG_BUNDA_SILVER;
 
   return {
     id: `satuan_${String(item.no).padStart(2, '0')}`,
@@ -670,9 +810,23 @@ export const SATUAN_PACKAGES: ParcelPackage[] = RAW_SATUAN_50.map((item) => {
 export const DEFAULT_PACKAGES: ParcelPackage[] = [...CORE_PACKAGES, ...SATUAN_PACKAGES];
 
 const LEGACY_DEFAULT_PHOTOS = new Set([
+  '/src/assets/images/hero_lebaran_parcel_1795079090213.jpg',
+  '/src/assets/images/paket_bunda_sembako_1795079090089.jpg',
+  '/src/assets/images/paket_bunda_box_silver_gold_1795598009338.jpg',
+  '/src/assets/images/paket_bunda_koper_platinum_1795598010326.jpg',
+  '/src/assets/images/paket_anak_lebaran_1795079090980.jpg',
+  '/src/assets/images/paket_anak_koper_ceria_1795598010163.jpg',
+  '/src/assets/images/paket_diamond_mukena_1795598011067.jpg',
+  '/src/assets/images/paket_sultan_diamond_1795079089961.jpg',
+  '/src/assets/images/paket_uang_daging_1795079090348.jpg',
+  '/src/assets/images/reseller_mitra_agen_1795598011859.jpg',
   IMG_HERO,
   IMG_BUNDA,
+  IMG_BUNDA_BOX,
+  IMG_BUNDA_KOPER,
   IMG_ANAK,
+  IMG_ANAK_KOPER,
+  IMG_DIAMOND_MUKENA,
   IMG_SULTAN,
   IMG_UANG_DAGING,
 ]);

@@ -30,9 +30,9 @@ import {
   BROCHURE_UANG,
   COMPANY_INFO,
   IMG_BUNDA,
-  IMG_BUNDA_BOX,
+  IMG_BUNDA_GOLD,
   IMG_HERO,
-  IMG_RESELLER,
+  IMG_RESELLER_POSTER,
   IMG_SULTAN,
   IMG_UANG_DAGING,
   PAKET_UANG_TABLES,
@@ -78,6 +78,7 @@ const BROCHURE_GALLERY = [
   { title: 'Brosur Paket Pilihan (Diamond & Sultan)', src: BROCHURE_PILIHAN },
   { title: 'Brosur Paket Uang Munggahan & Lebaran', src: BROCHURE_UANG },
   { title: 'Brosur 50 Barang Satuan (325 Hari)', src: BROCHURE_SATUAN },
+  { title: 'Poster Resmi Komisi Reseller Eksklusif', src: IMG_RESELLER_POSTER },
 ];
 
 const PAKET_LEBARAN_SUBFILTERS: { id: PaketLebaranSubFilter; label: string }[] = [
@@ -137,9 +138,10 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAllSatuan, setShowAllSatuan] = useState(false);
 
-  // Brochure Lightbox Modal
+  // Brochure Lightbox Modal & Reseller Table Tab
   const [showBrochuresModal, setShowBrochuresModal] = useState(false);
   const [activeBrochureIdx, setActiveBrochureIdx] = useState(0);
+  const [activeResellerGroup, setActiveResellerGroup] = useState<'anak' | 'ibu' | 'pilihan'>('anak');
 
   // Detail Paket UI State
   const [galleryIdx, setGalleryIdx] = useState(0);
@@ -474,11 +476,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         <div className="grid gap-6 sm:gap-8 lg:grid-cols-12">
           {/* Left Gallery + 5 Thumbnails */}
           <div className="space-y-3 lg:col-span-6">
-            <div className="relative overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white shadow-xs">
+            <div className="relative overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] shadow-xs">
               <img
                 src={activePhoto.src}
                 alt={activePhoto.label}
-                className="aspect-[4/3] w-full object-cover"
+                className="aspect-[16/10] w-full object-contain p-2"
                 referrerPolicy="no-referrer"
               />
               <button
@@ -507,7 +509,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   key={`${g.label}-${idx}`}
                   type="button"
                   onClick={() => setGalleryIdx(idx)}
-                  className={`overflow-hidden rounded-xl border-2 bg-white transition cursor-pointer ${
+                  className={`overflow-hidden rounded-xl border-2 bg-[#FAF5FC] transition cursor-pointer ${
                     galleryIdx === idx
                       ? 'border-[#C8A053] ring-1 ring-[#C8A053]'
                       : 'border-[#E4DCCB] opacity-75 hover:opacity-100'
@@ -516,7 +518,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   <img
                     src={g.src}
                     alt={g.label}
-                    className="aspect-[4/3] w-full object-cover"
+                    className="aspect-[16/10] w-full object-contain p-0.5"
                     referrerPolicy="no-referrer"
                   />
                 </button>
@@ -823,11 +825,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   key={pkg.id}
                   className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#FAF5FC]">
                     <img
                       src={pkg.foto_url}
                       alt={pkg.nama_paket}
-                      className="h-full w-full object-cover"
+                      className="h-full w-full object-contain p-1"
                       referrerPolicy="no-referrer"
                     />
                     <button
@@ -913,7 +915,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 className="inline-flex min-h-[42px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-4 py-2 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
               >
                 <BookOpen className="h-4 w-4 text-[#C8A053]" />
-                <span>Lihat 6 Brosur Resmi</span>
+                <span>Lihat Brosur &amp; Poster Resmi</span>
               </button>
               <button
                 type="button"
@@ -927,11 +929,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           </div>
 
           <div className="lg:col-span-6">
-            <div className="overflow-hidden rounded-t-[100px] sm:rounded-t-[150px] rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-xs">
+            <div className="overflow-hidden rounded-t-[100px] sm:rounded-t-[150px] rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-xs">
               <img
-                src={isTabunganUang ? IMG_UANG_DAGING : IMG_HERO}
-                alt={isTabunganUang ? 'Program Tabungan Uang Sagitarius Parcel' : 'Paket Lebaran Sagitarius Parcel'}
-                className="aspect-[16/9] w-full object-cover"
+                src={isTabunganUang ? BROCHURE_UANG : IMG_HERO}
+                alt={isTabunganUang ? 'Brosur Resmi Tabungan Uang Sagitarius Parcel' : 'Paket Lebaran Sagitarius Parcel'}
+                className="aspect-[16/10] w-full object-contain"
                 referrerPolicy="no-referrer"
               />
             </div>
@@ -1041,11 +1043,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                     key={pkg.id}
                     className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
                   >
-                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
+                    <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#FAF5FC]">
                       <img
                         src={pkg.foto_url}
                         alt={pkg.nama_paket}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain p-1"
                         referrerPolicy="no-referrer"
                       />
                       <button
@@ -1388,11 +1390,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                       key={pkg.id}
                       className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
                     >
-                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
+                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#FAF5FC]">
                         <img
                           src={pkg.foto_url}
                           alt={pkg.nama_paket}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain p-1"
                           referrerPolicy="no-referrer"
                         />
                         <button
@@ -1582,16 +1584,19 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           </div>
 
           <div className="lg:col-span-6">
-            <div className="relative overflow-hidden rounded-tl-[100px] sm:rounded-tl-[150px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-sm">
+            <div className="relative overflow-hidden rounded-tl-[100px] sm:rounded-tl-[150px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-sm">
               <img
                 src={IMG_HERO}
                 alt="Bingkisan Parcel Lebaran Sagitarius Parcel"
-                className="aspect-[16/10] w-full object-cover"
+                className="aspect-[16/10] w-full object-contain"
                 referrerPolicy="no-referrer"
               />
               <button
                 type="button"
-                onClick={() => setShowBrochuresModal(true)}
+                onClick={() => {
+                  setActiveBrochureIdx(0);
+                  setShowBrochuresModal(true);
+                }}
                 className="absolute right-3 bottom-3 sm:right-4 sm:bottom-4 inline-flex min-h-[38px] items-center gap-2 rounded-full border border-[#C8A053]/70 bg-[#0C3328]/90 px-3.5 py-2 text-xs font-semibold text-[#E8CA82] backdrop-blur-xs hover:bg-[#0C3328] cursor-pointer"
               >
                 <BookOpen className="h-3.5 w-3.5" />
@@ -1609,9 +1614,9 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
           >
             <img
-              src={IMG_BUNDA_BOX}
+              src={IMG_BUNDA_GOLD}
               alt="Paket Lebaran"
-              className="h-20 w-24 shrink-0 rounded-xl object-cover sm:h-24 sm:w-28"
+              className="h-20 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-24 sm:w-32"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0 flex-1">
@@ -1633,9 +1638,9 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
           >
             <img
-              src={IMG_UANG_DAGING}
+              src={BROCHURE_UANG}
               alt="Tabungan Uang"
-              className="h-20 w-24 shrink-0 rounded-xl object-cover sm:h-24 sm:w-28"
+              className="h-20 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-24 sm:w-32"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0 flex-1">
@@ -1692,44 +1697,111 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         </div>
       </section>
 
-      {/* Program Reseller & Mitra Agen Resmi */}
+      {/* Program Komisi Reseller Eksklusif & Mitra Agen Resmi */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
+        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
           <div className="lg:col-span-5">
-            <div className="overflow-hidden rounded-2xl border border-[#E4DCCB]">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveBrochureIdx(6);
+                setShowBrochuresModal(true);
+              }}
+              className="group relative block w-full overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] cursor-pointer"
+            >
               <img
-                src={IMG_RESELLER}
-                alt="Program Reseller & Mitra Agen Sagitarius Parcel"
-                className="aspect-[16/10] w-full object-cover"
+                src={IMG_RESELLER_POSTER}
+                alt="Poster Komisi Reseller Eksklusif Sagitarius Parcel"
+                className="aspect-[3/4] w-full object-contain"
                 referrerPolicy="no-referrer"
               />
-            </div>
+              <span className="absolute right-3 bottom-3 rounded-full bg-[#0C3328]/90 px-3 py-1.5 text-[11px] font-semibold text-[#E8CA82] shadow transition group-hover:bg-[#0C3328]">
+                Klik untuk Perbesar Poster
+              </span>
+            </button>
           </div>
           <div className="space-y-4 lg:col-span-7">
-            <p className="text-xs font-semibold text-[#C8A053]">
-              Kemitraan Priangan Timur · Tanpa Modal Stok Barang
-            </p>
-            <h2 className="font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
-              {RESELLER_PROGRAM.headline}
-            </h2>
-            <p className="text-xs leading-relaxed text-stone-600 sm:text-sm">
-              {RESELLER_PROGRAM.subheadline}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {RESELLER_PROGRAM.tiers.map((tier) => (
-                <div
-                  key={tier.label}
-                  className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5"
+            <div>
+              <p className="text-xs font-semibold text-[#C8A053]">
+                Program Kemitraan Priangan Timur · Tanpa Modal Stok Barang
+              </p>
+              <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
+                {RESELLER_PROGRAM.headline}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-stone-600 sm:text-sm">
+                {RESELLER_PROGRAM.subheadline}
+              </p>
+            </div>
+
+            {/* Interactive Group Selector */}
+            <div className="flex flex-wrap gap-2">
+              {RESELLER_PROGRAM.groups.map((grp) => (
+                <button
+                  key={grp.id}
+                  type="button"
+                  onClick={() => setActiveResellerGroup(grp.id)}
+                  className={`min-h-[40px] rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                    activeResellerGroup === grp.id
+                      ? 'bg-[#381E5A] text-[#E8CA82]'
+                      : 'border border-[#E4DCCB] bg-[#FAF7F2] text-[#381E5A] hover:bg-stone-100'
+                  }`}
                 >
-                  <p className="text-xs font-bold text-[#381E5A]">{tier.label}</p>
-                  <p className="mt-1 font-mono-nums text-xl font-bold text-[#0C3328]">
-                    Komisi {tier.komisi}
-                  </p>
-                  <p className="text-[11px] font-medium text-[#B98E3A]">{tier.syarat}</p>
-                  <p className="mt-1 text-[11px] leading-snug text-stone-600">{tier.detail}</p>
-                </div>
+                  {grp.title} · {grp.komisiLabel}
+                </button>
               ))}
             </div>
+
+            {/* Commission & Target Bonus Table */}
+            <div className="overflow-x-auto rounded-xl border border-[#E4DCCB]">
+              <table className="w-full min-w-[540px] text-left text-xs">
+                <thead className="bg-[#0C3328] text-[#E8CA82]">
+                  <tr>
+                    <th className="px-3 py-2.5 font-semibold">Paket</th>
+                    <th className="px-3 py-2.5 font-semibold">Komisi/Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 20 Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 50 Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 100 Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 200 Pkt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F0EAE0] bg-white font-mono-nums">
+                  {(
+                    RESELLER_PROGRAM.groups.find((g) => g.id === activeResellerGroup) ||
+                    RESELLER_PROGRAM.groups[0]
+                  ).rows.map((row) => (
+                    <tr key={row.nama} className="hover:bg-[#FAF7F2]">
+                      <td className="px-3 py-2.5 font-sans">
+                        <p className="font-bold text-[#381E5A]">{row.nama}</p>
+                        <p className="text-[11px] text-stone-500">{row.harian}</p>
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-[#0C3328]">
+                        {formatRupiah(row.komisi)}
+                      </td>
+                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus20)}</td>
+                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus50)}</td>
+                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus100)}</td>
+                      <td className="px-3 py-2.5 font-bold text-[#B98E3A]">
+                        {formatRupiah(row.bonus200)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 7 Ketentuan Komisi Reseller */}
+            <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4">
+              <p className="text-xs font-bold text-[#381E5A]">Ketentuan Komisi Reseller:</p>
+              <ol className="mt-2 space-y-1 text-xs leading-relaxed text-stone-700">
+                {RESELLER_PROGRAM.ketentuan.map((rule, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="font-mono-nums font-bold text-[#0C3328]">{idx + 1}.</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
             <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 type="button"
@@ -1787,11 +1859,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 key={pkg.id}
                 className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition hover:-translate-y-0.5 hover:shadow-md"
               >
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
+                <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#FAF5FC]">
                   <img
                     src={pkg.foto_url}
                     alt={pkg.nama_paket}
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-contain p-1"
                     referrerPolicy="no-referrer"
                   />
                   <button

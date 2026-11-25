@@ -8,7 +8,6 @@ import {
   MapPin,
   MessageCircle,
   Share2,
-  ShieldCheck,
   Sparkles,
   UserCheck,
   UserPlus,
@@ -21,11 +20,11 @@ import {
   BROCHURE_BUNDA,
   BROCHURE_PILIHAN,
   COMPANY_INFO,
-  IMG_BUNDA,
+  IMG_BUNDA_GOLD,
   IMG_HERO,
-  IMG_RESELLER,
-  IMG_UANG_DAGING,
+  IMG_RESELLER_POSTER,
   RESELLER_PROGRAM,
+  formatRupiah,
   formatWhatsAppUrl,
 } from '../data/catalogData';
 import {
@@ -51,11 +50,17 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
   onOpenAuth,
 }) => {
   const [wilayahFilter, setWilayahFilter] = useState<'Semua' | WilayahPriangan>('Semua');
+  const [activeResellerGroup, setActiveResellerGroup] = useState<'anak' | 'ibu' | 'pilihan'>('anak');
+  const [showPosterModal, setShowPosterModal] = useState(false);
 
   const filteredAgents = useMemo(() => {
     if (wilayahFilter === 'Semua') return agents;
     return agents.filter((a) => a.wilayah === wilayahFilter);
   }, [agents, wilayahFilter]);
+
+  const currentResellerGroup =
+    RESELLER_PROGRAM.groups.find((g) => g.id === activeResellerGroup) ||
+    RESELLER_PROGRAM.groups[0];
 
   const packagingSteps = [
     {
@@ -68,7 +73,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
       num: '2',
       title: 'Penyusunan',
       desc: 'Produk disusun seimbang dalam Travel Bag, Container Box, maupun Koper.',
-      img: IMG_BUNDA,
+      img: IMG_BUNDA_GOLD,
     },
     {
       num: '3',
@@ -106,7 +111,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('katalog')}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-2.5 text-xs font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-2.5 text-xs font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
             >
               <span>Lihat Paket Lebaran</span>
               <ArrowRight className="h-4 w-4" />
@@ -114,11 +119,12 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
           </div>
 
           <div className="lg:col-span-7">
-            <div className="overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white shadow-xs">
+            <div className="overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] shadow-xs">
               <img
                 src={IMG_HERO}
-                alt="Tim Pengemasan Sagitarius Parcel"
-                className="aspect-[16/9] w-full object-cover"
+                alt="Bingkisan Katalog Resmi Sagitarius Parcel"
+                className="aspect-[16/10] w-full object-contain"
+                referrerPolicy="no-referrer"
               />
             </div>
           </div>
@@ -169,11 +175,12 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
             <div className="grid gap-4 sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
               {packagingSteps.map((s) => (
                 <div key={s.num} className="space-y-2.5">
-                  <div className="overflow-hidden rounded-xl border border-[#C8A053]/40 bg-black/20">
+                  <div className="overflow-hidden rounded-xl border border-[#C8A053]/40 bg-[#FAF5FC]">
                     <img
                       src={s.img}
                       alt={s.title}
-                      className="aspect-[16/10] w-full object-cover"
+                      className="aspect-[16/10] w-full object-contain"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                   <div className="flex items-start gap-2.5">
@@ -194,49 +201,104 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
         </div>
       </section>
 
-      {/* Program Reseller & Mitra Agen Section */}
+      {/* Program Komisi Reseller Eksklusif & Mitra Agen */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
-          <div className="lg:col-span-5">
-            <div className="overflow-hidden rounded-2xl border border-[#E4DCCB]">
+        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
+          <div className="space-y-3 lg:col-span-5">
+            <button
+              type="button"
+              onClick={() => setShowPosterModal(true)}
+              className="group relative block w-full overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] cursor-pointer"
+            >
               <img
-                src={IMG_RESELLER}
-                alt="Mitra Agen & Reseller Sagitarius Parcel"
-                className="aspect-[16/10] w-full object-cover"
+                src={IMG_RESELLER_POSTER}
+                alt="Poster Resmi Komisi Reseller Eksklusif Sagitarius Parcel"
+                className="aspect-[3/4] w-full object-contain"
+                referrerPolicy="no-referrer"
               />
-            </div>
+              <span className="absolute right-3 bottom-3 rounded-full bg-[#0C3328]/90 px-3 py-1.5 text-[11px] font-semibold text-[#E8CA82] shadow transition group-hover:bg-[#0C3328]">
+                Klik untuk Perbesar Poster
+              </span>
+            </button>
           </div>
-          <div className="space-y-4 lg:col-span-7">
-            <p className="text-xs font-semibold text-[#C8A053]">Program Kemitraan Resmi</p>
-            <h2 className="font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
-              {RESELLER_PROGRAM.headline}
-            </h2>
-            <p className="text-xs leading-relaxed text-stone-600 sm:text-sm">
-              {RESELLER_PROGRAM.subheadline}
-            </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {RESELLER_PROGRAM.tiers.map((tier) => (
-                <div
-                  key={tier.label}
-                  className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5"
+
+          <div className="space-y-5 lg:col-span-7">
+            <div>
+              <p className="text-xs font-semibold text-[#C8A053]">Program Kemitraan Resmi</p>
+              <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
+                {RESELLER_PROGRAM.headline}
+              </h2>
+              <p className="mt-1.5 text-xs leading-relaxed text-stone-600 sm:text-sm">
+                {RESELLER_PROGRAM.subheadline}
+              </p>
+            </div>
+
+            {/* Category Tabs for Commission Table */}
+            <div className="flex flex-wrap gap-2">
+              {RESELLER_PROGRAM.groups.map((grp) => (
+                <button
+                  key={grp.id}
+                  type="button"
+                  onClick={() => setActiveResellerGroup(grp.id)}
+                  className={`min-h-[40px] rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                    activeResellerGroup === grp.id
+                      ? 'bg-[#381E5A] text-[#E8CA82]'
+                      : 'border border-[#E4DCCB] bg-[#FAF7F2] text-[#381E5A] hover:bg-stone-100'
+                  }`}
                 >
-                  <p className="text-xs font-bold text-[#381E5A]">{tier.label}</p>
-                  <p className="mt-1 font-mono-nums text-xl font-bold text-[#0C3328]">
-                    {tier.komisi}
-                  </p>
-                  <p className="text-[11px] font-medium text-[#B98E3A]">{tier.syarat}</p>
-                  <p className="mt-1 text-[11px] leading-snug text-stone-600">{tier.detail}</p>
-                </div>
+                  {grp.title} · {grp.komisiLabel}
+                </button>
               ))}
             </div>
-            <ul className="space-y-1.5 text-xs text-stone-700">
-              {RESELLER_PROGRAM.benefits.map((b) => (
-                <li key={b} className="flex items-start gap-2">
-                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#0C3328]" />
-                  <span>{b}</span>
-                </li>
-              ))}
-            </ul>
+
+            {/* Official Commission & Bonus Table */}
+            <div className="overflow-x-auto rounded-xl border border-[#E4DCCB]">
+              <table className="w-full min-w-[540px] text-left text-xs">
+                <thead className="bg-[#0C3328] text-[#E8CA82]">
+                  <tr>
+                    <th className="px-3 py-2.5 font-semibold">Paket</th>
+                    <th className="px-3 py-2.5 font-semibold">Komisi/Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 20 Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 50 Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 100 Pkt</th>
+                    <th className="px-3 py-2.5 font-semibold">Bonus 200 Pkt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F0EAE0] bg-white font-mono-nums">
+                  {currentResellerGroup.rows.map((row) => (
+                    <tr key={row.nama} className="hover:bg-[#FAF7F2]">
+                      <td className="px-3 py-2.5 font-sans">
+                        <p className="font-bold text-[#381E5A]">{row.nama}</p>
+                        <p className="text-[11px] text-stone-500">{row.harian}</p>
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-[#0C3328]">
+                        {formatRupiah(row.komisi)}
+                      </td>
+                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus20)}</td>
+                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus50)}</td>
+                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus100)}</td>
+                      <td className="px-3 py-2.5 font-bold text-[#B98E3A]">
+                        {formatRupiah(row.bonus200)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 7 Ketentuan Komisi Reseller */}
+            <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4">
+              <p className="text-xs font-bold text-[#381E5A]">Ketentuan Komisi Reseller:</p>
+              <ol className="mt-2 space-y-1.5 text-xs leading-relaxed text-stone-700">
+                {RESELLER_PROGRAM.ketentuan.map((rule, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="font-mono-nums font-bold text-[#0C3328]">{idx + 1}.</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
             <div className="flex flex-wrap gap-3 pt-1">
               <button
                 type="button"
@@ -258,6 +320,34 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
           </div>
         </div>
       </section>
+
+      {showPosterModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 p-4 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowPosterModal(false)}
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-stone-950 p-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowPosterModal(false)}
+              className="mb-2 ml-auto flex min-h-[38px] items-center gap-1 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/25 cursor-pointer"
+            >
+              Tutup Poster
+            </button>
+            <img
+              src={IMG_RESELLER_POSTER}
+              alt="Poster Komisi Reseller Eksklusif Sagitarius Parcel"
+              className="mx-auto max-h-[80vh] w-auto rounded-lg object-contain"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Direktori Agen Priangan Timur */}
       <section id="agen" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -608,11 +698,12 @@ export const KontakPage: React.FC = () => {
 
         {/* Right Column: Arched Hamper Photo + Peta Lokasi Kami */}
         <div className="space-y-4 lg:col-span-4">
-          <div className="overflow-hidden rounded-tl-[160px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-xs">
+          <div className="overflow-hidden rounded-tl-[140px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-xs">
             <img
-              src={IMG_UANG_DAGING}
+              src={IMG_HERO}
               alt="Parcel Eid Mubarak Sagitarius Parcel"
-              className="aspect-[4/4.2] w-full object-cover"
+              className="aspect-[16/10] w-full object-contain"
+              referrerPolicy="no-referrer"
             />
           </div>
 

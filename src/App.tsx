@@ -1622,7 +1622,8 @@ export default function App() {
                       <img
                         src={pkg.foto_url}
                         alt={pkg.nama_paket}
-                        className="h-20 w-20 shrink-0 rounded-xl object-cover"
+                        className="h-20 w-24 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1"
+                        referrerPolicy="no-referrer"
                       />
                       <div className="flex flex-1 flex-col justify-between">
                         <div className="flex items-start justify-between gap-2">
