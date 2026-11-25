@@ -1,9 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import {
   BarChart3,
+  Building2,
   Calculator,
+  CheckCircle2,
+  Coins,
   Download,
+  FileSpreadsheet,
+  FileText,
   Package as PackageIcon,
+  Printer,
   ShieldAlert,
   TrendingUp,
   Wallet,
@@ -69,8 +75,58 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
   warehouseInventory = [],
   auditLogs = [],
 }) => {
-  const [analyticsView, setAnalyticsView] = useState<'grafik' | 'hpp' | 'audit'>('grafik');
+  const [analyticsView, setAnalyticsView] = useState<'grafik' | 'hpp' | 'audit' | 'tutup_buku'>('grafik');
   const [hppCategoryFilter, setHppCategoryFilter] = useState<string>('all');
+
+  // Executive P&L & Financial Closing Calculations
+  const closingReport = useMemo(() => {
+    let grossCollected = 0;
+    let totalPenarikan = 0;
+    deposits.forEach((d) => {
+      if (d.status_verifikasi !== 'verified') return;
+      const isOut =
+        d.jenis_transaksi === 'penarikan' ||
+        d.metode === 'pencairan_tunai' ||
+        d.metode === 'transfer_keluar';
+      if (isOut) totalPenarikan += d.nominal || 0;
+      else grossCollected += d.nominal || 0;
+    });
+
+    const netCashInflow = Math.max(0, grossCollected - totalPenarikan);
+    const totalTarget = subscriptions.reduce((s, c) => s + (c.target_nominal || 0), 0);
+    const totalThrAllocated = subscriptions.reduce((s, c) => {
+      const p = packages.find((pkg) => pkg.id === c.package_id);
+      return s + (p?.bonus_thr || 0);
+    }, 0);
+
+    // Compute estimated COGS / HPP
+    let totalHppCost = 0;
+    subscriptions.forEach((sub) => {
+      const pkg = packages.find((p) => p.id === sub.package_id);
+      if (!pkg) return;
+      const standardRatio = pkg.kategori === 'uang' ? 0.9 : 0.72;
+      const estimatedCost = Math.round((pkg.harga_total - (pkg.bonus_thr || 0)) * standardRatio);
+      totalHppCost += estimatedCost;
+    });
+
+    const totalCommissionEst = korwilRecap.reduce((s, r) => s + r.totalCommission, 0);
+    const estimatedGrossProfit = Math.max(0, netCashInflow - (totalHppCost + totalCommissionEst + totalThrAllocated));
+    const profitMargin = netCashInflow > 0 ? Math.round((estimatedGrossProfit / netCashInflow) * 100) : 0;
+
+    return {
+      grossCollected,
+      totalPenarikan,
+      netCashInflow,
+      totalTarget,
+      totalThrAllocated,
+      totalHppCost,
+      totalCommissionEst,
+      estimatedGrossProfit,
+      profitMargin,
+      totalContracts: subscriptions.length,
+      lunasContracts: subscriptions.filter((s) => s.status === 'lunas').length,
+    };
+  }, [deposits, subscriptions, packages, korwilRecap]);
 
   const cashflow = useMemo(() => {
     let totalIn = 0;
@@ -260,6 +316,18 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
           {auditLogs.length > 0 && (
             <span className="font-mono-nums text-[11px] text-stone-500">({auditLogs.length})</span>
           )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAnalyticsView('tutup_buku')}
+          className={`inline-flex items-center gap-1.5 rounded-md px-3.5 py-1.5 text-xs font-semibold transition whitespace-nowrap cursor-pointer ${
+            analyticsView === 'tutup_buku'
+              ? 'bg-[#0C3328] text-[#E8CA82] shadow-xs'
+              : 'text-stone-600 hover:text-stone-900'
+          }`}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          <span>Laporan Tutup Buku &amp; P&amp;L</span>
         </button>
       </div>
 
@@ -599,6 +667,245 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* VIEW 4: LAPORAN KEUANGAN KONSOLIDASIAN & TUTUP BUKU PERIODE */}
+      {analyticsView === 'tutup_buku' && (
+        <div className="space-y-6">
+          {/* Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-4">
+            <div>
+              <h2 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-[#0C3328]" />
+                <span>Laporan Keuangan Konsolidasian &amp; Tutup Buku Resmi</span>
+              </h2>
+              <p className="text-[11px] text-stone-500">
+                Dokumen ikhtisar finansial eksekutif PT Sagitarius Trinunggal Karya periode berjalan.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[#0C3328] px-3.5 py-1.5 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer shadow-xs"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                <span>Cetak Dokumen / Simpan PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const headers = ['Indikator Laporan Keuangan', 'Nilai / Keterangan'];
+                  const rows = [
+                    ['Total Setoran Terkumpul (Gross Inflow)', formatRupiah(closingReport.grossCollected)],
+                    ['Penarikan Dana Member (Outflow)', formatRupiah(closingReport.totalPenarikan)],
+                    ['Penerimaan Kas Bersih (Net Cash)', formatRupiah(closingReport.netCashInflow)],
+                    ['Beban Pokok Penjualan HPP (COGS)', formatRupiah(closingReport.totalHppCost)],
+                    ['Estimasi Beban Komisi Agen (4-7%)', formatRupiah(closingReport.totalCommissionEst)],
+                    ['Alokasi Beban Hadiah & THR', formatRupiah(closingReport.totalThrAllocated)],
+                    ['Estimasi Laba Kotor Usaha', formatRupiah(closingReport.estimatedGrossProfit)],
+                    ['Rasio Margin Laba Bersih', `${closingReport.profitMargin}%`],
+                    ['Total Target Tabungan Portfolio', formatRupiah(closingReport.totalTarget)],
+                    ['Jumlah Kontrak Tabungan', `${closingReport.totalContracts} Kontrak (${closingReport.lunasContracts} Lunas)`],
+                  ];
+                  const csv = [headers.join(','), ...rows.map((r) => `"${r[0]}","${r[1]}"`)].join('\n');
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `laporan-tutup-buku-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-800" />
+                <span>Export CSV Tutup Buku</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Lembar Laporan Formal (Printable Sheet) */}
+          <div className="rounded-2xl border border-stone-300 bg-white p-6 sm:p-10 shadow-sm space-y-6">
+            {/* Header Kop Surat Perusahaan */}
+            <div className="border-b-2 border-stone-900 pb-5 text-center space-y-1">
+              <div className="flex items-center justify-center gap-2">
+                <Building2 className="h-6 w-6 text-[#0C3328]" />
+                <h1 className="font-display text-xl sm:text-2xl font-bold uppercase tracking-wide text-stone-900">
+                  PT. SAGITARIUS TRINUNGGAL KARYA
+                </h1>
+              </div>
+              <p className="text-xs font-semibold text-stone-700">
+                Penyelenggara Tabungan &amp; Bingkisan Parsel Lebaran Terpadu Priangan Timur
+              </p>
+              <p className="text-[11px] text-stone-500">
+                Bantar Peundeuy RT. 006 RW. 001 Margajaya Mangunreja Kab. Tasikmalaya Jawa Barat 46462 · WA: 0813 2438 3479 · www.sagitarius-parcel.web.id
+              </p>
+              <div className="pt-2">
+                <span className="inline-block rounded-md bg-[#FAF7F2] border border-[#E4DCCB] px-4 py-1 text-xs font-bold text-[#381E5A] uppercase tracking-wider">
+                  IKHTISAR LABA RUGI &amp; REKONSILIASI PENUTUPAN BUKU PERIODE RAMADHAN 1447H / 2026M
+                </span>
+              </div>
+              <p className="text-[10px] text-stone-400 font-mono-nums">
+                Dicetak pada: {new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+
+            {/* Metrik Finansial Utama (P&L Breakdown) */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+              <div className="rounded-xl border border-stone-200 bg-[#FAF7F2] p-3.5">
+                <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wide">
+                  Penerimaan Kas (Gross)
+                </p>
+                <p className="mt-1 font-mono-nums text-lg font-bold text-[#0C3328]">
+                  {formatRupiah(closingReport.grossCollected)}
+                </p>
+                <p className="text-[10px] text-stone-500">
+                  Total dana tervalidasi masuk
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-stone-200 bg-[#FAF7F2] p-3.5">
+                <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wide">
+                  Beban Pokok Parsel (HPP)
+                </p>
+                <p className="mt-1 font-mono-nums text-lg font-bold text-rose-800">
+                  {formatRupiah(closingReport.totalHppCost)}
+                </p>
+                <p className="text-[10px] text-stone-500">
+                  Estimasi belanja komoditas
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-stone-200 bg-[#FAF7F2] p-3.5">
+                <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wide">
+                  Beban Komisi &amp; Bonus
+                </p>
+                <p className="mt-1 font-mono-nums text-lg font-bold text-[#381E5A]">
+                  {formatRupiah(closingReport.totalCommissionEst + closingReport.totalThrAllocated)}
+                </p>
+                <p className="text-[10px] text-stone-500">
+                  Komisi agen &amp; alokasi THR
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3.5">
+                <p className="text-[10px] font-bold text-emerald-900 uppercase tracking-wide">
+                  Estimasi Laba Kotor Usaha
+                </p>
+                <p className="mt-1 font-mono-nums text-lg font-bold text-emerald-950">
+                  {formatRupiah(closingReport.estimatedGrossProfit)}
+                </p>
+                <p className="text-[10px] font-bold text-emerald-800">
+                  Margin: {closingReport.profitMargin}% dari arus kas
+                </p>
+              </div>
+            </div>
+
+            {/* Tabel Konsolidasi Per Wilayah */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold text-stone-800 uppercase tracking-wide border-b border-stone-200 pb-1.5">
+                Konsolidasi Operasional Per Wilayah Priangan Timur
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-stone-300 font-bold text-stone-600">
+                      <th className="py-2 pr-3">Wilayah Priangan</th>
+                      <th className="py-2 pr-3 text-right">Agen Aktif</th>
+                      <th className="py-2 pr-3 text-right">Kontrak Live</th>
+                      <th className="py-2 pr-3 text-right">Target Portfolio</th>
+                      <th className="py-2 pr-3 text-right">Dana Masuk</th>
+                      <th className="py-2 pr-3 text-right">Beban Komisi</th>
+                      <th className="py-2 text-right">Pencapaian (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-200">
+                    {korwilRecap.map((row) => (
+                      <tr key={row.wilayah} className="hover:bg-stone-50">
+                        <td className="py-2.5 pr-3 font-semibold text-stone-900">{row.wilayah}</td>
+                        <td className="py-2.5 pr-3 text-right font-mono-nums">{row.agentCount} Agen</td>
+                        <td className="py-2.5 pr-3 text-right font-mono-nums">{row.contractCount}</td>
+                        <td className="py-2.5 pr-3 text-right font-mono-nums text-stone-600">
+                          {formatRupiah(row.totalTarget)}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono-nums font-bold text-[#0C3328]">
+                          {formatRupiah(row.totalCollected)}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right font-mono-nums text-amber-800">
+                          {formatRupiah(row.totalCommission)}
+                        </td>
+                        <td className="py-2 text-right font-mono-nums font-semibold text-stone-800">
+                          {row.pct}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-stone-900 font-bold bg-[#FAF7F2]">
+                      <td className="py-2.5 pr-3 text-stone-900">TOTAL KONSOLIDASI</td>
+                      <td className="py-2.5 pr-3 text-right font-mono-nums">
+                        {korwilRecap.reduce((s, r) => s + r.agentCount, 0)} Agen
+                      </td>
+                      <td className="py-2.5 pr-3 text-right font-mono-nums">
+                        {closingReport.totalContracts} Kontrak
+                      </td>
+                      <td className="py-2.5 pr-3 text-right font-mono-nums">
+                        {formatRupiah(closingReport.totalTarget)}
+                      </td>
+                      <td className="py-2.5 pr-3 text-right font-mono-nums text-[#0C3328]">
+                        {formatRupiah(closingReport.netCashInflow)}
+                      </td>
+                      <td className="py-2.5 pr-3 text-right font-mono-nums text-amber-800">
+                        {formatRupiah(closingReport.totalCommissionEst)}
+                      </td>
+                      <td className="py-2 text-right font-mono-nums">
+                        {closingReport.totalTarget > 0
+                          ? Math.round((closingReport.netCashInflow / closingReport.totalTarget) * 100)
+                          : 0}
+                        %
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Pernyataan Integritas & Tanda Tangan */}
+            <div className="pt-6 border-t border-stone-300">
+              <p className="text-[11px] text-stone-500 italic text-center mb-8">
+                Laporan ini diterbitkan secara otomatis dari buku besar digital Sagitarius Parcel 2.0 dan disahkan oleh manajemen PT Sagitarius Trinunggal Karya.
+              </p>
+
+              <div className="grid grid-cols-3 gap-6 text-center text-xs">
+                <div className="space-y-12">
+                  <p className="text-stone-600 font-semibold">Disiapkan Oleh,</p>
+                  <div className="border-t border-stone-400 pt-1.5">
+                    <p className="font-bold text-stone-900">Petugas Keuangan</p>
+                    <p className="text-[10px] text-stone-500">Admin Keuangan Pusat</p>
+                  </div>
+                </div>
+
+                <div className="space-y-12">
+                  <p className="text-stone-600 font-semibold">Diperiksa Oleh,</p>
+                  <div className="border-t border-stone-400 pt-1.5">
+                    <p className="font-bold text-stone-900">Koordinator Wilayah</p>
+                    <p className="text-[10px] text-stone-500">Logistik &amp; Distribusi Priangan</p>
+                  </div>
+                </div>
+
+                <div className="space-y-12">
+                  <p className="text-stone-600 font-semibold">Disetujui Oleh,</p>
+                  <div className="border-t border-stone-400 pt-1.5">
+                    <p className="font-bold text-[#0C3328]">Direktur Utama</p>
+                    <p className="text-[10px] text-stone-500">PT Sagitarius Trinunggal Karya</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

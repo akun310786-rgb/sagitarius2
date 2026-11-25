@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
@@ -35,6 +36,7 @@ import {
   Trash2,
   Trophy,
   Truck,
+  Undo2,
   Upload,
   UserCheck,
   UserPlus,
@@ -89,6 +91,11 @@ import {
   WilayahPriangan,
 } from '../types';
 import { AdminAnalyticsTab } from './AdminAnalyticsTab';
+import { AdminBankReconciliationTab } from './AdminBankReconciliationTab';
+import { AdminBroadcastTab } from './AdminBroadcastTab';
+import { AdminDelinquencyTab } from './AdminDelinquencyTab';
+import { AdminFleetDispatchTab } from './AdminFleetDispatchTab';
+import { AdminVoidModal } from './AdminVoidModal';
 import { QrCameraScanner } from './QrCameraScanner';
 import { ReceiptGeneratorModal } from './ReceiptGeneratorModal';
 import { ResellerCatalogToolsTab } from './ResellerCatalogToolsTab';
@@ -242,16 +249,23 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   const [activeTab, setActiveTab] = useState<AdminTab>(
     userProfile?.role === 'agen' ? 'kontrak' : 'agen'
   );
-  const [kontrakSubTab, setKontrakSubTab] = useState<'members' | 'contracts' | 'pengiriman'>(
-    userProfile?.role === 'agen' ? 'members' : 'contracts'
-  );
+  const [kontrakSubTab, setKontrakSubTab] = useState<
+    'members' | 'contracts' | 'macet' | 'pengiriman'
+  >(userProfile?.role === 'agen' ? 'members' : 'contracts');
   const [txSubTab, setTxSubTab] = useState<'input' | 'harian' | 'riwayat'>('input');
   const [txHistoryStatusFilter, setTxHistoryStatusFilter] = useState<
     'all' | 'verified' | 'pending' | 'rejected'
   >(userProfile?.role === 'agen' ? 'all' : 'verified');
-  const [korwilSubTab, setKorwilSubTab] = useState<'tutup_kas' | 'wilayah' | 'referral'>('tutup_kas');
+  const [korwilSubTab, setKorwilSubTab] = useState<
+    'tutup_kas' | 'rekonsiliasi' | 'wilayah' | 'referral'
+  >('tutup_kas');
   const [settlementTypeFilter, setSettlementTypeFilter] = useState<'all' | AgentSettlementType>('all');
-  const [gudangSubTab, setGudangSubTab] = useState<'kebutuhan' | 'manifest' | 'stok'>('kebutuhan');
+  const [gudangSubTab, setGudangSubTab] = useState<
+    'kebutuhan' | 'manifest' | 'armada' | 'stok'
+  >('kebutuhan');
+  const [pesanSubTab, setPesanSubTab] = useState<'inbox' | 'broadcast'>('inbox');
+  const [voidTargetDeposit, setVoidTargetDeposit] = useState<Deposit | null>(null);
+  const [showVoidModal, setShowVoidModal] = useState(false);
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
   const [appKodeDraft, setAppKodeDraft] = useState<Record<string, string>>({});
   const [processingAppId, setProcessingAppId] = useState<string | null>(null);
@@ -1987,6 +2001,170 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'subscriptions/batch');
+    }
+  };
+
+  const handleUpdateDeliveryStageBatch = async (subIds: string[], nextStage: DeliveryStage) => {
+    const targetSubs = subscriptions.filter((s) => subIds.includes(s.id));
+    if (targetSubs.length > 0) {
+      await handleBatchAdvanceDelivery(targetSubs, nextStage);
+    }
+  };
+
+  const handleBatchVerifySettlements = async (settlementIds: string[]) => {
+    if (!userProfile || settlementIds.length === 0) return;
+    try {
+      const auditRef = doc(collection(db, 'audit_logs'));
+      await runTransaction(db, async (tx) => {
+        for (const sid of settlementIds) {
+          const sRef = doc(db, 'agent_settlements', sid);
+          const sSnap = await tx.get(sRef);
+          if (sSnap.exists() && sSnap.data().status === 'pending') {
+            tx.update(sRef, {
+              status: 'verified',
+              validated_by: userProfile.nama.slice(0, 100),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        }
+        if (canWriteAuditAction('VALIDASI_KAS_AGEN')) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              'VALIDASI_KAS_AGEN',
+              `${settlementIds.length} Setoran Kas`,
+              `Validasi massal rekonsiliasi mutasi bank/QRIS pusat untuk ${settlementIds.length} transaksi agen.`
+            )
+          );
+        }
+      });
+      setStatusMessage(`Berhasil memvalidasi ${settlementIds.length} setoran kas agen dari rekonsiliasi mutasi.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'agent_settlements');
+      throw err;
+    }
+  };
+
+  const handlePublishBannerFromBroadcast = async (judul: string, isi: string) => {
+    try {
+      const settingsRef = doc(db, 'app_settings', 'public');
+      const auditRef = doc(collection(db, 'audit_logs'));
+      const batch = writeBatch(db);
+      batch.set(
+        settingsRef,
+        {
+          pengumuman_judul: judul.slice(0, 100),
+          pengumuman_isi: isi.slice(0, 300),
+          pengumuman_aktif: true,
+          updated_by: userProfile?.nama || 'Admin Pusat',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      if (canWriteAuditAction('UPDATE_PENGATURAN_PUSAT')) {
+        batch.set(
+          auditRef,
+          buildAuditLogPayload(
+            'UPDATE_PENGATURAN_PUSAT',
+            'Banner Siaran Publik',
+            `Menerbitkan siaran resmi ke running banner aplikasi: "${judul.slice(0, 60)}"`
+          )
+        );
+      }
+      await batch.commit();
+      setStatusMessage('Siaran resmi berhasil diterbitkan ke banner aplikasi web.');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'app_settings/public');
+      throw err;
+    }
+  };
+
+  const handleExecuteVoidTransaction = async (
+    dep: Deposit,
+    reason: string,
+    note: string,
+    baNumber: string
+  ) => {
+    if (!userProfile) return;
+    try {
+      const subRef = doc(db, 'subscriptions', dep.subscription_id);
+      const revDepositRef = doc(collection(db, 'deposits'));
+      const auditRef = doc(collection(db, 'audit_logs'));
+      const notifRef = doc(collection(db, 'notifications'));
+
+      await runTransaction(db, async (tx) => {
+        const subSnap = await tx.get(subRef);
+        if (!subSnap.exists()) {
+          throw new Error('SUB_NOT_FOUND');
+        }
+        const freshSub = subSnap.data() as Omit<Subscription, 'id'>;
+        const isSetoran = !dep.jenis_transaksi || dep.jenis_transaksi === 'setoran';
+        const diff = dep.nominal;
+        const nextTotal = isSetoran
+          ? Math.max(0, (freshSub.total_terkumpul || 0) - diff)
+          : (freshSub.total_terkumpul || 0) + diff;
+
+        const nextStatus: SubscriptionStatus =
+          freshSub.status === 'diambil'
+            ? 'diambil'
+            : nextTotal >= freshSub.target_nominal
+              ? 'lunas'
+              : 'aktif';
+
+        tx.update(subRef, {
+          total_terkumpul: nextTotal,
+          status: nextStatus,
+          updatedAt: serverTimestamp(),
+        });
+
+        tx.set(revDepositRef, {
+          subscription_id: dep.subscription_id,
+          member_id: dep.member_id,
+          member_nama: (dep.member_nama || freshSub.member_nama).slice(0, 100),
+          agen_id: dep.agen_id,
+          korwil_id: dep.korwil_id || freshSub.korwil_id || '',
+          wilayah: dep.wilayah || freshSub.wilayah,
+          jenis_transaksi: isSetoran ? 'penarikan' : 'setoran',
+          nominal: dep.nominal,
+          metode: isSetoran ? 'pencairan_tunai' : 'tunai_agen',
+          catatan: `[VOID ${baNumber}] Pembatalan ${dep.id}: ${reason} - ${note}`.slice(0, 250),
+          status_verifikasi: 'verified',
+          validated_by: userProfile.nama.slice(0, 100),
+          tanggal: new Date().toISOString().slice(0, 10),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        if (canWriteAuditAction('TRANSAKSI_VOID')) {
+          tx.set(
+            auditRef,
+            buildAuditLogPayload(
+              'TRANSAKSI_VOID',
+              freshSub.member_nama,
+              `Berita Acara Pembatalan ${baNumber} nominal ${formatRupiah(dep.nominal)}. Alasan: ${reason}`
+            )
+          );
+        }
+
+        tx.set(notifRef, {
+          recipient_type: 'agen',
+          recipient_uid: dep.agen_id,
+          wilayah: dep.wilayah || freshSub.wilayah,
+          kategori: 'sistem',
+          judul: `Pembatalan Transaksi (${baNumber})`,
+          pesan: `Admin Pusat menerbitkan Berita Acara pembatalan untuk ${isSetoran ? 'setoran' : 'penarikan'} Rp ${formatRupiah(dep.nominal)} (${freshSub.member_nama}). Alasan: ${reason}`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      setStatusMessage(`Berhasil menerbitkan Berita Acara ${baNumber}. Saldo ${dep.member_nama} telah dibalik secara atomik.`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${dep.subscription_id}`);
+      throw err;
     }
   };
 
@@ -4488,6 +4666,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                                   <span>Struk PNG</span>
                                 </button>
                               )}
+                              {isAdmin && d.status_verifikasi === 'verified' && !d.catatan?.startsWith('[VOID') && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setVoidTargetDeposit(d);
+                                    setShowVoidModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
+                                  title="Batalkan transaksi dan terbitkan Berita Acara resmi (VOID)"
+                                >
+                                  <Undo2 className="h-3 w-3" />
+                                  <span>Void</span>
+                                </button>
+                              )}
                               {d.bukti_foto_url && (
                                 <button
                                   type="button"
@@ -4587,6 +4779,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               >
                 Daftar Kontrak ({filteredContracts.length})
               </button>
+              {(isAdmin || !isAgen) && (
+                <button
+                  type="button"
+                  onClick={() => setKontrakSubTab('macet')}
+                  className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    kontrakSubTab === 'macet'
+                      ? 'bg-rose-900 text-white shadow-xs'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Pengawasan Macet (Early Warning)
+                </button>
+              )}
               {isAgen && (
                 <button
                   type="button"
@@ -4603,7 +4808,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
           </div>
 
-          {kontrakSubTab !== 'pengiriman' && (
+          {kontrakSubTab !== 'pengiriman' && kontrakSubTab !== 'macet' && (
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
@@ -5059,6 +5264,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </>
           )}
 
+          {kontrakSubTab === 'macet' && (isAdmin || !isAgen) && (
+            <AdminDelinquencyTab
+              subscriptions={subscriptions}
+              deposits={deposits}
+              agents={agents}
+            />
+          )}
+
           {kontrakSubTab === 'pengiriman' && isAgen && (
             <div className="grid gap-5 lg:grid-cols-12">
               <div className="space-y-4 lg:col-span-5">
@@ -5461,6 +5674,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                   }`}
                 >
                   Rekap Wilayah &amp; Komisi 7%
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setKorwilSubTab('rekonsiliasi')}
+                  className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    korwilSubTab === 'rekonsiliasi'
+                      ? 'bg-emerald-900 text-white shadow-xs'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Rekonsiliasi Bank &amp; QRIS
                 </button>
               )}
               <button
@@ -6020,6 +6246,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
           )}
 
+          {korwilSubTab === 'rekonsiliasi' && isAdmin && (
+            <AdminBankReconciliationTab
+              pendingSettlements={agentSettlements}
+              onBatchVerify={handleBatchVerifySettlements}
+              bankName={appSettings.bank_nama}
+              bankRekening={appSettings.bank_rekening}
+              bankAtasNama={appSettings.bank_atas_nama}
+              qrisMerchant={appSettings.qris_merchant}
+            />
+          )}
+
           {korwilSubTab === 'referral' && (
           /* Link & QR Pendaftaran Khusus Agen + Komisi Reseller Pribadi / Leaderboard */
           <div className="grid gap-5 lg:grid-cols-12">
@@ -6491,6 +6728,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </button>
               <button
                 type="button"
+                onClick={() => setGudangSubTab('armada')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  gudangSubTab === 'armada'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Armada &amp; Ekspedisi Drop-Point
+              </button>
+              <button
+                type="button"
                 onClick={() => setGudangSubTab('stok')}
                 className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                   gudangSubTab === 'stok'
@@ -6825,6 +7073,14 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </div>
             )}
           </div>
+          )}
+
+          {gudangSubTab === 'armada' && (
+            <AdminFleetDispatchTab
+              subscriptions={subscriptions}
+              agents={agents}
+              onUpdateDeliveryStage={handleUpdateDeliveryStageBatch}
+            />
           )}
 
           {gudangSubTab === 'stok' && (
@@ -7357,105 +7613,146 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         </div>
       )}
 
-      {/* TAB 7: PESAN MASUK DARI HALAMAN KONTAK (ADMIN PUSAT) */}
+      {/* TAB 7: PESAN MASUK & SIARAN BROADCAST (ADMIN PUSAT) */}
       {activeTab === 'pesan' && isAdmin && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white p-6">
-            <div>
-              <h2 className="font-display text-xl font-bold text-stone-900">
+          {/* Sub-Tab Navigasi Pesan & Broadcast */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-3">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                type="button"
+                onClick={() => setPesanSubTab('inbox')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  pesanSubTab === 'inbox'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
                 Pesan Masuk Pengunjung ({contactMessages.length})
-              </h2>
-              <p className="mt-1 text-xs text-stone-600">
-                Pesan pertanyaan dari formulir halaman Kontak publik. Balas via WhatsApp lalu tandai selesai.
-              </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPesanSubTab('broadcast')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  pesanSubTab === 'broadcast'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Pusat Siaran &amp; WA Blast
+              </button>
             </div>
-            <span className="rounded-lg bg-amber-50 px-3 py-1.5 font-mono-nums text-xs font-bold text-amber-900">
-              {unreadMessagesCount} Pesan Baru
-            </span>
           </div>
 
-          {contactMessages.length === 0 ? (
-            <div className="rounded-2xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
-              Belum ada pesan masuk dari halaman Kontak.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {contactMessages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className="flex flex-col justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:flex-row sm:items-start"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-bold text-stone-900">{msg.nama}</span>
-                      <span className="font-mono-nums text-xs font-medium text-stone-600">
-                        {msg.no_wa}
-                      </span>
-                      <span
-                        className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          msg.status === 'baru'
-                            ? 'bg-amber-100 text-amber-900'
-                            : 'bg-emerald-100 text-emerald-900'
-                        }`}
-                      >
-                        {msg.status === 'baru' ? 'Baru' : 'Dibalas'}
-                      </span>
-                    </div>
-                    <p className="text-xs leading-relaxed text-stone-700 whitespace-pre-line">
-                      {msg.pesan}
-                    </p>
-                  </div>
+          {pesanSubTab === 'broadcast' && (
+            <AdminBroadcastTab
+              agents={agents}
+              subscriptions={subscriptions}
+              allUsers={allUsers}
+              onPublishToAppBanner={handlePublishBannerFromBroadcast}
+            />
+          )}
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <a
-                      href={formatWhatsAppUrl(
-                        msg.no_wa,
-                        `Halo ${msg.nama}, terima kasih telah menghubungi Sagitarius Parcel. Menanggapi pesan Anda: "${msg.pesan.slice(0, 60)}..."`
-                      )}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A34A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#15803D]"
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      <span>Balas WA</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleMarkMessageReplied(msg)}
-                      className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
-                    >
-                      {msg.status === 'baru' ? 'Tandai Dibalas' : 'Buka Lagi'}
-                    </button>
-                    {confirmDeleteMsgId === msg.id ? (
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteContactMessage(msg.id)}
-                          className="rounded-lg bg-rose-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-800 cursor-pointer"
-                        >
-                          Ya, Hapus
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteMsgId(null)}
-                          className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs text-stone-600 cursor-pointer"
-                        >
-                          Batal
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDeleteMsgId(msg.id)}
-                        className="rounded-lg border border-rose-200 p-1.5 text-rose-700 hover:bg-rose-50 cursor-pointer"
-                        aria-label="Hapus pesan"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+          {pesanSubTab === 'inbox' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stone-200 bg-white p-6">
+                <div>
+                  <h2 className="font-display text-xl font-bold text-stone-900">
+                    Pesan Masuk Pengunjung ({contactMessages.length})
+                  </h2>
+                  <p className="mt-1 text-xs text-stone-600">
+                    Pesan pertanyaan dari formulir halaman Kontak publik. Balas via WhatsApp lalu tandai selesai.
+                  </p>
                 </div>
-              ))}
+                <span className="rounded-lg bg-amber-50 px-3 py-1.5 font-mono-nums text-xs font-bold text-amber-900">
+                  {unreadMessagesCount} Pesan Baru
+                </span>
+              </div>
+
+              {contactMessages.length === 0 ? (
+                <div className="rounded-2xl border border-stone-200 bg-white p-10 text-center text-sm text-stone-500">
+                  Belum ada pesan masuk dari halaman Kontak.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {contactMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className="flex flex-col justify-between gap-4 rounded-2xl border border-stone-200 bg-white p-5 sm:flex-row sm:items-start"
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-bold text-stone-900">{msg.nama}</span>
+                          <span className="font-mono-nums text-xs font-medium text-stone-600">
+                            {msg.no_wa}
+                          </span>
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              msg.status === 'baru'
+                                ? 'bg-amber-100 text-amber-900'
+                                : 'bg-emerald-100 text-emerald-900'
+                            }`}
+                          >
+                            {msg.status === 'baru' ? 'Baru' : 'Dibalas'}
+                          </span>
+                        </div>
+                        <p className="text-xs leading-relaxed text-stone-700 whitespace-pre-line">
+                          {msg.pesan}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <a
+                          href={formatWhatsAppUrl(
+                            msg.no_wa,
+                            `Halo ${msg.nama}, terima kasih telah menghubungi Sagitarius Parcel. Menanggapi pesan Anda: "${msg.pesan.slice(0, 60)}..."`
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A34A] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#15803D]"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          <span>Balas WA</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleMarkMessageReplied(msg)}
+                          className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-50 cursor-pointer"
+                        >
+                          {msg.status === 'baru' ? 'Tandai Dibalas' : 'Buka Lagi'}
+                        </button>
+                        {confirmDeleteMsgId === msg.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteContactMessage(msg.id)}
+                              className="rounded-lg bg-rose-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-800 cursor-pointer"
+                            >
+                              Ya, Hapus
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteMsgId(null)}
+                              className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs text-stone-600 cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteMsgId(msg.id)}
+                            className="rounded-lg border border-rose-200 p-1.5 text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            aria-label="Hapus pesan"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -8787,6 +9084,19 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           subscriptions.find((s) => s.id === receiptDeposit?.subscription_id) || null
         }
         onClose={() => setReceiptDeposit(null)}
+      />
+
+      <AdminVoidModal
+        deposit={voidTargetDeposit}
+        subscription={
+          subscriptions.find((s) => s.id === voidTargetDeposit?.subscription_id)
+        }
+        isOpen={showVoidModal}
+        onClose={() => {
+          setShowVoidModal(false);
+          setVoidTargetDeposit(null);
+        }}
+        onConfirmVoid={handleExecuteVoidTransaction}
       />
     </div>
   );

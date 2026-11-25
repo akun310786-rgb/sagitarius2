@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Clock,
   Copy,
+  Download,
   FileImage,
   Gift,
   Layers,
@@ -18,6 +19,7 @@ import {
   Megaphone,
   MessageCircle,
   PackageCheck,
+  Phone,
   Plus,
   Printer,
   QrCode,
@@ -757,6 +759,80 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
     ? `INV-SGT-${activeSub.qr_code_token.slice(-4)}-${uniqueCodeSuffix}`
     : `INV-SGT-${uniqueCodeSuffix}`;
 
+  const handleDownloadPassbookPng = () => {
+    if (!activeSub) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 500;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, 800, 500);
+    grad.addColorStop(0, '#381E5A');
+    grad.addColorStop(1, '#0C3328');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 800, 500);
+
+    // Card container
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(30, 30, 740, 440);
+
+    // Header strip
+    ctx.fillStyle = '#0C3328';
+    ctx.fillRect(30, 30, 740, 80);
+
+    ctx.fillStyle = '#E8CA82';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText('PT. SAGITARIUS TRINUNGGAL KARYA', 50, 65);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px sans-serif';
+    ctx.fillText('KARTU BUKU TABUNGAN PARCEL LEBARAN EKSKLUSIF', 50, 90);
+
+    // Member Info
+    ctx.fillStyle = '#381E5A';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(userProfile?.nama || 'Member Sagitarius', 50, 150);
+
+    ctx.fillStyle = '#666666';
+    ctx.font = '13px sans-serif';
+    ctx.fillText(`WhatsApp: ${userProfile?.no_wa || '-'} | Wilayah: ${activeSub.wilayah}`, 50, 175);
+
+    // Package Box
+    ctx.fillStyle = '#FAF7F2';
+    ctx.fillRect(50, 200, 700, 130);
+    ctx.strokeStyle = '#E4DCCB';
+    ctx.strokeRect(50, 200, 700, 130);
+
+    ctx.fillStyle = '#381E5A';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(activeSub.package_nama, 70, 235);
+
+    ctx.fillStyle = '#666666';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(`Token E-Tiket: ${activeSub.qr_code_token}`, 70, 260);
+    ctx.fillText(`Agen Pembina: ${activeSub.agen_nama || activeSub.agen_kode || 'Agen Resmi'}`, 70, 280);
+
+    ctx.fillStyle = '#0C3328';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(`Terkumpul: ${formatRupiah(activeSub.total_terkumpul)}`, 450, 240);
+    ctx.fillText(`Target: ${formatRupiah(activeSub.target_nominal)}`, 450, 270);
+    ctx.fillText(`Status: ${activeSub.status.toUpperCase()}`, 450, 300);
+
+    // Footer
+    ctx.fillStyle = '#888888';
+    ctx.font = '11px sans-serif';
+    ctx.fillText('Simpan kartu digital ini sebagai bukti keikutsertaan resmi Sagitarius Parcel 2.0', 50, 380);
+    ctx.fillText(`Dicetak pada: ${new Date().toLocaleDateString('id-ID')}`, 50, 400);
+
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kartu-tabungan-${activeSub.qr_code_token}.png`;
+    a.click();
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
       {/* Broadcast Announcement Banner from Admin */}
@@ -997,6 +1073,24 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       {mySubscriptions.length > 0 && activeSub && (
         <>
           {mySubscriptions.length > 1 && (
+            <div className="no-print rounded-2xl border border-[#C8A053]/50 bg-gradient-to-r from-[#381E5A] to-[#241140] p-5 text-white shadow-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold text-[#E8CA82] uppercase tracking-wide">
+                    Portofolio Multi-Kontrak Anda ({mySubscriptions.length} Paket Aktif)
+                  </p>
+                  <p className="font-mono-nums text-lg font-bold mt-0.5">
+                    Total Terkumpul: {formatRupiah(mySubscriptions.reduce((s, c) => s + (c.total_terkumpul || 0), 0))}
+                  </p>
+                </div>
+                <div className="text-right text-xs">
+                  <p className="text-stone-300">Akumulasi Target: <strong className="text-white">{formatRupiah(mySubscriptions.reduce((s, c) => s + (c.target_nominal || 0), 0))}</strong></p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {mySubscriptions.length > 1 && (
             <div className="no-print flex flex-wrap gap-2">
               {mySubscriptions.map((sub) => (
                 <button
@@ -1096,6 +1190,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A]">
                       {activeSub.package_nama}
                     </h2>
+                    <button
+                      type="button"
+                      onClick={handleDownloadPassbookPng}
+                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
+                    >
+                      <Download className="h-3.5 w-3.5 text-[#0C3328]" />
+                      <span>Simpan Kartu Buku Tabungan (PNG)</span>
+                    </button>
                   </div>
                   <span
                     className={`rounded-md px-3 py-1 text-xs font-semibold ${
@@ -2091,6 +2193,43 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Bantuan Cepat & Jemput Bola Agen */}
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 space-y-3">
+                <h3 className="font-display text-sm font-bold text-[#381E5A] flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-[#0C3328]" />
+                  <span>Bantuan Agen &amp; Jemput Bola</span>
+                </h3>
+                <p className="text-xs text-stone-600 leading-relaxed">
+                  Ingin setor tunai langsung di rumah atau butuh konfirmasi setoran? Hubungi agen pembina wilayah Anda sekarang.
+                </p>
+                {activeAgentInfo && (
+                  <a
+                    href={formatWhatsAppUrl(
+                      activeAgentInfo.no_wa,
+                      `Halo Agen ${activeAgentInfo.nama}, saya ${userProfile.nama} ingin meminta jadwal jemput bola setoran tabungan untuk paket ${activeSub.package_nama}. Terima kasih.`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#16A34A] py-2.5 text-xs font-bold text-white hover:bg-[#15803D]"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    <span>Minta Jemput Bola ke Agen ({activeAgentInfo.nama})</span>
+                  </a>
+                )}
+                <a
+                  href={formatWhatsAppUrl(
+                    '081324383479',
+                    `Halo CS Pusat Sagitarius Parcel, saya ${userProfile.nama} (${userProfile.no_wa}) ingin bertanya mengenai layanan tabungan parsel.`
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-stone-50 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                >
+                  <Building2 className="h-3.5 w-3.5 text-stone-500" />
+                  <span>Hubungi Customer Service Pusat</span>
+                </a>
               </div>
             </div>
           </div>
