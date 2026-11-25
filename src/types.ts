@@ -302,8 +302,6 @@ export type PublicPage =
   | 'beranda'
   | 'katalog'
   | 'detail_paket'
-  | 'tabungan'
-  | 'cara_pesan'
   | 'tentang'
   | 'kontak';
 

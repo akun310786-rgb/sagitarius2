@@ -1,25 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import {
   ArrowRight,
-  Calendar,
   CheckCircle2,
-  ChevronDown,
   Clock,
-  CreditCard,
-  Download,
-  Gift,
   HeartHandshake,
   Mail,
   MapPin,
   MessageCircle,
-  PackageCheck,
-  SearchCheck,
   Share2,
   ShieldCheck,
   Sparkles,
-  Truck,
+  UserCheck,
+  UserPlus,
   Users,
-  Wallet,
 } from 'lucide-react';
 import { collection, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -30,537 +23,24 @@ import {
   COMPANY_INFO,
   IMG_BUNDA,
   IMG_HERO,
-  IMG_SULTAN,
+  IMG_RESELLER,
   IMG_UANG_DAGING,
+  RESELLER_PROGRAM,
   formatWhatsAppUrl,
 } from '../data/catalogData';
 import {
   AgentDirectoryItem,
-  ParcelPackage,
   PublicPage,
-  SimulationLock,
   WILAYAH_LIST,
   WilayahPriangan,
 } from '../types';
-import { InstallmentSimulator } from './InstallmentSimulator';
-
-interface TabunganPageProps {
-  packages: ParcelPackage[];
-  agents: AgentDirectoryItem[];
-  selectedAgentId: string;
-  onSelectAgent: (id: string) => void;
-  onLockSimulation: (lock: SimulationLock) => void;
-  initialPackageId?: string;
-}
-
-const FAQ_ITEMS = [
-  {
-    q: 'Apa itu Program Tabungan Sagitarius Parcel?',
-    a: 'Program menabung resmi dari PT. Sagitarius Trinunggal Karya yang memudahkan keluarga Priangan Timur mempersiapkan paket sembako, kue kering, perlengkapan anak, hingga uang tunai THR dengan cicilan ringan harian atau mingguan.',
-  },
-  {
-    q: 'Bagaimana cara mendaftar program tabungan?',
-    a: 'Pilih paket di Katalog, hitung cicilan pada Simulator di bawah, lalu klik "Kunci Simulasi Ini & Daftar" atau hubungi agen terdekat di wilayah Anda untuk aktivasi kontrak.',
-  },
-  {
-    q: 'Apakah pembayaran bisa dicicil harian atau mingguan?',
-    a: 'Ya. Anda bebas memilih setoran harian (mulai Rp 100/hari untuk barang satuan dan Rp 1.500/hari untuk paket anak) atau mingguan selama periode 295 hari (Paket Uang Munggahan) hingga 325 hari (Paket Barang & Uang Lebaran).',
-  },
-  {
-    q: 'Bagaimana ketentuan pembatalan atau tidak selesai penuh?',
-    a: 'Sesuai aturan resmi brosur, paket satuan barang tidak bisa diuangkan; jika anggota tidak menyelesaikan pembayaran penuh, akan diberikan barang sejumlah nominal masuk (biaya administrasi tetap sama). Paket uang hanya dibagikan sesuai jadwal pembagian.',
-  },
-  {
-    q: 'Kapan parcel dan uang tunai akan diserahkan?',
-    a: 'Paket Uang dibagikan lebih awal menjelang Lebaran, Paket Barang/Parcel selambatnya 15 Ramadhan, sedangkan Paket Daging Sapi, Ayam & Telur segar dibagikan pada H-2 Idul Fitri menggunakan Tiket QR resmi.',
-  },
-];
-
-export const TabunganProgramPage: React.FC<TabunganPageProps> = ({
-  packages,
-  agents,
-  selectedAgentId,
-  onSelectAgent,
-  onLockSimulation,
-  initialPackageId,
-}) => {
-  const [openFaqIdx, setOpenFaqIdx] = useState<number>(0);
-
-  return (
-    <div className="space-y-12 pb-16">
-      {/* Hero + Ringkasan Program */}
-      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-8 lg:grid-cols-12">
-          <div className="space-y-4 lg:col-span-5">
-            <p className="text-xs font-semibold text-[#C8A053]">
-              Program Tabungan Resmi 2026–2027
-            </p>
-            <h1
-              className="font-display text-3xl leading-tight font-bold text-[#381E5A] sm:text-4xl"
-              style={{ textWrap: 'balance' }}
-            >
-              Rencanakan Paket Lebaran dengan Lebih Terarah
-            </h1>
-            <p className="text-sm leading-relaxed text-stone-600 sm:text-base">
-              Program tabungan khusus untuk membantu Anda mempersiapkan parcel Lebaran berkualitas, paket sembako, maupun dana tunai THR dengan lebih ringan, aman, dan terencana.
-            </p>
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() =>
-                  document.getElementById('simulator')?.scrollIntoView({ behavior: 'smooth' })
-                }
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-xs font-semibold text-white hover:bg-[#144738] cursor-pointer"
-              >
-                <span>Hitung Simulasi Sekarang</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <a
-                href={formatWhatsAppUrl(
-                  COMPANY_INFO.csWhatsappDigits,
-                  'Halo CS Sagitarius Parcel, saya ingin bertanya tentang Program Tabungan Lebaran.'
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-3 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2]"
-              >
-                <MessageCircle className="h-4 w-4 text-[#0C3328]" />
-                <span>Tanyakan Program (WA CS)</span>
-              </a>
-            </div>
-          </div>
-
-          <div className="flex justify-center lg:col-span-4">
-            <div className="overflow-hidden rounded-t-[140px] rounded-b-2xl border-2 border-[#C8A053]/50 bg-white shadow-sm">
-              <img
-                src={IMG_SULTAN}
-                alt="Paket Tabungan Lebaran Sagitarius Parcel"
-                className="h-80 w-full object-cover"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xs lg:col-span-3">
-            <h2 className="font-display text-lg font-bold text-[#381E5A]">Ringkasan Program</h2>
-            <ul className="mt-4 space-y-3.5 text-xs text-stone-700">
-              <li className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                  <Sparkles className="h-3.5 w-3.5" />
-                </span>
-                <span>Rencanakan lebih awal, persiapan Lebaran lebih tenang</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                  <Wallet className="h-3.5 w-3.5" />
-                </span>
-                <span>Menabung bertahap harian/mingguan, ringankan beban</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                </span>
-                <span>Aman, transparan di Buku Tabungan Digital &amp; terpercaya</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                  <Gift className="h-3.5 w-3.5" />
-                </span>
-                <span>Parcel &amp; THR berkualitas siap di Hari Kemenangan + Door Prize</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      {/* Dark Emerald Band: Cara Kerja */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-6 text-white sm:p-8">
-          <div className="flex flex-col items-center justify-between gap-6 lg:flex-row">
-            <h2 className="font-display text-2xl font-bold text-white">Cara Kerja</h2>
-            <div className="grid flex-1 gap-6 sm:grid-cols-3">
-              <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 font-mono-nums text-sm font-bold text-[#E8CA82]">
-                  01
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-[#E8CA82]">Pilih Paket</p>
-                  <p className="mt-0.5 text-xs text-stone-200">
-                    Tentukan jenis paket Bunda, Anak, Pilihan, Uang, atau Satuan sesuai kebutuhan.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 font-mono-nums text-sm font-bold text-[#E8CA82]">
-                  02
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-[#E8CA82]">Daftar Program</p>
-                  <p className="mt-0.5 text-xs text-stone-200">
-                    Daftarkan kontrak Anda melalui Dashboard Member atau agen wilayah Priangan Timur.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 font-mono-nums text-sm font-bold text-[#E8CA82]">
-                  03
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-[#E8CA82]">Setor Bertahap</p>
-                  <p className="mt-0.5 text-xs text-stone-200">
-                    Setor tunai via agen atau upload bukti transfer hingga target lunas &amp; QR terbit.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 4 Info Cards Row (Real Brochure Data) */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                <Wallet className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="font-mono-nums text-xs font-bold text-[#C8A053]">01</p>
-                <h3 className="text-sm font-bold text-[#381E5A]">Nominal Pembayaran</h3>
-              </div>
-            </div>
-            <p className="mt-3 border-t border-[#F0EAE0] pt-3 font-mono-nums text-xs font-semibold text-[#0C3328]">
-              Mulai Rp 100/hari (Satuan) · Rp 1.500–Rp 10.000/hari (Paket)
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                <Calendar className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="font-mono-nums text-xs font-bold text-[#C8A053]">02</p>
-                <h3 className="text-sm font-bold text-[#381E5A]">Jadwal Pembayaran</h3>
-              </div>
-            </div>
-            <p className="mt-3 border-t border-[#F0EAE0] pt-3 text-xs font-semibold text-[#0C3328]">
-              Harian atau Mingguan (42 / 45 Minggu) via Agen &amp; Transfer
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                <Clock className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="font-mono-nums text-xs font-bold text-[#C8A053]">03</p>
-                <h3 className="text-sm font-bold text-[#381E5A]">Periode Program</h3>
-              </div>
-            </div>
-            <p className="mt-3 border-t border-[#F0EAE0] pt-3 font-mono-nums text-xs font-semibold text-[#0C3328]">
-              325 Hari (Paket &amp; Uang Lebaran) · 295 Hari (Munggahan)
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                <Truck className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="font-mono-nums text-xs font-bold text-[#C8A053]">04</p>
-                <h3 className="text-sm font-bold text-[#381E5A]">Waktu Penyerahan</h3>
-              </div>
-            </div>
-            <p className="mt-3 border-t border-[#F0EAE0] pt-3 text-xs font-semibold text-[#0C3328]">
-              15 Ramadhan (Parcel), H-2 (Daging/Telur), Lebih Awal (Uang)
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Simulator + FAQ Split */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-12">
-          <div className="lg:col-span-8">
-            <InstallmentSimulator
-              packages={packages}
-              agents={agents}
-              initialPackageId={initialPackageId}
-              selectedAgentId={selectedAgentId}
-              onSelectAgent={onSelectAgent}
-              onLockSimulation={onLockSimulation}
-            />
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-4">
-            <h2 className="text-center font-display text-2xl font-bold text-[#381E5A]">FAQ</h2>
-            <div className="mx-auto mt-2 mb-5 h-0.5 w-16 bg-[#C8A053]/60" />
-            <div className="space-y-2.5">
-              {FAQ_ITEMS.map((item, idx) => {
-                const isOpen = openFaqIdx === idx;
-                return (
-                  <div
-                    key={idx}
-                    className="overflow-hidden rounded-xl border border-[#E8E1D3] bg-[#FAF7F2]"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setOpenFaqIdx(isOpen ? -1 : idx)}
-                      className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs font-semibold text-[#381E5A] hover:bg-[#F1ECE1] cursor-pointer"
-                    >
-                      <span>{item.q}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-[#C8A053] transition-transform ${
-                          isOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-                    {isOpen && (
-                      <div className="border-t border-[#E8E1D3] bg-white px-4 py-3 text-xs leading-relaxed text-stone-600">
-                        {item.a}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Bottom CTA Banner */}
-      <section className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="bg-arabesque-emerald flex flex-col items-center justify-between gap-4 rounded-2xl border border-[#C8A053]/40 p-6 text-white sm:flex-row sm:px-10">
-          <div className="flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/50 bg-white/5 text-[#E8CA82]">
-              <MessageCircle className="h-5 w-5" />
-            </span>
-            <div>
-              <h3 className="font-display text-xl font-bold text-white">
-                Butuh informasi lebih lanjut?
-              </h3>
-              <p className="mt-0.5 text-xs text-stone-200">
-                Tim CS kami &amp; Asisten Sagitarius siap membantu Anda merencanakan parcel Lebaran terbaik untuk keluarga.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <a
-              href={formatWhatsAppUrl(
-                COMPANY_INFO.csWhatsappDigits,
-                'Halo CS Sagitarius Parcel, saya ingin berkonsultasi mengenai program tabungan Lebaran.'
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-6 py-3 text-xs font-bold text-[#1D122B] hover:brightness-105 whitespace-nowrap"
-            >
-              <span>Tanyakan Program</span>
-              <ArrowRight className="h-4 w-4" />
-            </a>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-};
-
-interface CaraPemesananPageProps {
-  onNavigate: (page: PublicPage) => void;
-}
-
-export const CaraPemesananPage: React.FC<CaraPemesananPageProps> = ({
-  onNavigate,
-}) => {
-  const steps = [
-    {
-      num: '01',
-      title: 'Pilih paket',
-      desc: 'Lihat katalog Bunda, Anak, Pilihan, Uang, atau 50 Satuan.',
-      icon: PackageCheck,
-      action: () => onNavigate('katalog'),
-    },
-    {
-      num: '02',
-      title: 'Hubungi admin / agen',
-      desc: 'Konsultasikan via WhatsApp CS atau pilih agen wilayah terdekat.',
-      icon: MessageCircle,
-      action: () => onNavigate('kontak'),
-    },
-    {
-      num: '03',
-      title: 'Konfirmasi pesanan',
-      desc: 'Kunci simulasi cicilan & aktifkan kontrak di Dashboard Member.',
-      icon: SearchCheck,
-      action: () => onNavigate('tabungan'),
-    },
-    {
-      num: '04',
-      title: 'Lakukan pembayaran',
-      desc: 'Setor tunai via agen jemput bola atau transfer & unggah bukti.',
-      icon: Wallet,
-      action: () => onNavigate('tabungan'),
-    },
-    {
-      num: '05',
-      title: 'Terima paket',
-      desc: 'Tunjukkan E-Tiket QR Lunas pada jadwal 15 Ramadhan / H-2.',
-      icon: Truck,
-      action: () => onNavigate('tabungan'),
-    },
-  ];
-
-  return (
-    <div className="space-y-12 pb-16">
-      {/* Hero */}
-      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-8 lg:grid-cols-12">
-          <div className="space-y-4 lg:col-span-6">
-            <div className="flex items-center gap-3 text-xs font-semibold text-[#C8A053]">
-              <span className="h-px w-8 bg-[#C8A053]" />
-              <span>Panduan Pemesanan Resmi</span>
-            </div>
-            <h1 className="font-display text-3xl leading-tight font-bold text-[#381E5A] sm:text-5xl">
-              Cara Memesan Paket Lebaran
-            </h1>
-            <p className="max-w-lg text-sm leading-relaxed text-stone-600 sm:text-base">
-              Mudah, aman, dan penuh berkah. Ikuti 5 langkah terstruktur berikut untuk memesan dan menabung paket Lebaran spesial dari Sagitarius Parcel.
-            </p>
-            <div className="flex flex-wrap gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => onNavigate('katalog')}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-xs font-semibold text-white hover:bg-[#144738] cursor-pointer"
-              >
-                <span>Mulai Pilih Paket</span>
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('tabungan')}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-3 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
-              >
-                <span>Buka Simulator Cicilan</span>
-              </button>
-              <a
-                href="/panduan-penggunaan-sagitarius-parcel.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                download="Panduan-Penggunaan-Sagitarius-Parcel.pdf"
-                className="inline-flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 py-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
-              >
-                <Download className="h-4 w-4 text-[#0C3328]" />
-                <span>Buku Panduan (PDF)</span>
-              </a>
-            </div>
-          </div>
-
-          <div className="lg:col-span-6">
-            <div className="overflow-hidden rounded-tl-[120px] rounded-br-[32px] rounded-tr-2xl rounded-bl-2xl border-2 border-[#C8A053]/50 bg-[#0C3328] shadow-sm">
-              <img
-                src={IMG_HERO}
-                alt="Cara Memesan Paket Lebaran Sagitarius Parcel"
-                className="aspect-[16/10] w-full object-cover"
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 5-Step Card */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xs sm:p-8">
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-            {steps.map((step) => {
-              const Icon = step.icon;
-              return (
-                <button
-                  key={step.num}
-                  type="button"
-                  onClick={step.action}
-                  className="group flex flex-col items-center rounded-xl border border-transparent p-3 text-center transition hover:border-[#E4DCCB] hover:bg-[#FAF7F2] cursor-pointer"
-                >
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0C3328] font-mono-nums text-[11px] font-bold text-[#E8CA82]">
-                    {step.num}
-                  </span>
-                  <div className="mt-3 flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#C8A053]/60 bg-[#FAF7F2] text-[#0C3328] transition group-hover:scale-105">
-                    <Icon className="h-7 w-7" />
-                  </div>
-                  <h3 className="mt-3 text-sm font-bold text-[#381E5A]">{step.title}</h3>
-                  <p className="mt-1 text-xs leading-relaxed text-stone-600">{step.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Payment, Delivery & Need Help 3-column grid */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
-            <div className="flex items-start gap-4">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                <CreditCard className="h-5 w-5" />
-              </span>
-              <div>
-                <h3 className="font-display text-xl font-bold text-[#381E5A]">
-                  Metode Pembayaran
-                </h3>
-                <p className="mt-2 text-xs leading-relaxed text-stone-600">
-                  Pembayaran dapat dilakukan secara <strong>Tunai Jemput Bola</strong> melalui Agen Wilayah Priangan Timur atau <strong>Transfer Bank Resmi</strong> dengan unggah bukti struk di Dashboard Member untuk validasi digital.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
-            <div className="flex items-start gap-4">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                <Truck className="h-5 w-5" />
-              </span>
-              <div>
-                <h3 className="font-display text-xl font-bold text-[#381E5A]">
-                  Metode Pengiriman
-                </h3>
-                <p className="mt-2 text-xs leading-relaxed text-stone-600">
-                  Pengambilan paket menggunakan <strong>E-Tiket QR Lunas</strong> di Agen/Gudang Pusat Mangunreja: selambatnya <strong>15 Ramadhan</strong> (Paket Barang), <strong>H-2 Idul Fitri</strong> (Daging &amp; Telur), dan <strong>Lebih Awal</strong> (Paket Uang).
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[#E4DCCB] bg-[#FAF7F2] p-6">
-            <h3 className="font-display text-xl font-bold text-[#381E5A]">Butuh Bantuan?</h3>
-            <p className="mt-2 text-xs leading-relaxed text-stone-600">
-              Tim kami siap membantu Anda memilih paket, mengecek saldo tabungan, atau menghubungkan dengan agen terdekat.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <a
-                href={formatWhatsAppUrl(
-                  COMPANY_INFO.csWhatsappDigits,
-                  'Halo Admin Sagitarius Parcel, saya butuh panduan pemesanan paket Lebaran.'
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2.5 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738]"
-              >
-                <span>Hubungi Admin</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-};
 
 interface TentangKamiPageProps {
   agents: AgentDirectoryItem[];
   selectedAgentId: string;
   onSelectAgent: (id: string) => void;
   onNavigate: (page: PublicPage) => void;
+  onOpenAuth: (mode: 'login' | 'register_member' | 'register_agent') => void;
 }
 
 export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
@@ -568,6 +48,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
   selectedAgentId,
   onSelectAgent,
   onNavigate,
+  onOpenAuth,
 }) => {
   const [wilayahFilter, setWilayahFilter] = useState<'Semua' | WilayahPriangan>('Semua');
 
@@ -708,6 +189,71 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Program Reseller & Mitra Agen Section */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid items-center gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <div className="overflow-hidden rounded-2xl border border-[#E4DCCB]">
+              <img
+                src={IMG_RESELLER}
+                alt="Mitra Agen & Reseller Sagitarius Parcel"
+                className="aspect-[16/10] w-full object-cover"
+              />
+            </div>
+          </div>
+          <div className="space-y-4 lg:col-span-7">
+            <p className="text-xs font-semibold text-[#C8A053]">Program Kemitraan Resmi</p>
+            <h2 className="font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
+              {RESELLER_PROGRAM.headline}
+            </h2>
+            <p className="text-xs leading-relaxed text-stone-600 sm:text-sm">
+              {RESELLER_PROGRAM.subheadline}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {RESELLER_PROGRAM.tiers.map((tier) => (
+                <div
+                  key={tier.label}
+                  className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5"
+                >
+                  <p className="text-xs font-bold text-[#381E5A]">{tier.label}</p>
+                  <p className="mt-1 font-mono-nums text-xl font-bold text-[#0C3328]">
+                    {tier.komisi}
+                  </p>
+                  <p className="text-[11px] font-medium text-[#B98E3A]">{tier.syarat}</p>
+                  <p className="mt-1 text-[11px] leading-snug text-stone-600">{tier.detail}</p>
+                </div>
+              ))}
+            </div>
+            <ul className="space-y-1.5 text-xs text-stone-700">
+              {RESELLER_PROGRAM.benefits.map((b) => (
+                <li key={b} className="flex items-start gap-2">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#0C3328]" />
+                  <span>{b}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => onOpenAuth('register_agent')}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+              >
+                <UserCheck className="h-4 w-4" />
+                <span>Gabung Agen / Reseller</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenAuth('register_member')}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4 text-[#0C3328]" />
+                <span>Gabung Member</span>
+              </button>
             </div>
           </div>
         </div>

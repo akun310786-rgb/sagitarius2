@@ -47,7 +47,7 @@ import {
 } from './components/AuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FloatingNotificationWidget } from './components/FloatingNotificationWidget';
-import { LandingCatalog } from './components/LandingCatalog';
+import { LandingCatalog, MainCatalogCategory } from './components/LandingCatalog';
 import { MemberDashboard } from './components/MemberDashboard';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallButton } from './components/PWAInstallButton';
@@ -59,6 +59,7 @@ import {
   LOGO_SAGITARIUS,
   formatRupiah,
   formatWhatsAppUrl,
+  resolvePackagePhoto,
 } from './data/catalogData';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
 import {
@@ -99,6 +100,8 @@ const DEFAULT_APP_SETTINGS: AppPublicSettings = {
 export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('landing');
   const [publicPage, setPublicPage] = useState<PublicPage>('beranda');
+  const [catalogCategory, setCatalogCategory] =
+    useState<MainCatalogCategory>('paket_lebaran');
   const [detailPackageId, setDetailPackageId] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [focusSearchTrigger, setFocusSearchTrigger] = useState(0);
@@ -198,10 +201,12 @@ export default function App() {
       collection(db, 'packages'),
       (snap) => {
         if (!snap.empty) {
-          const fsPkgs = snap.docs.map((d) => ({
-            id: d.id,
-            ...(d.data() as Omit<ParcelPackage, 'id'>),
-          }));
+          const fsPkgs = snap.docs.map((d) =>
+            resolvePackagePhoto({
+              id: d.id,
+              ...(d.data() as Omit<ParcelPackage, 'id'>),
+            })
+          );
           if (fsPkgs.length >= 10) {
             setPackages(fsPkgs);
           } else {
@@ -995,9 +1000,12 @@ export default function App() {
     }
   };
 
-  const navigatePublicPage = (page: PublicPage) => {
+  const navigatePublicPage = (page: PublicPage, category?: MainCatalogCategory) => {
     setActiveView('landing');
     setPublicPage(page);
+    if (category) {
+      setCatalogCategory(category);
+    }
     setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1043,33 +1051,33 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="bg-arabesque-ivory min-h-screen flex flex-col text-stone-900">
+      <div className="bg-arabesque-ivory min-h-screen flex flex-col overflow-x-hidden text-stone-900">
         {/* TOP BAR matching Royal Purple + Gold Border Mockups */}
         <header className="bg-arabesque-purple sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
-          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
             {/* Zone 1: Brand Crest */}
             <button
               type="button"
               onClick={() => navigatePublicPage('beranda')}
-              className="flex items-center gap-2.5 text-left whitespace-nowrap shrink-0 cursor-pointer"
+              className="flex items-center gap-2 text-left whitespace-nowrap shrink-0 cursor-pointer"
             >
               <img
                 src={LOGO_SAGITARIUS}
                 alt="Logo Sagitarius Parcel"
-                className="h-10 w-10 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
+                className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
               />
-              <div className="hidden sm:block">
-                <p className="font-display text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
+              <div>
+                <p className="font-display text-sm sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
                   Sagitarius Parcel
                 </p>
-                <p className="text-[10px] font-medium text-stone-300 leading-tight">
+                <p className="hidden sm:block text-[10px] font-medium text-stone-300 leading-tight">
                   Our Eid, Our Happiness
                 </p>
               </div>
             </button>
 
-            {/* Zone 2: Multi-page single-line navigation links */}
-            <nav className="hidden xl:flex items-center gap-5">
+            {/* Zone 2: Clean Desktop & Laptop single-line navigation links */}
+            <nav className="hidden lg:flex items-center gap-5">
               <button
                 type="button"
                 onClick={() => navigatePublicPage('beranda')}
@@ -1079,27 +1087,13 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={() => navigatePublicPage('katalog')}
+                onClick={() => navigatePublicPage('katalog', 'paket_lebaran')}
                 className={navLinkClass(
                   activeView === 'landing' &&
                     (publicPage === 'katalog' || publicPage === 'detail_paket')
                 )}
               >
                 Paket Lebaran
-              </button>
-              <button
-                type="button"
-                onClick={() => navigatePublicPage('tabungan')}
-                className={navLinkClass(activeView === 'landing' && publicPage === 'tabungan')}
-              >
-                Tabungan
-              </button>
-              <button
-                type="button"
-                onClick={() => navigatePublicPage('cara_pesan')}
-                className={navLinkClass(activeView === 'landing' && publicPage === 'cara_pesan')}
-              >
-                Cara Pemesanan
               </button>
               <button
                 type="button"
@@ -1139,58 +1133,8 @@ export default function App() {
               )}
             </nav>
 
-            {/* Compact tablet nav */}
-            <nav className="hidden md:flex xl:hidden items-center gap-4">
-              <button
-                type="button"
-                onClick={() => navigatePublicPage('beranda')}
-                className={navLinkClass(activeView === 'landing' && publicPage === 'beranda')}
-              >
-                Beranda
-              </button>
-              <button
-                type="button"
-                onClick={() => navigatePublicPage('katalog')}
-                className={navLinkClass(
-                  activeView === 'landing' &&
-                    (publicPage === 'katalog' || publicPage === 'detail_paket')
-                )}
-              >
-                Paket
-              </button>
-              <button
-                type="button"
-                onClick={() => navigatePublicPage('tabungan')}
-                className={navLinkClass(activeView === 'landing' && publicPage === 'tabungan')}
-              >
-                Tabungan
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveView('member');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={navLinkClass(activeView === 'member')}
-              >
-                Member
-              </button>
-              {showDashboardNav && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView('operasional');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className={navLinkClass(activeView === 'operasional')}
-                >
-                  Dashboard
-                </button>
-              )}
-            </nav>
-
             {/* Zone 3: Search, Wishlist Bag, Account & Hubungi Kami */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handleHeaderSearchClick}
@@ -1225,7 +1169,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => openAuthModal('login')}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3.5 py-2 text-xs font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
+                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
                 >
                   <LogIn className="h-3.5 w-3.5" />
                   <span>Masuk</span>
@@ -1235,7 +1179,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => navigatePublicPage('kontak')}
-                className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-[#C8A053]/80 bg-white/10 px-3.5 py-2 text-xs font-semibold text-[#E8CA82] transition hover:bg-white/20 whitespace-nowrap cursor-pointer"
+                className="hidden xl:inline-flex items-center gap-1.5 rounded-full border border-[#C8A053]/80 bg-white/10 px-3.5 py-2 text-xs font-semibold text-[#E8CA82] transition hover:bg-white/20 whitespace-nowrap cursor-pointer"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 <span>Hubungi Kami</span>
@@ -1244,7 +1188,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className="rounded-lg border border-white/20 p-2 text-white xl:hidden cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-white lg:hidden cursor-pointer"
                 aria-label="Menu Navigasi"
               >
                 {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -1254,47 +1198,40 @@ export default function App() {
 
           {/* Mobile & Tablet Drawer */}
           {mobileMenuOpen && (
-            <div className="border-t border-[#C8A053]/30 bg-[#241142] px-4 py-4 text-white xl:hidden">
-              <div className="grid grid-cols-2 gap-2 text-xs font-medium sm:grid-cols-4">
+            <div className="border-t border-[#C8A053]/30 bg-[#241142] px-4 py-4 text-white lg:hidden">
+              <div className="grid grid-cols-2 gap-2 text-xs font-medium sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('beranda')}
-                  className="rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
                 >
                   Beranda
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigatePublicPage('katalog')}
-                  className="rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  onClick={() => navigatePublicPage('katalog', 'paket_lebaran')}
+                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
                 >
                   Paket Lebaran
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigatePublicPage('tabungan')}
-                  className="rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  onClick={() => navigatePublicPage('katalog', 'tabungan_uang')}
+                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
                 >
-                  Program Tabungan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigatePublicPage('cara_pesan')}
-                  className="rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
-                >
-                  Cara Pemesanan
+                  Tabungan Uang
                 </button>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('tentang')}
-                  className="rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
                 >
                   Tentang &amp; Agen
                 </button>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('kontak')}
-                  className="rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
                 >
                   Kontak Resmi
                 </button>
@@ -1304,9 +1241,9 @@ export default function App() {
                     setActiveView('member');
                     setMobileMenuOpen(false);
                   }}
-                  className="rounded-xl border border-[#C8A053]/40 bg-[#0C3328] px-3 py-2.5 text-left font-bold text-[#E8CA82]"
+                  className="min-h-[44px] rounded-xl border border-[#C8A053]/40 bg-[#0C3328] px-3 py-2.5 text-left font-bold text-[#E8CA82]"
                 >
-                  Dashboard Member
+                  Member
                 </button>
                 {showDashboardNav && (
                   <button
@@ -1315,12 +1252,38 @@ export default function App() {
                       setActiveView('operasional');
                       setMobileMenuOpen(false);
                     }}
-                    className="rounded-xl border border-[#C8A053]/40 bg-white/10 px-3 py-2.5 text-left font-bold text-white"
+                    className="min-h-[44px] rounded-xl border border-[#C8A053]/40 bg-white/10 px-3 py-2.5 text-left font-bold text-white"
                   >
                     Dashboard
                   </button>
                 )}
               </div>
+
+              {!userProfile && (
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      openAuthModal('register_member');
+                    }}
+                    className="min-h-[44px] rounded-xl bg-[#0C3328] px-3 py-2 text-xs font-bold text-[#E8CA82]"
+                  >
+                    Gabung Member
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      openAuthModal('register_agent');
+                    }}
+                    className="min-h-[44px] rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 py-2 text-xs font-bold text-[#1D122B]"
+                  >
+                    Gabung Agen
+                  </button>
+                </div>
+              )}
+
               {userProfile && (
                 <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
                   <button
@@ -1401,6 +1364,8 @@ export default function App() {
             <LandingCatalog
               activePage={publicPage}
               onNavigate={navigatePublicPage}
+              catalogCategory={catalogCategory}
+              onSelectCatalogCategory={setCatalogCategory}
               packages={packages}
               agents={agents}
               onLockSimulation={handleLockSimulation}
@@ -1412,6 +1377,7 @@ export default function App() {
               onToggleWishlist={handleToggleWishlist}
               focusSearchTrigger={focusSearchTrigger}
               referralAgent={referralAgent}
+              onOpenAuth={openAuthModal}
             />
           )}
 
@@ -1457,9 +1423,9 @@ export default function App() {
           )}
         </main>
 
-        {/* Official Dark Emerald Footer matching Mockup */}
+        {/* Official Dark Emerald Footer */}
         <footer className="bg-arabesque-emerald border-t-2 border-[#C8A053]/60 py-10 text-stone-200 no-print">
-          <div className="mx-auto grid max-w-7xl gap-8 px-4 text-xs sm:grid-cols-2 lg:grid-cols-6 sm:px-6 lg:px-8">
+          <div className="mx-auto grid max-w-7xl gap-8 px-4 text-xs sm:grid-cols-2 lg:grid-cols-5 sm:px-6 lg:px-8">
             <div className="space-y-3 lg:col-span-2">
               <div className="flex items-center gap-3">
                 <img
@@ -1485,52 +1451,59 @@ export default function App() {
             </div>
 
             <div className="space-y-2">
-              <p className="font-bold text-[#E8CA82]">Paket Lebaran</p>
+              <p className="font-bold text-[#E8CA82]">Katalog Pilihan</p>
               <div className="flex flex-col items-start gap-1.5">
                 <button
                   type="button"
-                  onClick={() => navigatePublicPage('katalog')}
+                  onClick={() => navigatePublicPage('katalog', 'paket_lebaran')}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
-                  Lihat Semua Paket
+                  Paket Lebaran
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigatePublicPage('katalog', 'tabungan_uang')}
+                  className="hover:text-[#E8CA82] cursor-pointer"
+                >
+                  Tabungan Uang
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     const sultan = packages.find((p) => p.kategori === 'pilihan');
                     if (sultan) handleOpenDetail(sultan);
-                    else navigatePublicPage('katalog');
+                    else navigatePublicPage('katalog', 'paket_lebaran');
                   }}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
                   Paket Pilihan &amp; THR
                 </button>
-                <button
-                  type="button"
-                  onClick={() => navigatePublicPage('katalog')}
-                  className="hover:text-[#E8CA82] cursor-pointer"
-                >
-                  50 Barang Satuan
-                </button>
               </div>
             </div>
 
             <div className="space-y-2">
-              <p className="font-bold text-[#E8CA82]">Tabungan</p>
+              <p className="font-bold text-[#E8CA82]">Kemitraan &amp; Akun</p>
               <div className="flex flex-col items-start gap-1.5">
                 <button
                   type="button"
-                  onClick={() => navigatePublicPage('tabungan')}
+                  onClick={() => openAuthModal('register_member')}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
-                  Tentang Tabungan
+                  Gabung Member
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigatePublicPage('tabungan')}
+                  onClick={() => openAuthModal('register_agent')}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
-                  Simulator Cicilan
+                  Gabung Agen / Reseller
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigatePublicPage('tentang')}
+                  className="hover:text-[#E8CA82] cursor-pointer"
+                >
+                  Tentang &amp; Direktori Agen
                 </button>
                 <button
                   type="button"
@@ -1540,27 +1513,7 @@ export default function App() {
                   }}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
-                  Buku Tabungan Member
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="font-bold text-[#E8CA82]">Tentang Kami</p>
-              <div className="flex flex-col items-start gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => navigatePublicPage('tentang')}
-                  className="hover:text-[#E8CA82] cursor-pointer"
-                >
-                  Profil Perusahaan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigatePublicPage('tentang')}
-                  className="hover:text-[#E8CA82] cursor-pointer"
-                >
-                  Direktori Agen Wilayah
+                  Dashboard Member
                 </button>
                 {showDashboardNav && (
                   <button
@@ -1582,22 +1535,6 @@ export default function App() {
               <div className="flex flex-col items-start gap-1.5">
                 <button
                   type="button"
-                  onClick={() => navigatePublicPage('cara_pesan')}
-                  className="hover:text-[#E8CA82] cursor-pointer"
-                >
-                  Cara Pemesanan
-                </button>
-                <a
-                  href="/panduan-penggunaan-sagitarius-parcel.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download="Panduan-Penggunaan-Sagitarius-Parcel.pdf"
-                  className="hover:text-[#E8CA82]"
-                >
-                  Unduh Buku Panduan (PDF)
-                </a>
-                <button
-                  type="button"
                   onClick={() => navigatePublicPage('kontak')}
                   className="hover:text-[#E8CA82] cursor-pointer"
                 >
@@ -1606,7 +1543,7 @@ export default function App() {
                 <a
                   href={formatWhatsAppUrl(
                     COMPANY_INFO.csWhatsappDigits,
-                    'Halo CS Sagitarius Parcel, saya ingin bertanya tentang paket tabungan Lebaran.'
+                    'Halo CS Sagitarius Parcel, saya ingin bertanya tentang paket Lebaran.'
                   )}
                   target="_blank"
                   rel="noopener noreferrer"

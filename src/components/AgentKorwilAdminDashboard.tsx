@@ -2189,19 +2189,6 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               );
             })}
           </nav>
-
-          <div className="mt-4 border-t border-stone-100 pt-3">
-            <a
-              href="/panduan-penggunaan-sagitarius-parcel.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              download="Panduan-Penggunaan-Sagitarius-Parcel.pdf"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
-            >
-              <Download className="h-3.5 w-3.5 text-emerald-800 shrink-0" />
-              <span>Buku Panduan (PDF)</span>
-            </a>
-          </div>
         </aside>
 
         {/* Main Workspace */}

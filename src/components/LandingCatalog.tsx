@@ -1,25 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  Banknote,
   BookOpen,
-  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Gift,
   Heart,
   Home,
-  Lock,
   MessageCircle,
   Package as PackageIcon,
-  Scale,
+  QrCode,
   Search,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   Truck,
+  UserCheck,
+  UserPlus,
   X,
 } from 'lucide-react';
 import {
@@ -30,12 +29,14 @@ import {
   BROCHURE_SATUAN,
   BROCHURE_UANG,
   COMPANY_INFO,
-  IMG_ANAK,
   IMG_BUNDA,
+  IMG_BUNDA_BOX,
   IMG_HERO,
+  IMG_RESELLER,
   IMG_SULTAN,
   IMG_UANG_DAGING,
   PAKET_UANG_TABLES,
+  RESELLER_PROGRAM,
   formatRupiah,
   formatWhatsAppUrl,
 } from '../data/catalogData';
@@ -46,16 +47,16 @@ import {
   PublicPage,
   SimulationLock,
 } from '../types';
-import {
-  CaraPemesananPage,
-  KontakPage,
-  TabunganProgramPage,
-  TentangKamiPage,
-} from './ContactAndPages';
+import { KontakPage, TentangKamiPage } from './ContactAndPages';
+
+export type MainCatalogCategory = 'paket_lebaran' | 'tabungan_uang';
+type PaketLebaranSubFilter = 'all_lebaran' | 'bunda' | 'anak' | 'pilihan' | 'satuan';
 
 interface LandingCatalogProps {
   activePage: PublicPage;
   onNavigate: (page: PublicPage) => void;
+  catalogCategory: MainCatalogCategory;
+  onSelectCatalogCategory: (cat: MainCatalogCategory) => void;
   packages: ParcelPackage[];
   agents: AgentDirectoryItem[];
   onLockSimulation: (lock: SimulationLock) => void;
@@ -67,6 +68,7 @@ interface LandingCatalogProps {
   onToggleWishlist: (pkgId: string) => void;
   focusSearchTrigger?: number;
   referralAgent?: AgentDirectoryItem | null;
+  onOpenAuth: (mode: 'login' | 'register_member' | 'register_agent') => void;
 }
 
 const BROCHURE_GALLERY = [
@@ -78,12 +80,11 @@ const BROCHURE_GALLERY = [
   { title: 'Brosur 50 Barang Satuan (325 Hari)', src: BROCHURE_SATUAN },
 ];
 
-const CATEGORY_OPTIONS: { id: 'all' | PackageCategory; label: string }[] = [
-  { id: 'all', label: 'Semua Kategori' },
-  { id: 'bunda', label: 'Paket Bunda (Keluarga)' },
+const PAKET_LEBARAN_SUBFILTERS: { id: PaketLebaranSubFilter; label: string }[] = [
+  { id: 'all_lebaran', label: 'Semua Paket Lebaran' },
+  { id: 'bunda', label: 'Paket Bunda' },
   { id: 'anak', label: 'Paket Anak' },
-  { id: 'pilihan', label: 'Paket Eksklusif (Diamond & Sultan)' },
-  { id: 'uang', label: 'Paket Uang (Munggahan & Lebaran)' },
+  { id: 'pilihan', label: 'Diamond & Sultan' },
   { id: 'satuan', label: '50 Barang Satuan' },
 ];
 
@@ -112,6 +113,8 @@ const SATUAN_SUBFILTERS = [
 export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   activePage,
   onNavigate,
+  catalogCategory,
+  onSelectCatalogCategory,
   packages,
   agents,
   onLockSimulation,
@@ -123,9 +126,10 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   onToggleWishlist,
   focusSearchTrigger,
   referralAgent,
+  onOpenAuth,
 }) => {
-  // Katalog Filters
-  const [activeCategory, setActiveCategory] = useState<'all' | PackageCategory>('all');
+  const [lebaranSubCategory, setLebaranSubCategory] =
+    useState<PaketLebaranSubFilter>('all_lebaran');
   const [priceRange, setPriceRange] =
     useState<(typeof PRICE_RANGE_OPTIONS)[number]['id']>('all');
   const [sortBy, setSortBy] = useState<(typeof SORT_OPTIONS)[number]['id']>('featured');
@@ -153,7 +157,6 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
     }
   }, [focusSearchTrigger, activePage]);
 
-  // Reset gallery & tab when opening a different package
   useEffect(() => {
     setGalleryIdx(0);
     setDetailTab('isi');
@@ -164,17 +167,30 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
     return packages.find((p) => p.id === detailPackageId) || packages[0];
   }, [packages, detailPackageId]);
 
-  const filteredPackages = useMemo(() => {
+  // Strict 2-category separation
+  const tabunganUangPackages = useMemo(
+    () => packages.filter((pkg) => pkg.kategori === 'uang'),
+    [packages]
+  );
+
+  const filteredLebaranPackages = useMemo(() => {
     const list = packages.filter((pkg) => {
-      if (activeCategory !== 'all' && pkg.kategori !== activeCategory) return false;
+      // Strictly exclude Tabungan Uang when Paket Lebaran is selected
+      if (pkg.kategori === 'uang') return false;
+
+      if (lebaranSubCategory !== 'all_lebaran' && pkg.kategori !== lebaranSubCategory) {
+        return false;
+      }
+
       if (
-        (activeCategory === 'satuan' || activeCategory === 'all') &&
+        (lebaranSubCategory === 'satuan' || lebaranSubCategory === 'all_lebaran') &&
         satuanSubFilter !== 'Semua Satuan' &&
         pkg.kategori === 'satuan' &&
         pkg.sub_kategori !== satuanSubFilter
       ) {
         return false;
       }
+
       if (priceRange === 'under500k' && pkg.harga_total >= 500000) return false;
       if (
         priceRange === '500k_1500k' &&
@@ -205,42 +221,76 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
       sorted.sort((a, b) => a.setoran_harian - b.setoran_harian);
     }
     return sorted;
-  }, [packages, activeCategory, satuanSubFilter, priceRange, searchQuery, sortBy]);
+  }, [packages, lebaranSubCategory, satuanSubFilter, priceRange, searchQuery, sortBy]);
 
-  const displayedPackages = useMemo(() => {
-    if (activeCategory === 'all' && !searchQuery.trim() && priceRange === 'all' && !showAllSatuan) {
-      const mainPkgs = filteredPackages.filter((p) => p.kategori !== 'satuan');
-      const sampleSatuan = filteredPackages.filter((p) => p.kategori === 'satuan').slice(0, 4);
+  const displayedLebaranPackages = useMemo(() => {
+    if (
+      lebaranSubCategory === 'all_lebaran' &&
+      !searchQuery.trim() &&
+      priceRange === 'all' &&
+      !showAllSatuan
+    ) {
+      const mainPkgs = filteredLebaranPackages.filter((p) => p.kategori !== 'satuan');
+      const sampleSatuan = filteredLebaranPackages
+        .filter((p) => p.kategori === 'satuan')
+        .slice(0, 4);
       return [...mainPkgs, ...sampleSatuan];
     }
-    return filteredPackages;
-  }, [filteredPackages, activeCategory, searchQuery, priceRange, showAllSatuan]);
+    return filteredLebaranPackages;
+  }, [filteredLebaranPackages, lebaranSubCategory, searchQuery, priceRange, showAllSatuan]);
 
-  const openCategoryCatalog = (cat: 'all' | PackageCategory) => {
-    setActiveCategory(cat);
-    setSatuanSubFilter('Semua Satuan');
-    setPriceRange('all');
+  const openMainCategory = (mainCat: MainCatalogCategory, subCat?: PackageCategory) => {
+    onSelectCatalogCategory(mainCat);
+    if (mainCat === 'paket_lebaran') {
+      setLebaranSubCategory(
+        subCat && subCat !== 'uang' ? subCat : 'all_lebaran'
+      );
+      setSatuanSubFilter('Semua Satuan');
+      setPriceRange('all');
+    }
     onNavigate('katalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectUangNominal = (
+    programTitle: string,
+    frekuensi: 'harian' | 'mingguan',
+    setoran: number,
+    hasil: number,
+    durasiHari: number,
+    durasiMinggu: number,
+    jadwalAmbil: string
+  ) => {
+    const virtualPkg: ParcelPackage = {
+      id: `pkg_uang_${frekuensi}_${durasiHari}_${setoran}`,
+      nama_paket: `${programTitle} (${formatRupiah(setoran)}/${frekuensi === 'harian' ? 'hr' : 'mg'})`,
+      kategori: 'uang',
+      sub_kategori: `Tabungan Uang · ${frekuensi === 'harian' ? `${durasiHari} Hari` : `${durasiMinggu} Minggu`}`,
+      harga_total: hasil,
+      setoran_harian: frekuensi === 'harian' ? setoran : Math.round(setoran / 7),
+      setoran_mingguan: frekuensi === 'mingguan' ? setoran : setoran * 7,
+      durasi_hari: durasiHari,
+      bobot_kg: 0.5,
+      daftar_isi: [
+        `Pencairan Dana Tunai ${formatRupiah(hasil)}`,
+        `Setoran ${formatRupiah(setoran)}/${frekuensi === 'harian' ? 'hari' : 'minggu'}`,
+        `Periode resmi ${frekuensi === 'harian' ? `${durasiHari} hari` : `${durasiMinggu} minggu`}`,
+      ],
+      bonus_thr: 0,
+      foto_url: IMG_UANG_DAGING,
+      jadwal_ambil: jadwalAmbil,
+    };
+
+    onLockSimulation({
+      packageItem: virtualPkg,
+      durasiMinggu,
+      frekuensi,
+      estimasiSetoran: setoran,
+      selectedAgentId: selectedAgentId || agents[0]?.id,
+    });
   };
 
   // Delegate standalone pages
-  if (activePage === 'tabungan') {
-    return (
-      <TabunganProgramPage
-        packages={packages}
-        agents={agents}
-        selectedAgentId={selectedAgentId}
-        onSelectAgent={onSelectAgent}
-        onLockSimulation={onLockSimulation}
-        initialPackageId={detailPackageId || undefined}
-      />
-    );
-  }
-
-  if (activePage === 'cara_pesan') {
-    return <CaraPemesananPage onNavigate={onNavigate} />;
-  }
-
   if (activePage === 'tentang') {
     return (
       <TentangKamiPage
@@ -248,6 +298,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         selectedAgentId={selectedAgentId}
         onSelectAgent={onSelectAgent}
         onNavigate={onNavigate}
+        onOpenAuth={onOpenAuth}
       />
     );
   }
@@ -256,7 +307,6 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
     return <KontakPage />;
   }
 
-  // Detail gallery images built from package photo + relevant official brochures
   const buildPackageGallery = (pkg: ParcelPackage) => {
     const categoryBrochure =
       pkg.kategori === 'bunda'
@@ -281,46 +331,47 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   const renderBrochuresModal = () =>
     showBrochuresModal && (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/75 p-4 backdrop-blur-xs"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/75 p-3 sm:p-4 backdrop-blur-xs"
         role="dialog"
         aria-modal="true"
       >
         <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#C8A053]/50 bg-white shadow-2xl">
-          <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#0C3328] px-5 py-3.5 text-white">
-            <div>
-              <p className="text-[11px] font-semibold text-[#E8CA82]">
+          <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#0C3328] px-4 py-3 sm:px-5 sm:py-3.5 text-white">
+            <div className="min-w-0 pr-2">
+              <p className="truncate text-[11px] font-semibold text-[#E8CA82]">
                 {COMPANY_INFO.legalName}
               </p>
-              <h3 className="font-display text-lg font-bold">
+              <h3 className="truncate font-display text-base font-bold sm:text-lg">
                 {BROCHURE_GALLERY[activeBrochureIdx].title}
               </h3>
             </div>
             <button
               type="button"
               onClick={() => setShowBrochuresModal(false)}
-              className="rounded-lg p-1.5 text-stone-300 hover:bg-white/10 hover:text-white cursor-pointer"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-300 hover:bg-white/10 hover:text-white cursor-pointer"
               aria-label="Tutup galeri brosur"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto bg-stone-950 p-4 text-center">
+          <div className="flex-1 overflow-y-auto bg-stone-950 p-3 sm:p-4 text-center">
             <img
               src={BROCHURE_GALLERY[activeBrochureIdx].src}
               alt={BROCHURE_GALLERY[activeBrochureIdx].title}
-              className="mx-auto max-h-[64vh] rounded-lg object-contain"
+              className="mx-auto max-h-[60vh] rounded-lg object-contain"
+              referrerPolicy="no-referrer"
             />
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E4DCCB] bg-[#FAF7F2] px-5 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E4DCCB] bg-[#FAF7F2] px-4 py-3 sm:px-5">
             <div className="flex flex-wrap gap-1.5">
               {BROCHURE_GALLERY.map((b, i) => (
                 <button
                   key={b.title}
                   type="button"
                   onClick={() => setActiveBrochureIdx(i)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  className={`min-h-[36px] rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
                     i === activeBrochureIdx
                       ? 'bg-[#381E5A] text-white'
                       : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-stone-50'
@@ -337,7 +388,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
               )}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#16A34A] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#15803D]"
+              className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg bg-[#16A34A] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#15803D]"
             >
               <MessageCircle className="h-3.5 w-3.5" />
               <span>Tanya CS WA</span>
@@ -348,7 +399,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
     );
 
   // =========================================================================
-  // PAGE: DETAIL PAKET (Matches 6_4e5e6576.png)
+  // PAGE: DETAIL PAKET
   // =========================================================================
   if (activePage === 'detail_paket' && currentDetailPkg) {
     const gallery = buildPackageGallery(currentDetailPkg);
@@ -406,17 +457,21 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           <span>&gt;</span>
           <button
             type="button"
-            onClick={() => onNavigate('katalog')}
+            onClick={() =>
+              openMainCategory(
+                currentDetailPkg.kategori === 'uang' ? 'tabungan_uang' : 'paket_lebaran'
+              )
+            }
             className="text-[#381E5A] hover:underline cursor-pointer"
           >
-            Paket Parcel
+            {currentDetailPkg.kategori === 'uang' ? 'Tabungan Uang' : 'Paket Lebaran'}
           </button>
           <span>&gt;</span>
           <span className="font-semibold text-[#C8A053]">{currentDetailPkg.nama_paket}</span>
         </nav>
 
         {/* Main Detail Split Grid */}
-        <div className="grid gap-8 lg:grid-cols-12">
+        <div className="grid gap-6 sm:gap-8 lg:grid-cols-12">
           {/* Left Gallery + 5 Thumbnails */}
           <div className="space-y-3 lg:col-span-6">
             <div className="relative overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white shadow-xs">
@@ -424,6 +479,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 src={activePhoto.src}
                 alt={activePhoto.label}
                 className="aspect-[4/3] w-full object-cover"
+                referrerPolicy="no-referrer"
               />
               <button
                 type="button"
@@ -431,7 +487,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   setGalleryIdx((prev) => (prev - 1 + gallery.length) % gallery.length)
                 }
                 aria-label="Foto sebelumnya"
-                className="absolute top-1/2 left-3 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#E4DCCB] bg-white/95 text-[#381E5A] shadow transition hover:bg-white cursor-pointer"
+                className="absolute top-1/2 left-3 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E4DCCB] bg-white/95 text-[#381E5A] shadow transition hover:bg-white cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -439,13 +495,13 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 type="button"
                 onClick={() => setGalleryIdx((prev) => (prev + 1) % gallery.length)}
                 aria-label="Foto berikutnya"
-                className="absolute top-1/2 right-3 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[#E4DCCB] bg-white/95 text-[#381E5A] shadow transition hover:bg-white cursor-pointer"
+                className="absolute top-1/2 right-3 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-[#E4DCCB] bg-white/95 text-[#381E5A] shadow transition hover:bg-white cursor-pointer"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-5 gap-2.5">
+            <div className="grid grid-cols-5 gap-2 sm:gap-2.5">
               {gallery.map((g, idx) => (
                 <button
                   key={`${g.label}-${idx}`}
@@ -461,6 +517,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                     src={g.src}
                     alt={g.label}
                     className="aspect-[4/3] w-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                 </button>
               ))}
@@ -468,7 +525,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           </div>
 
           {/* Right Spec Card */}
-          <div className="flex flex-col justify-between rounded-2xl border border-[#E4DCCB] bg-white p-6 sm:p-8 lg:col-span-6">
+          <div className="flex flex-col justify-between rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:col-span-6">
             <div>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -484,7 +541,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   type="button"
                   onClick={() => onToggleWishlist(currentDetailPkg.id)}
                   aria-label="Simpan paket pilihan"
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition cursor-pointer ${
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition cursor-pointer ${
                     isLiked
                       ? 'border-rose-300 bg-rose-50 text-rose-600'
                       : 'border-[#E4DCCB] bg-[#FAF7F2] text-stone-500 hover:text-rose-500'
@@ -515,8 +572,8 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
 
                 <div className="sm:border-l sm:border-[#F0EAE0] sm:pl-5">
                   <p className="text-xs font-semibold text-[#B98E3A]">Ketersediaan &amp; Jadwal</p>
-                  <p className="mt-1.5 inline-flex items-center gap-2 text-sm font-bold text-[#0C3328]">
-                    <span className="h-2.5 w-2.5 rounded-full bg-[#16A34A]" />
+                  <p className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-bold text-[#0C3328]">
+                    <CheckCircle2 className="h-4 w-4 text-[#16A34A]" />
                     <span>Tersedia (Program 2026–2027)</span>
                   </p>
                   <p className="mt-1 text-xs text-stone-600">
@@ -551,7 +608,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                     <button
                       type="button"
                       onClick={() => setQuickBookFreq('harian')}
-                      className={`flex-1 rounded-md py-1.5 font-semibold transition cursor-pointer ${
+                      className={`min-h-[38px] flex-1 rounded-md py-1.5 font-semibold transition cursor-pointer ${
                         quickBookFreq === 'harian'
                           ? 'bg-[#0C3328] text-white'
                           : 'text-stone-600 hover:text-stone-900'
@@ -562,7 +619,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                     <button
                       type="button"
                       onClick={() => setQuickBookFreq('mingguan')}
-                      className={`flex-1 rounded-md py-1.5 font-semibold transition cursor-pointer ${
+                      className={`min-h-[38px] flex-1 rounded-md py-1.5 font-semibold transition cursor-pointer ${
                         quickBookFreq === 'mingguan'
                           ? 'bg-[#0C3328] text-white'
                           : 'text-stone-600 hover:text-stone-900'
@@ -579,7 +636,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   <select
                     value={selectedAgentId}
                     onChange={(e) => onSelectAgent(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-[#E4DCCB] bg-white px-2.5 py-1.5 text-xs font-medium text-stone-800"
+                    className="mt-1.5 min-h-[40px] w-full rounded-lg border border-[#E4DCCB] bg-white px-2.5 py-1.5 text-xs font-medium text-stone-800"
                   >
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
@@ -596,7 +653,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
               <button
                 type="button"
                 onClick={handleDirectOrder}
-                className="flex items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[#144738] cursor-pointer"
+                className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#144738] cursor-pointer"
               >
                 <ShoppingBag className="h-4 w-4 text-[#E8CA82]" />
                 <span>Pesan Paket Sekarang</span>
@@ -608,7 +665,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl border border-[#0C3328] bg-white px-5 py-3.5 text-sm font-bold text-[#0C3328] transition hover:bg-[#FAF7F2]"
+                className="flex min-h-[46px] items-center justify-center gap-2 rounded-xl border border-[#0C3328] bg-white px-5 py-3 text-sm font-bold text-[#0C3328] transition hover:bg-[#FAF7F2]"
               >
                 <MessageCircle className="h-4 w-4" />
                 <span>Tanyakan Detail</span>
@@ -633,20 +690,20 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   key={t.id}
                   type="button"
                   onClick={() => setDetailTab(t.id)}
-                  className={`flex items-center justify-center gap-2 px-4 py-3.5 text-xs font-bold transition cursor-pointer ${
+                  className={`flex min-h-[46px] items-center justify-center gap-2 px-3 py-3 text-xs font-bold transition cursor-pointer ${
                     active
                       ? 'bg-[#0C3328] text-[#E8CA82]'
                       : 'text-[#381E5A] hover:bg-white'
                   }`}
                 >
-                  <Icon className={`h-4 w-4 ${active ? 'text-[#E8CA82]' : 'text-[#C8A053]'}`} />
-                  <span>{t.label}</span>
+                  <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-[#E8CA82]' : 'text-[#C8A053]'}`} />
+                  <span className="truncate">{t.label}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="p-6">
+          <div className="p-5 sm:p-6">
             {detailTab === 'isi' && (
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
@@ -720,7 +777,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 <ul className="space-y-1.5 text-xs leading-relaxed text-stone-700">
                   {COMPANY_INFO.terms.map((t, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#C8A053]" />
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#C8A053]" />
                       <span>{t}</span>
                     </li>
                   ))}
@@ -733,7 +790,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         {/* Rekomendasi Paket Lainnya */}
         <section className="space-y-4 pt-2">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-2xl font-bold text-[#381E5A]">
+            <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
               Rekomendasi Paket Lainnya
             </h2>
             <div className="flex items-center gap-2">
@@ -742,7 +799,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 disabled={recOffset === 0}
                 onClick={() => setRecOffset((v) => Math.max(0, v - 1))}
                 aria-label="Rekomendasi sebelumnya"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E4DCCB] bg-white text-[#381E5A] hover:bg-[#FAF7F2] disabled:opacity-40 cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#E4DCCB] bg-white text-[#381E5A] hover:bg-[#FAF7F2] disabled:opacity-40 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -751,7 +808,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 disabled={recOffset >= maxOffset}
                 onClick={() => setRecOffset((v) => Math.min(maxOffset, v + 1))}
                 aria-label="Rekomendasi berikutnya"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E4DCCB] bg-white text-[#381E5A] hover:bg-[#FAF7F2] disabled:opacity-40 cursor-pointer"
+                className="flex h-9 w-9 items-center justify-center rounded-full border border-[#E4DCCB] bg-white text-[#381E5A] hover:bg-[#FAF7F2] disabled:opacity-40 cursor-pointer"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
@@ -771,12 +828,13 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                       src={pkg.foto_url}
                       alt={pkg.nama_paket}
                       className="h-full w-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                     <button
                       type="button"
                       onClick={() => onToggleWishlist(pkg.id)}
                       aria-label={`Simpan ${pkg.nama_paket}`}
-                      className="absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-[#381E5A] shadow cursor-pointer"
+                      className="absolute top-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-[#381E5A] shadow cursor-pointer"
                     >
                       <Heart
                         className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
@@ -797,9 +855,8 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                       </p>
                     </div>
                     <div className="mt-3 flex items-center justify-between border-t border-[#F0EAE0] pt-3">
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600">
-                        <span className="h-2 w-2 rounded-full bg-[#16A34A]" />
-                        Tersedia
+                      <span className="text-[11px] font-medium text-[#0C3328]">
+                        {pkg.durasi_hari} Hari
                       </span>
                       <button
                         type="button"
@@ -807,7 +864,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                           onOpenDetail(pkg);
                           window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
-                        className="inline-flex items-center gap-1 rounded-full bg-[#241142] px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#381E5A] cursor-pointer"
+                        className="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#241142] px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#381E5A] cursor-pointer"
                       >
                         <span>Lihat Detail</span>
                         <ChevronRight className="h-3 w-3" />
@@ -826,357 +883,615 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   }
 
   // =========================================================================
-  // PAGE: KATALOG PAKET LEBARAN (Matches 7_10f3e5fa.png)
+  // PAGE: PAKET LEBARAN (STRICT 2-CATEGORY MODEL: PAKET LEBARAN vs TABUNGAN UANG)
   // =========================================================================
   if (activePage === 'katalog') {
+    const isTabunganUang = catalogCategory === 'tabungan_uang';
+
     return (
-      <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
-        {/* Arched Hero Header */}
+      <div className="mx-auto max-w-7xl space-y-7 px-4 py-6 sm:px-6 lg:px-8">
+        {/* Hero Header */}
         <section className="grid items-center gap-6 lg:grid-cols-12">
           <div className="space-y-3 lg:col-span-6">
             <p className="text-xs font-semibold text-[#C8A053]">
               Katalog Resmi 2026–2027 · {COMPANY_INFO.legalName}
             </p>
-            <h1 className="font-display text-3xl leading-tight font-bold text-[#381E5A] sm:text-5xl">
-              Temukan Paket Lebaran Pilihan Anda
+            <h1 className="font-display text-[clamp(1.75rem,3.8vw,3rem)] leading-tight font-bold text-[#381E5A]">
+              {isTabunganUang
+                ? 'Tabungan Uang Munggahan & Lebaran'
+                : 'Pilih Paket Lebaran Anda'}
             </h1>
             <p className="max-w-lg text-sm leading-relaxed text-stone-600">
-              Hampers berkualitas untuk momen penuh makna bersama keluarga, rekan, dan sahabat. Pilih Paket Bunda, Paket Anak, Diamond &amp; Sultan, Paket Uang, atau 50 Barang Satuan.
+              {isTabunganUang
+                ? 'Menabung uang tunai harian atau mingguan secara ringan selama 295 hari (Munggahan) atau 325 hari (Lebaran) dengan nominal hasil pasti.'
+                : 'Tersedia Paket Bunda, Paket Anak, Paket Pilihan Diamond & Sultan, serta 50 Barang Satuan yang bisa dicicil harian atau mingguan.'}
             </p>
             <div className="flex flex-wrap gap-2.5 pt-1">
               <button
                 type="button"
                 onClick={() => setShowBrochuresModal(true)}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-4 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-4 py-2 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
               >
                 <BookOpen className="h-4 w-4 text-[#C8A053]" />
                 <span>Lihat 6 Brosur Resmi</span>
               </button>
               <button
                 type="button"
-                onClick={() => onNavigate('tabungan')}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                onClick={() => onOpenAuth('register_member')}
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
               >
-                <Sparkles className="h-4 w-4" />
-                <span>Simulasi Tabungan 325 Hari</span>
+                <UserPlus className="h-4 w-4" />
+                <span>Gabung Member</span>
               </button>
             </div>
           </div>
 
           <div className="lg:col-span-6">
-            <div className="overflow-hidden rounded-t-[160px] rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-xs">
+            <div className="overflow-hidden rounded-t-[100px] sm:rounded-t-[150px] rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-xs">
               <img
-                src={IMG_HERO}
-                alt="Temukan Paket Lebaran Pilihan Anda"
+                src={isTabunganUang ? IMG_UANG_DAGING : IMG_HERO}
+                alt={isTabunganUang ? 'Program Tabungan Uang Sagitarius Parcel' : 'Paket Lebaran Sagitarius Parcel'}
                 className="aspect-[16/9] w-full object-cover"
+                referrerPolicy="no-referrer"
               />
             </div>
           </div>
         </section>
 
-        {/* Search & 3 Dropdown Filters Bar */}
-        <section className="space-y-3">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari paket hadiah, isi (misal: beras, khong guan, daging), atau kategori..."
-              className="w-full rounded-xl border border-[#E4DCCB] bg-white py-3 pr-10 pl-11 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#381E5A] focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute top-1/2 right-3 -translate-y-1/2 rounded-md p-1 text-stone-400 hover:bg-stone-100 cursor-pointer"
-                aria-label="Hapus pencarian"
+        {/* SIMPLE 2-CATEGORY SWITCHER */}
+        <section aria-label="Kategori Pilihan" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => {
+              onSelectCatalogCategory('paket_lebaran');
+              setSatuanSubFilter('Semua Satuan');
+            }}
+            className={`flex min-h-[72px] items-center gap-4 rounded-2xl border-2 p-4 text-left transition cursor-pointer ${
+              !isTabunganUang
+                ? 'border-[#0C3328] bg-[#0C3328] text-white shadow-sm'
+                : 'border-[#E4DCCB] bg-white text-[#381E5A] hover:border-[#C8A053]'
+            }`}
+          >
+            <span
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+                !isTabunganUang ? 'bg-white/15 text-[#E8CA82]' : 'bg-[#FAF7F2] text-[#0C3328]'
+              }`}
+            >
+              <Gift className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-lg font-bold leading-snug">Paket Lebaran</p>
+              <p
+                className={`mt-0.5 text-xs ${
+                  !isTabunganUang ? 'text-stone-200' : 'text-stone-600'
+                }`}
               >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+                Paket Bunda, Paket Anak, Diamond &amp; Sultan, serta 50 Barang Satuan
+              </p>
+            </div>
+          </button>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="relative">
-              <select
-                value={activeCategory}
-                onChange={(e) => {
-                  const val = e.target.value as 'all' | PackageCategory;
-                  setActiveCategory(val);
-                  if (val !== 'satuan') setSatuanSubFilter('Semua Satuan');
-                }}
-                aria-label="Filter kategori"
-                className="w-full appearance-none rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 pr-9 text-xs font-semibold text-[#381E5A] focus:border-[#381E5A] focus:outline-none"
+          <button
+            type="button"
+            onClick={() => onSelectCatalogCategory('tabungan_uang')}
+            className={`flex min-h-[72px] items-center gap-4 rounded-2xl border-2 p-4 text-left transition cursor-pointer ${
+              isTabunganUang
+                ? 'border-[#0C3328] bg-[#0C3328] text-white shadow-sm'
+                : 'border-[#E4DCCB] bg-white text-[#381E5A] hover:border-[#C8A053]'
+            }`}
+          >
+            <span
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+                isTabunganUang ? 'bg-white/15 text-[#E8CA82]' : 'bg-[#FAF7F2] text-[#0C3328]'
+              }`}
+            >
+              <Banknote className="h-6 w-6" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-lg font-bold leading-snug">Tabungan Uang</p>
+              <p
+                className={`mt-0.5 text-xs ${
+                  isTabunganUang ? 'text-stone-200' : 'text-stone-600'
+                }`}
               >
-                {CATEGORY_OPTIONS.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                Dana Tunai Munggahan (295 Hari / 42 Mg) &amp; Lebaran (325 Hari / 45 Mg)
+              </p>
             </div>
-
-            <div className="relative">
-              <select
-                value={priceRange}
-                onChange={(e) =>
-                  setPriceRange(e.target.value as (typeof PRICE_RANGE_OPTIONS)[number]['id'])
-                }
-                aria-label="Filter rentang harga"
-                className="w-full appearance-none rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 pr-9 text-xs font-semibold text-[#381E5A] focus:border-[#381E5A] focus:outline-none"
-              >
-                {PRICE_RANGE_OPTIONS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            </div>
-
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e) =>
-                  setSortBy(e.target.value as (typeof SORT_OPTIONS)[number]['id'])
-                }
-                aria-label="Urutkan katalog"
-                className="w-full appearance-none rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 pr-9 text-xs font-semibold text-[#381E5A] focus:border-[#381E5A] focus:outline-none"
-              >
-                {SORT_OPTIONS.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
-            </div>
-          </div>
-
-          {/* Sub-filter chips when 50 Barang Satuan */}
-          {(activeCategory === 'satuan' || activeCategory === 'all') && (
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <span className="font-semibold text-stone-500">Filter Satuan:</span>
-              {SATUAN_SUBFILTERS.map((sub) => (
-                <button
-                  key={sub}
-                  type="button"
-                  onClick={() => {
-                    setSatuanSubFilter(sub);
-                    if (sub !== 'Semua Satuan') setActiveCategory('satuan');
-                  }}
-                  className={`rounded-lg px-3 py-1 font-semibold transition cursor-pointer ${
-                    satuanSubFilter === sub
-                      ? 'bg-[#0C3328] text-[#E8CA82]'
-                      : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
-                  }`}
-                >
-                  {sub}
-                </button>
-              ))}
-            </div>
-          )}
+          </button>
         </section>
 
-        {/* Exact Lookup Tables when Paket Uang is selected */}
-        {activeCategory === 'uang' && (
-          <div className="grid gap-5 lg:grid-cols-2">
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
-              <h3 className="font-display text-lg font-bold text-[#381E5A]">
-                Tabel Paket Uang Munggahan (295 Hari &amp; 42 Minggu)
-              </h3>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 text-xs">
-                <div>
-                  <p className="mb-1.5 font-semibold text-stone-700">Harian (295 Hari)</p>
-                  <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB]">
-                    {PAKET_UANG_TABLES.munggahanHarian295.map((r) => (
-                      <div key={r.setoran} className="flex justify-between px-3 py-1.5 font-mono-nums">
-                        <span>{formatRupiah(r.setoran)}/hr</span>
-                        <span className="font-bold text-[#0C3328]">{formatRupiah(r.hasil)}</span>
+        {/* CATEGORY VIEW A: TABUNGAN UANG ONLY */}
+        {isTabunganUang ? (
+          <div className="space-y-6">
+            {/* Agent selection bar for quick Tabungan Uang enrollment */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-bold text-[#381E5A]">
+                  Pilih Nominal Langsung dari Tabel atau Kartu Tabungan Uang
+                </p>
+                <p className="text-xs text-stone-600">
+                  Klik salah satu baris nominal pada tabel di bawah untuk langsung mengunci setoran dan mendaftar.
+                </p>
+              </div>
+              <div className="w-full sm:w-72">
+                <label className="sr-only" htmlFor="uang-agent-select">
+                  Agen Binaan Wilayah
+                </label>
+                <select
+                  id="uang-agent-select"
+                  value={selectedAgentId}
+                  onChange={(e) => onSelectAgent(e.target.value)}
+                  className="min-h-[42px] w-full rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2 text-xs font-semibold text-[#381E5A]"
+                >
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      Agen: {a.wilayah} — {a.nama}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* 4 Tabungan Uang Core Cards */}
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {tabunganUangPackages.map((pkg) => {
+                const liked = wishlistIds.includes(pkg.id);
+                return (
+                  <article
+                    key={pkg.id}
+                    className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
+                      <img
+                        src={pkg.foto_url}
+                        alt={pkg.nama_paket}
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onToggleWishlist(pkg.id)}
+                        aria-label={`Simpan ${pkg.nama_paket}`}
+                        className="absolute top-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow cursor-pointer"
+                      >
+                        <Heart
+                          className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
+                        />
+                      </button>
+                    </div>
+                    <div className="flex flex-1 flex-col justify-between p-4">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-[#C8A053]">
+                          {pkg.sub_kategori || 'Tabungan Uang'}
+                        </p>
+                        <h2 className="mt-0.5 text-base font-bold text-[#381E5A]">
+                          {pkg.nama_paket}
+                        </h2>
+                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-stone-600">
+                          {pkg.deskripsi_singkat || pkg.daftar_isi.slice(0, 2).join(', ')}
+                        </p>
                       </div>
-                    ))}
+
+                      <div className="mt-3 border-t border-[#F0EAE0] pt-3">
+                        <p className="font-mono-nums text-sm font-bold text-[#381E5A]">
+                          Cair {formatRupiah(pkg.harga_total)}
+                        </p>
+                        <p className="font-mono-nums text-[11px] text-stone-500">
+                          Setoran {formatRupiah(pkg.setoran_harian)}/hari · {pkg.jadwal_ambil}
+                        </p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onOpenDetail(pkg)}
+                            className="min-h-[40px] flex-1 rounded-xl border border-[#E4DCCB] px-3 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                          >
+                            Detail
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const isWeekly = pkg.id.includes('mingguan');
+                              onLockSimulation({
+                                packageItem: pkg,
+                                durasiMinggu: Math.max(12, Math.round(pkg.durasi_hari / 7)),
+                                frekuensi: isWeekly ? 'mingguan' : 'harian',
+                                estimasiSetoran: isWeekly
+                                  ? pkg.setoran_mingguan
+                                  : pkg.setoran_harian,
+                                selectedAgentId: selectedAgentId || agents[0]?.id,
+                              });
+                            }}
+                            className="min-h-[40px] flex-1 rounded-xl bg-[#0C3328] px-3 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                          >
+                            Pilih Paket
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+
+            {/* Interactive Lookup Tables for Paket Uang Munggahan & Lebaran */}
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
+                <h3 className="font-display text-lg font-bold text-[#381E5A]">
+                  Tabel Tabungan Uang Munggahan (295 Hari &amp; 42 Minggu)
+                </h3>
+                <p className="mt-1 text-xs text-stone-500">
+                  Klik baris nominal untuk langsung memilih paket &amp; mendaftar.
+                </p>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2 text-xs">
+                  <div>
+                    <p className="mb-1.5 font-semibold text-stone-700">Harian (295 Hari)</p>
+                    <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB] overflow-hidden">
+                      {PAKET_UANG_TABLES.munggahanHarian295.map((r) => (
+                        <button
+                          key={r.setoran}
+                          type="button"
+                          onClick={() =>
+                            handleSelectUangNominal(
+                              'Tabungan Uang Munggahan',
+                              'harian',
+                              r.setoran,
+                              r.hasil,
+                              295,
+                              42,
+                              'Lebih Awal (Menjelang Munggahan)'
+                            )
+                          }
+                          className="flex min-h-[38px] w-full items-center justify-between px-3 py-2 text-left font-mono-nums transition hover:bg-[#FAF7F2] cursor-pointer"
+                        >
+                          <span className="text-stone-700">{formatRupiah(r.setoran)}/hr</span>
+                          <span className="font-bold text-[#0C3328]">
+                            {formatRupiah(r.hasil)} →
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 font-semibold text-stone-700">Mingguan (42 Minggu)</p>
+                    <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB] overflow-hidden">
+                      {PAKET_UANG_TABLES.munggahanMingguan42.map((r) => (
+                        <button
+                          key={r.setoran}
+                          type="button"
+                          onClick={() =>
+                            handleSelectUangNominal(
+                              'Tabungan Uang Munggahan',
+                              'mingguan',
+                              r.setoran,
+                              r.hasil,
+                              294,
+                              42,
+                              'Lebih Awal (Menjelang Munggahan)'
+                            )
+                          }
+                          className="flex min-h-[38px] w-full items-center justify-between px-3 py-2 text-left font-mono-nums transition hover:bg-[#FAF7F2] cursor-pointer"
+                        >
+                          <span className="text-stone-700">{formatRupiah(r.setoran)}/mg</span>
+                          <span className="font-bold text-[#0C3328]">
+                            {formatRupiah(r.hasil)} →
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <p className="mb-1.5 font-semibold text-stone-700">Mingguan (42 Minggu)</p>
-                  <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB]">
-                    {PAKET_UANG_TABLES.munggahanMingguan42.map((r) => (
-                      <div key={r.setoran} className="flex justify-between px-3 py-1.5 font-mono-nums">
-                        <span>{formatRupiah(r.setoran)}/mg</span>
-                        <span className="font-bold text-[#0C3328]">{formatRupiah(r.hasil)}</span>
-                      </div>
-                    ))}
+              </div>
+
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
+                <h3 className="font-display text-lg font-bold text-[#381E5A]">
+                  Tabel Tabungan Uang Lebaran (325 Hari &amp; 45 Minggu)
+                </h3>
+                <p className="mt-1 text-xs text-stone-500">
+                  Klik baris nominal untuk langsung memilih paket &amp; mendaftar.
+                </p>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2 text-xs">
+                  <div>
+                    <p className="mb-1.5 font-semibold text-stone-700">Harian (325 Hari)</p>
+                    <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB] overflow-hidden">
+                      {PAKET_UANG_TABLES.lebaranHarian325.map((r) => (
+                        <button
+                          key={r.setoran}
+                          type="button"
+                          onClick={() =>
+                            handleSelectUangNominal(
+                              'Tabungan Uang Lebaran',
+                              'harian',
+                              r.setoran,
+                              r.hasil,
+                              325,
+                              45,
+                              'Lebih Awal (Sebelum Lebaran)'
+                            )
+                          }
+                          className="flex min-h-[38px] w-full items-center justify-between px-3 py-2 text-left font-mono-nums transition hover:bg-[#FAF7F2] cursor-pointer"
+                        >
+                          <span className="text-stone-700">{formatRupiah(r.setoran)}/hr</span>
+                          <span className="font-bold text-[#0C3328]">
+                            {formatRupiah(r.hasil)} →
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 font-semibold text-stone-700">Mingguan (45 Minggu)</p>
+                    <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB] overflow-hidden">
+                      {PAKET_UANG_TABLES.lebaranMingguan45.map((r) => (
+                        <button
+                          key={r.setoran}
+                          type="button"
+                          onClick={() =>
+                            handleSelectUangNominal(
+                              'Tabungan Uang Lebaran',
+                              'mingguan',
+                              r.setoran,
+                              r.hasil,
+                              315,
+                              45,
+                              'Lebih Awal (Sebelum Lebaran)'
+                            )
+                          }
+                          className="flex min-h-[38px] w-full items-center justify-between px-3 py-2 text-left font-mono-nums transition hover:bg-[#FAF7F2] cursor-pointer"
+                        >
+                          <span className="text-stone-700">{formatRupiah(r.setoran)}/mg</span>
+                          <span className="font-bold text-[#0C3328]">
+                            {formatRupiah(r.hasil)} →
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
-              <h3 className="font-display text-lg font-bold text-[#381E5A]">
-                Tabel Paket Uang Lebaran (325 Hari &amp; 45 Minggu)
-              </h3>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 text-xs">
-                <div>
-                  <p className="mb-1.5 font-semibold text-stone-700">Harian (325 Hari)</p>
-                  <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB]">
-                    {PAKET_UANG_TABLES.lebaranHarian325.map((r) => (
-                      <div key={r.setoran} className="flex justify-between px-3 py-1.5 font-mono-nums">
-                        <span>{formatRupiah(r.setoran)}/hr</span>
-                        <span className="font-bold text-[#0C3328]">{formatRupiah(r.hasil)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-1.5 font-semibold text-stone-700">Mingguan (45 Minggu)</p>
-                  <div className="divide-y divide-[#F0EAE0] rounded-xl border border-[#E4DCCB]">
-                    {PAKET_UANG_TABLES.lebaranMingguan45.map((r) => (
-                      <div key={r.setoran} className="flex justify-between px-3 py-1.5 font-mono-nums">
-                        <span>{formatRupiah(r.setoran)}/mg</span>
-                        <span className="font-bold text-[#0C3328]">{formatRupiah(r.hasil)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 4-Column Product Grid */}
-        {displayedPackages.length === 0 ? (
-          <div className="rounded-2xl border border-[#E4DCCB] bg-white p-12 text-center">
-            <PackageIcon className="mx-auto h-10 w-10 text-stone-400" />
-            <p className="mt-3 text-sm font-semibold text-[#381E5A]">
-              Tidak ada paket yang sesuai dengan filter Anda.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setActiveCategory('all');
-                setPriceRange('all');
-                setSatuanSubFilter('Semua Satuan');
-              }}
-              className="mt-4 rounded-xl border border-[#E4DCCB] px-5 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
-            >
-              Reset Filter Katalog
-            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {displayedPackages.map((pkg) => {
-              const liked = wishlistIds.includes(pkg.id);
-              return (
-                <article
-                  key={pkg.id}
-                  className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
-                    <img
-                      src={pkg.foto_url}
-                      alt={pkg.nama_paket}
-                      className="h-full w-full object-cover"
-                    />
+          /* CATEGORY VIEW B: PAKET LEBARAN ONLY (Bunda, Anak, Diamond/Sultan, 50 Satuan) */
+          <div className="space-y-6">
+            <section className="space-y-3">
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari paket lebaran, isi (misal: beras, khong guan, daging, koper)..."
+                  className="min-h-[46px] w-full rounded-xl border border-[#E4DCCB] bg-white py-3 pr-10 pl-11 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#381E5A] focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute top-1/2 right-3 -translate-y-1/2 rounded-md p-1.5 text-stone-400 hover:bg-stone-100 cursor-pointer"
+                    aria-label="Hapus pencarian"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Jenis Paket Lebaran Filter Tabs + Price & Sort */}
+              <div className="flex flex-wrap gap-2">
+                {PAKET_LEBARAN_SUBFILTERS.map((sub) => (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => {
+                      setLebaranSubCategory(sub.id);
+                      if (sub.id !== 'satuan') setSatuanSubFilter('Semua Satuan');
+                    }}
+                    className={`min-h-[40px] rounded-xl px-3.5 py-2 text-xs font-semibold transition cursor-pointer ${
+                      lebaranSubCategory === sub.id
+                        ? 'bg-[#381E5A] text-[#E8CA82]'
+                        : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
+                    }`}
+                  >
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="relative">
+                  <select
+                    value={priceRange}
+                    onChange={(e) =>
+                      setPriceRange(e.target.value as (typeof PRICE_RANGE_OPTIONS)[number]['id'])
+                    }
+                    aria-label="Filter rentang harga"
+                    className="min-h-[42px] w-full appearance-none rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 pr-9 text-xs font-semibold text-[#381E5A] focus:border-[#381E5A] focus:outline-none"
+                  >
+                    {PRICE_RANGE_OPTIONS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={sortBy}
+                    onChange={(e) =>
+                      setSortBy(e.target.value as (typeof SORT_OPTIONS)[number]['id'])
+                    }
+                    aria-label="Urutkan katalog"
+                    className="min-h-[42px] w-full appearance-none rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 pr-9 text-xs font-semibold text-[#381E5A] focus:border-[#381E5A] focus:outline-none"
+                  >
+                    {SORT_OPTIONS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                </div>
+              </div>
+
+              {(lebaranSubCategory === 'satuan' || lebaranSubCategory === 'all_lebaran') && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                  <span className="font-semibold text-stone-500">Filter Satuan:</span>
+                  {SATUAN_SUBFILTERS.map((sub) => (
                     <button
+                      key={sub}
                       type="button"
-                      onClick={() => onToggleWishlist(pkg.id)}
-                      aria-label={`Simpan ${pkg.nama_paket} ke daftar pilihan`}
-                      className="absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow transition hover:scale-105 cursor-pointer"
+                      onClick={() => {
+                        setSatuanSubFilter(sub);
+                        if (sub !== 'Semua Satuan') setLebaranSubCategory('satuan');
+                      }}
+                      className={`min-h-[36px] rounded-lg px-3 py-1.5 font-semibold transition cursor-pointer ${
+                        satuanSubFilter === sub
+                          ? 'bg-[#0C3328] text-[#E8CA82]'
+                          : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
+                      }`}
                     >
-                      <Heart
-                        className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
-                      />
+                      {sub}
                     </button>
-                    {pkg.bonus_thr > 0 && (
-                      <span className="absolute bottom-2.5 left-2.5 rounded-lg bg-[#0C3328]/90 px-2.5 py-1 font-mono-nums text-[10px] font-bold text-[#E8CA82]">
-                        THR {formatRupiah(pkg.bonus_thr)}
-                      </span>
-                    )}
-                  </div>
+                  ))}
+                </div>
+              )}
+            </section>
 
-                  <div className="flex flex-1 flex-col justify-between p-4">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[#C8A053]">
-                        {pkg.sub_kategori || pkg.kategori} · {pkg.bobot_kg} kg
-                      </p>
-                      <h2 className="mt-0.5 text-base font-bold text-[#381E5A]">
-                        {pkg.nama_paket}
-                      </h2>
-                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-stone-600">
-                        {pkg.daftar_isi.slice(0, 3).join(', ')}
-                        {pkg.daftar_isi.length > 3
-                          ? ` (+${pkg.daftar_isi.length - 3} item lainnya)`
-                          : ''}
-                      </p>
-                    </div>
-
-                    <div className="mt-3 border-t border-[#F0EAE0] pt-3">
-                      <p className="font-mono-nums text-sm font-bold text-[#381E5A]">
-                        {formatRupiah(pkg.harga_total)}{' '}
-                        <span className="text-[11px] font-normal text-stone-500">
-                          ({formatRupiah(pkg.setoran_harian)}/hari)
-                        </span>
-                      </p>
-
-                      <div className="mt-3 flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-stone-600">
-                          <span className="h-2 w-2 rounded-full bg-[#16A34A]" />
-                          Tersedia
-                        </span>
+            {/* Product Grid */}
+            {displayedLebaranPackages.length === 0 ? (
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-10 text-center">
+                <PackageIcon className="mx-auto h-10 w-10 text-stone-400" />
+                <p className="mt-3 text-sm font-semibold text-[#381E5A]">
+                  Tidak ada paket yang sesuai dengan filter Anda.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setLebaranSubCategory('all_lebaran');
+                    setPriceRange('all');
+                    setSatuanSubFilter('Semua Satuan');
+                  }}
+                  className="mt-4 min-h-[42px] rounded-xl border border-[#E4DCCB] px-5 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                >
+                  Reset Filter Katalog
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {displayedLebaranPackages.map((pkg) => {
+                  const liked = wishlistIds.includes(pkg.id);
+                  return (
+                    <article
+                      key={pkg.id}
+                      className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-stone-100">
+                        <img
+                          src={pkg.foto_url}
+                          alt={pkg.nama_paket}
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
                         <button
                           type="button"
-                          onClick={() => {
-                            onOpenDetail(pkg);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                          className="inline-flex items-center gap-1 rounded-full bg-[#241142] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#381E5A] cursor-pointer"
+                          onClick={() => onToggleWishlist(pkg.id)}
+                          aria-label={`Simpan ${pkg.nama_paket} ke daftar pilihan`}
+                          className="absolute top-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow transition hover:scale-105 cursor-pointer"
                         >
-                          <span>Lihat Detail</span>
-                          <ChevronRight className="h-3.5 w-3.5" />
+                          <Heart
+                            className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
+                          />
                         </button>
+                        {pkg.bonus_thr > 0 && (
+                          <span className="absolute bottom-2.5 left-2.5 rounded-lg bg-[#0C3328]/90 px-2.5 py-1 font-mono-nums text-[10px] font-bold text-[#E8CA82]">
+                            THR {formatRupiah(pkg.bonus_thr)}
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
 
-            {/* Action Card at end of grid (replaces decorative "Katalog sedang diperbarui" card with live action) */}
-            <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#D5CBB8] bg-[#FAF7F2] p-6 text-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#381E5A]/10 text-[#381E5A]">
-                <ShoppingBag className="h-5 w-5" />
-              </span>
-              <h3 className="mt-3 text-sm font-bold text-[#381E5A]">
-                {activeCategory === 'all' && !showAllSatuan
-                  ? 'Lihat 50 Barang Satuan Lengkap'
-                  : 'Cek Brosur Cetak Resmi'}
-              </h3>
-              <p className="mt-1 text-xs text-stone-600">
-                {activeCategory === 'all' && !showAllSatuan
-                  ? 'Beras, Minyak, Daging Sapi, Ayam, dan Telur H-2 mulai Rp 100/hari.'
-                  : 'Bandingkan seluruh varian langsung dari brosur resmi 2026–2027.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeCategory === 'all' && !showAllSatuan) {
-                    setActiveCategory('satuan');
-                    setShowAllSatuan(true);
-                  } else {
-                    setShowBrochuresModal(true);
-                  }
-                }}
-                className="mt-4 rounded-xl bg-[#0C3328] px-4 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
-              >
-                {activeCategory === 'all' && !showAllSatuan
-                  ? 'Muat 50 Barang Satuan'
-                  : 'Buka Galeri Brosur'}
-              </button>
-            </div>
+                      <div className="flex flex-1 flex-col justify-between p-4">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#C8A053]">
+                            {pkg.sub_kategori || pkg.kategori} · {pkg.bobot_kg} kg
+                          </p>
+                          <h2 className="mt-0.5 text-base font-bold text-[#381E5A]">
+                            {pkg.nama_paket}
+                          </h2>
+                          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-stone-600">
+                            {pkg.daftar_isi.slice(0, 3).join(', ')}
+                            {pkg.daftar_isi.length > 3
+                              ? ` (+${pkg.daftar_isi.length - 3} item lainnya)`
+                              : ''}
+                          </p>
+                        </div>
+
+                        <div className="mt-3 border-t border-[#F0EAE0] pt-3">
+                          <p className="font-mono-nums text-sm font-bold text-[#381E5A]">
+                            {formatRupiah(pkg.harga_total)}{' '}
+                            <span className="text-[11px] font-normal text-stone-500">
+                              ({formatRupiah(pkg.setoran_harian)}/hari)
+                            </span>
+                          </p>
+
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-[#0C3328]">
+                              {pkg.durasi_hari} Hari
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onOpenDetail(pkg);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="inline-flex min-h-[38px] items-center gap-1 rounded-full bg-[#241142] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#381E5A] cursor-pointer"
+                            >
+                              <span>Lihat Detail</span>
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+
+                {/* Action Card at end of grid */}
+                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#D5CBB8] bg-[#FAF7F2] p-6 text-center">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#381E5A]/10 text-[#381E5A]">
+                    <ShoppingBag className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-3 text-sm font-bold text-[#381E5A]">
+                    {lebaranSubCategory === 'all_lebaran' && !showAllSatuan
+                      ? 'Lihat 50 Barang Satuan Lengkap'
+                      : 'Cek Brosur Cetak Resmi'}
+                  </h3>
+                  <p className="mt-1 text-xs text-stone-600">
+                    {lebaranSubCategory === 'all_lebaran' && !showAllSatuan
+                      ? 'Beras, Minyak, Daging Sapi, Ayam, dan Telur H-2 mulai Rp 100/hari.'
+                      : 'Bandingkan seluruh varian langsung dari brosur resmi 2026–2027.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (lebaranSubCategory === 'all_lebaran' && !showAllSatuan) {
+                        setLebaranSubCategory('satuan');
+                        setShowAllSatuan(true);
+                      } else {
+                        setShowBrochuresModal(true);
+                      }
+                    }}
+                    className="mt-4 min-h-[40px] rounded-xl bg-[#0C3328] px-4 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                  >
+                    {lebaranSubCategory === 'all_lebaran' && !showAllSatuan
+                      ? 'Muat 50 Barang Satuan'
+                      : 'Buka Galeri Brosur'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1186,17 +1501,19 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   }
 
   // =========================================================================
-  // PAGE: BERANDA (Matches 8_2fabc4d5.png)
+  // PAGE: BERANDA
   // =========================================================================
-  const featuredHighlight = packages.filter((p) => p.kategori !== 'satuan').slice(0, 4);
+  const featuredHighlight = packages
+    .filter((p) => p.kategori !== 'satuan' && p.kategori !== 'uang')
+    .slice(0, 4);
 
   return (
-    <div className="space-y-10 pb-12">
+    <div className="space-y-10 pb-12 sm:space-y-12 sm:pb-16">
       {referralAgent && (
         <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#0C3328] to-[#164A3B] px-5 py-3.5 text-white shadow-sm">
-            <div className="flex items-center gap-3">
-              <ShieldCheck className="h-5 w-5 shrink-0 text-[#E8CA82]" />
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#0C3328] to-[#164A3B] px-4 py-3.5 text-white shadow-sm sm:flex-row sm:items-center sm:px-5">
+            <div className="flex items-start gap-3 sm:items-center">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#E8CA82] sm:mt-0" />
               <div className="text-xs">
                 <p className="font-bold text-[#E8CA82]">
                   Tautan Pendaftaran Resmi Agen ({referralAgent.kode_agen})
@@ -1209,8 +1526,8 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => openCategoryCatalog('all')}
-              className="rounded-lg bg-[#E8CA82] px-3.5 py-1.5 text-xs font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
+              onClick={() => openMainCategory('paket_lebaran')}
+              className="min-h-[40px] shrink-0 rounded-lg bg-[#E8CA82] px-4 py-2 text-xs font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
             >
               Pilih Paket Sekarang
             </button>
@@ -1218,255 +1535,225 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         </div>
       )}
 
-      {/* Split Hero Section */}
-      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-8 lg:grid-cols-12">
-          <div className="space-y-5 lg:col-span-5">
+      {/* Split Hero Section with Gabung Member & Gabung Agen CTA */}
+      <section className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-7 lg:px-8">
+        <div className="grid items-center gap-7 lg:grid-cols-12 lg:gap-10">
+          <div className="space-y-4 sm:space-y-5 lg:col-span-6">
             <p className="text-xs font-semibold text-[#C8A053]">
               {COMPANY_INFO.legalName} · {COMPANY_INFO.tagline}
             </p>
             <h1
-              className="font-display text-4xl leading-[1.12] font-bold text-[#381E5A] sm:text-5xl"
+              className="font-display text-[clamp(1.85rem,4.2vw,3.2rem)] leading-[1.12] font-bold text-[#381E5A]"
               style={{ textWrap: 'balance' }}
             >
               Sambut Lebaran dengan Bingkisan Bermakna
             </h1>
-            <p className="text-sm leading-relaxed text-stone-600 sm:text-base">
-              Persiapkan paket Lebaran untuk keluarga dan orang terkasih bersama Sagitarius Parcel. Mulai Rp 100–Rp 10.000/hari selama 325 hari lengkap dengan bonus THR &amp; kupon Door Prize.
+            <p className="max-w-xl text-sm leading-relaxed text-stone-600 sm:text-base">
+              Persiapkan Paket Lebaran atau Tabungan Uang untuk keluarga Anda dengan cicilan ringan mulai Rp 100–Rp 10.000/hari selama 295–325 hari lengkap dengan bonus THR &amp; kupon Door Prize.
             </p>
-            <div className="flex flex-wrap items-center gap-3 pt-1">
+
+            {/* Primary Onboarding Buttons for Non-Technical Visitors */}
+            <div className="grid grid-cols-1 gap-2.5 pt-1 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
               <button
                 type="button"
-                onClick={() => openCategoryCatalog('all')}
-                className="inline-flex items-center gap-2 rounded-full bg-[#0C3328] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#144738] cursor-pointer"
+                onClick={() => onOpenAuth('register_member')}
+                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#144738] sm:w-auto cursor-pointer"
               >
-                <span>Lihat Paket</span>
-                <ArrowRight className="h-4 w-4 text-[#E8CA82]" />
+                <UserPlus className="h-4 w-4 text-[#E8CA82]" />
+                <span>Gabung Member</span>
               </button>
               <button
                 type="button"
-                onClick={() => onNavigate('tabungan')}
-                className="inline-flex items-center gap-2 rounded-full border border-[#C8A053] bg-white px-6 py-3 text-sm font-semibold text-[#381E5A] transition hover:bg-[#FAF7F2] cursor-pointer"
+                onClick={() => onOpenAuth('register_agent')}
+                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-3 text-sm font-bold text-[#1D122B] shadow-xs transition hover:brightness-105 sm:w-auto cursor-pointer"
               >
-                <span>Pelajari Tabungan</span>
+                <UserCheck className="h-4 w-4" />
+                <span>Gabung Agen</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openMainCategory('paket_lebaran')}
+                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-3 text-sm font-semibold text-[#381E5A] transition hover:bg-[#FAF7F2] sm:w-auto cursor-pointer"
+              >
+                <span>Pilih Paket</span>
                 <ArrowRight className="h-4 w-4 text-[#0C3328]" />
               </button>
             </div>
           </div>
 
-          <div className="lg:col-span-7">
-            <div className="relative overflow-hidden rounded-tl-[160px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-sm">
+          <div className="lg:col-span-6">
+            <div className="relative overflow-hidden rounded-tl-[100px] sm:rounded-tl-[150px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-white shadow-sm">
               <img
                 src={IMG_HERO}
                 alt="Bingkisan Parcel Lebaran Sagitarius Parcel"
-                className="aspect-[16/9] w-full object-cover"
+                className="aspect-[16/10] w-full object-cover"
+                referrerPolicy="no-referrer"
               />
               <button
                 type="button"
                 onClick={() => setShowBrochuresModal(true)}
-                className="absolute right-4 bottom-4 inline-flex items-center gap-2 rounded-full border border-[#C8A053]/70 bg-[#0C3328]/90 px-4 py-2 text-xs font-semibold text-[#E8CA82] backdrop-blur-xs hover:bg-[#0C3328] cursor-pointer"
+                className="absolute right-3 bottom-3 sm:right-4 sm:bottom-4 inline-flex min-h-[38px] items-center gap-2 rounded-full border border-[#C8A053]/70 bg-[#0C3328]/90 px-3.5 py-2 text-xs font-semibold text-[#E8CA82] backdrop-blur-xs hover:bg-[#0C3328] cursor-pointer"
               >
                 <BookOpen className="h-3.5 w-3.5" />
-                <span>Lihat Brosur Cetak 2026–2027</span>
+                <span>Lihat Brosur Cetak</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* 3 Category Showcase Cards */}
-        <div className="mt-8 grid gap-5 md:grid-cols-3">
+        {/* 2 Simple Category Entry Cards */}
+        <div className="mt-8 grid gap-4 md:grid-cols-2 md:gap-5">
           <button
             type="button"
-            onClick={() => openCategoryCatalog('bunda')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-3.5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
+            onClick={() => openMainCategory('paket_lebaran')}
+            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
           >
             <img
-              src={IMG_BUNDA}
-              alt="Paket Keluarga"
-              className="h-24 w-28 shrink-0 rounded-xl object-cover"
+              src={IMG_BUNDA_BOX}
+              alt="Paket Lebaran"
+              className="h-20 w-24 shrink-0 rounded-xl object-cover sm:h-24 sm:w-28"
+              referrerPolicy="no-referrer"
             />
-            <div className="flex-1">
-              <h2 className="font-display text-lg font-bold text-[#381E5A]">Paket Keluarga</h2>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-lg font-bold text-[#381E5A] sm:text-xl">
+                Paket Lebaran
+              </h2>
               <p className="mt-1 text-xs leading-relaxed text-stone-600">
-                Paket Bunda 4 varian (Travel Bag, Box &amp; Koper) lengkap sembako &amp; THR.
+                Paket Bunda (Travel Bag, Box &amp; Koper), Paket Anak, Diamond &amp; Sultan, serta 50 Barang Satuan.
               </p>
             </div>
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
               <ArrowRight className="h-4 w-4" />
             </span>
           </button>
 
           <button
             type="button"
-            onClick={() => openCategoryCatalog('pilihan')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-3.5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
+            onClick={() => openMainCategory('tabungan_uang')}
+            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
           >
             <img
-              src={IMG_SULTAN}
-              alt="Paket Eksklusif"
-              className="h-24 w-28 shrink-0 rounded-xl object-cover"
+              src={IMG_UANG_DAGING}
+              alt="Tabungan Uang"
+              className="h-20 w-24 shrink-0 rounded-xl object-cover sm:h-24 sm:w-28"
+              referrerPolicy="no-referrer"
             />
-            <div className="flex-1">
-              <h2 className="font-display text-lg font-bold text-[#381E5A]">Paket Eksklusif</h2>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-lg font-bold text-[#381E5A] sm:text-xl">
+                Tabungan Uang
+              </h2>
               <p className="mt-1 text-xs leading-relaxed text-stone-600">
-                Paket Diamond &amp; Sultan berhadiah THR hingga Rp 2.000.000 + Door Prize.
+                Tabungan Uang Munggahan (295 Hari / 42 Minggu) &amp; Lebaran (325 Hari / 45 Minggu) harian atau mingguan.
               </p>
             </div>
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
-              <ArrowRight className="h-4 w-4" />
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => openCategoryCatalog('anak')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-3.5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
-          >
-            <img
-              src={IMG_ANAK}
-              alt="Paket Hemat"
-              className="h-24 w-28 shrink-0 rounded-xl object-cover"
-            />
-            <div className="flex-1">
-              <h2 className="font-display text-lg font-bold text-[#381E5A]">Paket Hemat</h2>
-              <p className="mt-1 text-xs leading-relaxed text-stone-600">
-                Paket Anak mulai Rp 1.500/hari &amp; 50 Barang Satuan mulai Rp 100/hari.
-              </p>
-            </div>
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
               <ArrowRight className="h-4 w-4" />
             </span>
           </button>
         </div>
 
-        {/* 3-Column Bento Grid */}
-        <div className="mt-6 grid gap-5 lg:grid-cols-12">
-          {/* Card 1: Program Tabungan Lebaran */}
-          <div className="bg-arabesque-emerald flex flex-col justify-between rounded-2xl border border-[#C8A053]/40 p-6 text-white lg:col-span-5">
-            <div className="flex items-start gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
-                <Gift className="h-5 w-5" />
+        {/* Simple 3-Step Guide Strip inline on Beranda */}
+        <div className="mt-6 bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-5 text-white sm:p-6">
+          <div className="grid gap-5 md:grid-cols-3">
+            <div className="flex items-start gap-3.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
+                <ShoppingBag className="h-4 w-4" />
               </span>
               <div>
-                <h3 className="font-display text-xl font-bold text-white">
-                  Program Tabungan Lebaran
-                </h3>
-                <p className="mt-1 text-xs leading-relaxed text-stone-200">
-                  Rencanakan Lebaran lebih tenang dengan menabung secara bertahap harian atau mingguan.
+                <p className="text-xs font-bold text-[#E8CA82]">1. Pilih Paket / Tabungan</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-stone-200">
+                  Pilih kategori Paket Lebaran atau Tabungan Uang sesuai kebutuhan keluarga.
                 </p>
               </div>
             </div>
-
-            <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/15 pt-4 text-[11px]">
-              <div className="flex items-start gap-1.5">
-                <Calendar className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#E8CA82]" />
-                <span>Ringan 325 hari</span>
-              </div>
-              <div className="flex items-start gap-1.5">
-                <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#E8CA82]" />
-                <span>Fleksibel Harian/Minggu</span>
-              </div>
-              <div className="flex items-start gap-1.5">
-                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#E8CA82]" />
-                <span>Siap 15 Ramadhan</span>
+            <div className="flex items-start gap-3.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
+                <UserPlus className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-[#E8CA82]">2. Daftar Member / Agen</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-stone-200">
+                  Klik Gabung Member untuk menabung atau Gabung Agen untuk menjadi mitra resmi.
+                </p>
               </div>
             </div>
+            <div className="flex items-start gap-3.5">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
+                <QrCode className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="text-xs font-bold text-[#E8CA82]">3. Setor &amp; Ambil Pakai QR</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-stone-200">
+                  Pantau saldo real-time di dashboard hingga terbit Tiket QR pengambilan paket.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-            <div className="mt-4">
+      {/* Program Reseller & Mitra Agen Resmi */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid items-center gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <div className="overflow-hidden rounded-2xl border border-[#E4DCCB]">
+              <img
+                src={IMG_RESELLER}
+                alt="Program Reseller & Mitra Agen Sagitarius Parcel"
+                className="aspect-[16/10] w-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+          <div className="space-y-4 lg:col-span-7">
+            <p className="text-xs font-semibold text-[#C8A053]">
+              Kemitraan Priangan Timur · Tanpa Modal Stok Barang
+            </p>
+            <h2 className="font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
+              {RESELLER_PROGRAM.headline}
+            </h2>
+            <p className="text-xs leading-relaxed text-stone-600 sm:text-sm">
+              {RESELLER_PROGRAM.subheadline}
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {RESELLER_PROGRAM.tiers.map((tier) => (
+                <div
+                  key={tier.label}
+                  className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5"
+                >
+                  <p className="text-xs font-bold text-[#381E5A]">{tier.label}</p>
+                  <p className="mt-1 font-mono-nums text-xl font-bold text-[#0C3328]">
+                    Komisi {tier.komisi}
+                  </p>
+                  <p className="text-[11px] font-medium text-[#B98E3A]">{tier.syarat}</p>
+                  <p className="mt-1 text-[11px] leading-snug text-stone-600">{tier.detail}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => onNavigate('tabungan')}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#E8CA82] hover:underline cursor-pointer"
+                onClick={() => onOpenAuth('register_agent')}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
               >
-                <span>Buka Kalkulator &amp; Info Program</span>
+                <UserCheck className="h-4 w-4" />
+                <span>Gabung Agen Sekarang</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenAuth('register_member')}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+              >
+                <UserPlus className="h-4 w-4 text-[#0C3328]" />
+                <span>Gabung Member</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('tentang')}
+                className="inline-flex min-h-[44px] items-center gap-1.5 px-2 text-xs font-semibold text-[#381E5A] underline hover:text-[#C8A053] cursor-pointer"
+              >
+                <span>Lihat Direktori Agen</span>
                 <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Card 2: Cara Pemesanan */}
-          <div className="flex flex-col justify-between rounded-2xl border border-[#E4DCCB] bg-white p-6 lg:col-span-4">
-            <div>
-              <h3 className="text-center font-display text-xl font-bold text-[#381E5A]">
-                Cara Pemesanan
-              </h3>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => openCategoryCatalog('all')}
-                  className="flex flex-col items-center cursor-pointer"
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                    <ShoppingBag className="h-4 w-4" />
-                  </span>
-                  <span className="-mt-2 rounded-full bg-[#C8A053] px-1.5 font-mono-nums text-[10px] font-bold text-white">
-                    1
-                  </span>
-                  <p className="mt-1.5 text-xs font-bold text-[#381E5A]">Pilih Paket</p>
-                  <p className="mt-0.5 text-[10px] text-stone-500">Sesuaikan kebutuhan</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onNavigate('cara_pesan')}
-                  className="flex flex-col items-center cursor-pointer"
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                    <MessageCircle className="h-4 w-4" />
-                  </span>
-                  <span className="-mt-2 rounded-full bg-[#C8A053] px-1.5 font-mono-nums text-[10px] font-bold text-white">
-                    2
-                  </span>
-                  <p className="mt-1.5 text-xs font-bold text-[#381E5A]">Konfirmasi</p>
-                  <p className="mt-0.5 text-[10px] text-stone-500">Daftar via Agen/CS</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onNavigate('cara_pesan')}
-                  className="flex flex-col items-center cursor-pointer"
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0C3328] text-[#E8CA82]">
-                    <Truck className="h-4 w-4" />
-                  </span>
-                  <span className="-mt-2 rounded-full bg-[#C8A053] px-1.5 font-mono-nums text-[10px] font-bold text-white">
-                    3
-                  </span>
-                  <p className="mt-1.5 text-xs font-bold text-[#381E5A]">Pengiriman</p>
-                  <p className="mt-0.5 text-[10px] text-stone-500">Ambil dengan QR</p>
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => onNavigate('cara_pesan')}
-                className="text-xs font-semibold text-[#381E5A] underline hover:text-[#C8A053] cursor-pointer"
-              >
-                Lihat Panduan 5 Langkah Lengkap
-              </button>
-            </div>
-          </div>
-
-          {/* Card 3: Siap berbagi kebahagiaan? */}
-          <div className="bg-arabesque-emerald flex flex-col justify-between rounded-2xl border border-[#C8A053]/40 p-6 text-white lg:col-span-3">
-            <div>
-              <h3 className="font-display text-xl font-bold text-white">
-                Siap berbagi kebahagiaan?
-              </h3>
-              <p className="mt-2 text-xs leading-relaxed text-stone-200">
-                Hubungi kami untuk konsultasi dan pemesanan paket Lebaran Priangan Timur.
-              </p>
-            </div>
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => onNavigate('kontak')}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-2.5 text-xs font-bold text-[#1D122B] transition hover:brightness-105 cursor-pointer"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span>Hubungi Kami</span>
               </button>
             </div>
           </div>
@@ -1484,10 +1771,10 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => openCategoryCatalog('all')}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#381E5A] hover:text-[#C8A053] cursor-pointer"
+            onClick={() => openMainCategory('paket_lebaran')}
+            className="inline-flex min-h-[38px] items-center gap-1.5 text-xs font-bold text-[#381E5A] hover:text-[#C8A053] cursor-pointer"
           >
-            <span>Lihat Semua {packages.length} Paket &amp; Satuan</span>
+            <span>Lihat Semua Paket Lebaran</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
@@ -1505,12 +1792,13 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                     src={pkg.foto_url}
                     alt={pkg.nama_paket}
                     className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
                   />
                   <button
                     type="button"
                     onClick={() => onToggleWishlist(pkg.id)}
                     aria-label={`Simpan ${pkg.nama_paket}`}
-                    className="absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 shadow cursor-pointer"
+                    className="absolute top-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow cursor-pointer"
                   >
                     <Heart
                       className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
@@ -1531,9 +1819,8 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                     </p>
                   </div>
                   <div className="mt-3 flex items-center justify-between border-t border-[#F0EAE0] pt-3">
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-stone-600">
-                      <span className="h-2 w-2 rounded-full bg-[#16A34A]" />
-                      Tersedia
+                    <span className="text-[11px] font-medium text-[#0C3328]">
+                      {pkg.durasi_hari} Hari
                     </span>
                     <button
                       type="button"
@@ -1541,7 +1828,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                         onOpenDetail(pkg);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#241142] px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#381E5A] cursor-pointer"
+                      className="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#241142] px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#381E5A] cursor-pointer"
                     >
                       <span>Lihat Detail</span>
                       <ChevronRight className="h-3 w-3" />

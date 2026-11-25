@@ -2,9 +2,14 @@ import { AgentDirectoryItem, ParcelPackage } from '../types';
 
 export const IMG_HERO = '/src/assets/images/hero_lebaran_parcel_1795079090213.jpg';
 export const IMG_BUNDA = '/src/assets/images/paket_bunda_sembako_1795079090089.jpg';
+export const IMG_BUNDA_BOX = '/src/assets/images/paket_bunda_box_silver_gold_1795598009338.jpg';
+export const IMG_BUNDA_KOPER = '/src/assets/images/paket_bunda_koper_platinum_1795598010326.jpg';
 export const IMG_ANAK = '/src/assets/images/paket_anak_lebaran_1795079090980.jpg';
+export const IMG_ANAK_KOPER = '/src/assets/images/paket_anak_koper_ceria_1795598010163.jpg';
+export const IMG_DIAMOND_MUKENA = '/src/assets/images/paket_diamond_mukena_1795598011067.jpg';
 export const IMG_SULTAN = '/src/assets/images/paket_sultan_diamond_1795079089961.jpg';
 export const IMG_UANG_DAGING = '/src/assets/images/paket_uang_daging_1795079090348.jpg';
+export const IMG_RESELLER = '/src/assets/images/reseller_mitra_agen_1795598011859.jpg';
 
 // Official Sagitarius Parcel Assets uploaded by user
 export const LOGO_SAGITARIUS = '/assets/aistudio/file_00000000ca58820ba2ac5348f000d329_d1d25037.png';
@@ -14,6 +19,37 @@ export const BROCHURE_ANAK = '/assets/aistudio/Screenshot_20261022_113924_ef1753
 export const BROCHURE_PILIHAN = '/assets/aistudio/Screenshot_20261022_113934_78453c2e.jpg';
 export const BROCHURE_UANG = '/assets/aistudio/Screenshot_20261022_113906_7abaaaea.jpg';
 export const BROCHURE_SATUAN = '/assets/aistudio/Screenshot_20261022_113857_3eccd7c1.jpg';
+
+export const RESELLER_PROGRAM = {
+  headline: 'Program Reseller & Mitra Agen Resmi Sagitarius Parcel',
+  subheadline:
+    'Buka peluang penghasilan jelang Ramadhan & Idul Fitri bersama PT. Sagitarius Trinunggal Karya di wilayah Priangan Timur.',
+  tiers: [
+    {
+      label: 'Agen Pemula',
+      syarat: '< 10 Member Aktif',
+      komisi: '4%',
+      detail: 'Tautan referral pribadi & pencatatan setoran digital.',
+    },
+    {
+      label: 'Agen Aktif',
+      syarat: '10 – 24 Member Aktif',
+      komisi: '5,5%',
+      detail: 'Bonus kenaikan tier & prioritas alokasi paket wilayah.',
+    },
+    {
+      label: 'Agen Prioritas',
+      syarat: '≥ 25 Member Aktif',
+      komisi: '7%',
+      detail: 'Komisi maksimal + dukungan penuh Korwil & Pusat.',
+    },
+  ],
+  benefits: [
+    'Tanpa stok barang di rumah — cukup kelola pendaftaran dan setoran member via aplikasi.',
+    'Tautan undangan member otomatis (kode agen terhubung langsung saat member mendaftar).',
+    'Laporan komisi, kwitansi digital, dan pengajuan pencairan transparan langsung di Dashboard.',
+  ],
+};
 
 export const COMPANY_INFO = {
   legalName: 'PT. SAGITARIUS TRINUNGGAL KARYA',
@@ -217,7 +253,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Kapal Api 10x6g & Good Day Mocacino 10pcs',
     ],
     bonus_thr: 350000,
-    foto_url: IMG_BUNDA,
+    foto_url: IMG_BUNDA_BOX,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 3.000/hari selama 325 hari · Container Box & THR Rp 350.000.',
   },
@@ -249,7 +285,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       "Fox's Kaleng 170g",
     ],
     bonus_thr: 600000,
-    foto_url: IMG_HERO,
+    foto_url: IMG_BUNDA_BOX,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 4.000/hari selama 325 hari · Khong Guan 1600g & THR Rp 600.000.',
   },
@@ -280,7 +316,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Marjan Syrup 460ml',
     ],
     bonus_thr: 800000,
-    foto_url: IMG_HERO,
+    foto_url: IMG_BUNDA_KOPER,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 5.000/hari selama 325 hari · Koper Dewasa & THR Rp 800.000.',
   },
@@ -366,7 +402,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Kental Manis 545g',
     ],
     bonus_thr: 600000,
-    foto_url: IMG_ANAK,
+    foto_url: IMG_ANAK_KOPER,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 4.000/hari selama 325 hari · Koper Karakter & THR Rp 600.000.',
   },
@@ -393,7 +429,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Koko Krunch Box 150g',
     ],
     bonus_thr: 900000,
-    foto_url: IMG_ANAK,
+    foto_url: IMG_ANAK_KOPER,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 5.000/hari selama 325 hari · Koper Dewasa & THR Rp 900.000.',
   },
@@ -422,7 +458,7 @@ export const CORE_PACKAGES: ParcelPackage[] = [
       'Indomie Mi Goreng 10pcs & Indomie AB 69g 10pcs',
     ],
     bonus_thr: 1000000,
-    foto_url: IMG_SULTAN,
+    foto_url: IMG_DIAMOND_MUKENA,
     jadwal_ambil: 'Selambatnya 15 Ramadhan',
     deskripsi_singkat: 'Cicilan Rp 7.000/hari · Mukena Silky, Container Box & THR Rp 1.000.000.',
   },
@@ -611,7 +647,7 @@ export const SATUAN_PACKAGES: ParcelPackage[] = RAW_SATUAN_50.map((item) => {
       ? IMG_UANG_DAGING
       : item.sub === 'Kue & Minuman'
         ? IMG_HERO
-        : IMG_BUNDA;
+        : IMG_BUNDA_BOX;
 
   return {
     id: `satuan_${String(item.no).padStart(2, '0')}`,
@@ -632,6 +668,23 @@ export const SATUAN_PACKAGES: ParcelPackage[] = RAW_SATUAN_50.map((item) => {
 });
 
 export const DEFAULT_PACKAGES: ParcelPackage[] = [...CORE_PACKAGES, ...SATUAN_PACKAGES];
+
+const LEGACY_DEFAULT_PHOTOS = new Set([
+  IMG_HERO,
+  IMG_BUNDA,
+  IMG_ANAK,
+  IMG_SULTAN,
+  IMG_UANG_DAGING,
+]);
+
+export function resolvePackagePhoto(pkg: ParcelPackage): ParcelPackage {
+  const defaultMatch = DEFAULT_PACKAGES.find((d) => d.id === pkg.id);
+  if (!defaultMatch) return pkg;
+  if (!pkg.foto_url || LEGACY_DEFAULT_PHOTOS.has(pkg.foto_url)) {
+    return { ...pkg, foto_url: defaultMatch.foto_url };
+  }
+  return pkg;
+}
 
 // Direktori Agen Resmi Priangan Timur (plus Pusat Mangunreja Tasikmalaya)
 export const DEFAULT_AGENTS: AgentDirectoryItem[] = [
