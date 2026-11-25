@@ -3,6 +3,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
+  BookOpen,
   Boxes,
   Building2,
   Check,
@@ -12,14 +13,17 @@ import {
   Copy,
   Download,
   Edit3,
+  Eye,
   FileImage,
   FileSpreadsheet,
   Gift,
   Layers,
+  LifeBuoy,
   Link2,
   Megaphone,
   MessageCircle,
   Package as PackageIcon,
+  Phone,
   Plus,
   Printer,
   QrCode,
@@ -56,6 +60,7 @@ import {
   DEFAULT_AGENTS,
   DEFAULT_PACKAGES,
   IMG_BUNDA,
+  RESELLER_PROGRAM,
   formatRupiah,
   formatWhatsAppUrl,
 } from '../data/catalogData';
@@ -86,6 +91,8 @@ import {
 import { AdminAnalyticsTab } from './AdminAnalyticsTab';
 import { QrCameraScanner } from './QrCameraScanner';
 import { ReceiptGeneratorModal } from './ReceiptGeneratorModal';
+import { ResellerCatalogToolsTab } from './ResellerCatalogToolsTab';
+import { ResellerHelpTab } from './ResellerHelpTab';
 
 interface AgentKorwilAdminDashboardProps {
   userProfile: UserProfile | null;
@@ -118,6 +125,8 @@ const DELIVERY_STAGE_OPTIONS: Array<{ value: DeliveryStage; label: string }> = [
 type AdminTab =
   | 'agen'
   | 'kontrak'
+  | 'katalog'
+  | 'bantuan'
   | 'master'
   | 'korwil'
   | 'gudang'
@@ -230,20 +239,52 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   onNeedLogin,
   onOpenAgentRegister,
 }) => {
-  const [activeTab, setActiveTab] = useState<AdminTab>('agen');
+  const [activeTab, setActiveTab] = useState<AdminTab>(
+    userProfile?.role === 'agen' ? 'kontrak' : 'agen'
+  );
+  const [kontrakSubTab, setKontrakSubTab] = useState<'members' | 'contracts' | 'pengiriman'>(
+    userProfile?.role === 'agen' ? 'members' : 'contracts'
+  );
   const [txSubTab, setTxSubTab] = useState<'input' | 'harian' | 'riwayat'>('input');
+  const [txHistoryStatusFilter, setTxHistoryStatusFilter] = useState<
+    'all' | 'verified' | 'pending' | 'rejected'
+  >(userProfile?.role === 'agen' ? 'all' : 'verified');
   const [korwilSubTab, setKorwilSubTab] = useState<'tutup_kas' | 'wilayah' | 'referral'>('tutup_kas');
+  const [settlementTypeFilter, setSettlementTypeFilter] = useState<'all' | AgentSettlementType>('all');
   const [gudangSubTab, setGudangSubTab] = useState<'kebutuhan' | 'manifest' | 'stok'>('kebutuhan');
   const [confirmDeleteMsgId, setConfirmDeleteMsgId] = useState<string | null>(null);
   const [appKodeDraft, setAppKodeDraft] = useState<Record<string, string>>({});
   const [processingAppId, setProcessingAppId] = useState<string | null>(null);
+  const [selectedDetailMemberKey, setSelectedDetailMemberKey] = useState<string | null>(null);
+  const [detailTxStatusFilter, setDetailTxStatusFilter] = useState<
+    'all' | 'verified' | 'pending' | 'rejected'
+  >('all');
   const cashFormRef = useRef<HTMLFormElement | null>(null);
+  const initializedRoleRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const role = userProfile?.role || null;
+    if (!role || initializedRoleRef.current === role) return;
+    initializedRoleRef.current = role;
+    if (role === 'agen') {
+      setActiveTab('kontrak');
+      setKontrakSubTab('members');
+      setTxHistoryStatusFilter('all');
+      if (korwilSubTab === 'wilayah') {
+        setKorwilSubTab('tutup_kas');
+      }
+    }
+  }, [userProfile?.role, korwilSubTab]);
 
   useEffect(() => {
     if (!externalTabRequest) return;
+    const normalizedTab =
+      externalTabRequest.tab === 'komisi' ? 'korwil' : externalTabRequest.tab;
     const validTabs: AdminTab[] = [
       'agen',
       'kontrak',
+      'katalog',
+      'bantuan',
       'master',
       'korwil',
       'gudang',
@@ -253,15 +294,29 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       'users',
       'pesan',
     ];
-    if (validTabs.includes(externalTabRequest.tab as AdminTab)) {
-      setActiveTab(externalTabRequest.tab as AdminTab);
+    if (validTabs.includes(normalizedTab as AdminTab)) {
+      if (
+        userProfile?.role === 'agen' &&
+        !['agen', 'kontrak', 'korwil', 'katalog', 'bantuan'].includes(normalizedTab)
+      ) {
+        setActiveTab('kontrak');
+      } else {
+        setActiveTab(normalizedTab as AdminTab);
+      }
     }
-  }, [externalTabRequest]);
+  }, [externalTabRequest, userProfile?.role]);
 
   // Tab 1: Transaksi (Setoran & Penarikan) & Verifikasi & Checklist Jemput Bola
   const [selectedSubId, setSelectedSubId] = useState<string>(subscriptions[0]?.id || '');
   const [cashTxType, setCashTxType] = useState<TransactionType>('setoran');
-  const [checklistFilter, setChecklistFilter] = useState<'all' | 'overdue' | 'near_lunas'>('all');
+  const [checklistFilter, setChecklistFilter] = useState<
+    'all' | 'due_today' | 'overdue' | 'near_lunas'
+  >('all');
+  const [showBatchPanel, setShowBatchPanel] = useState(false);
+  const [batchSelectedIds, setBatchSelectedIds] = useState<Record<string, boolean>>({});
+  const [batchNominals, setBatchNominals] = useState<Record<string, string>>({});
+  const [batchNote, setBatchNote] = useState('Setoran Kolektif Harian');
+  const [submittingBatch, setSubmittingBatch] = useState(false);
   const [withdrawMethod, setWithdrawMethod] = useState<'pencairan_tunai' | 'transfer_keluar'>(
     'pencairan_tunai'
   );
@@ -413,6 +468,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   } | null>(null);
 
   const isAdmin = userProfile?.role === 'admin';
+  const isAgen = userProfile?.role === 'agen';
   const isStaff =
     userProfile &&
     (userProfile.role === 'agen' ||
@@ -482,29 +538,348 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     );
   }, [deposits, managedSubscriptions, isAdmin]);
 
-  // Verified Audit Ledger
+  // Verified / Status-Filtered Audit Ledger
   const verifiedTransactions = useMemo(() => {
     const subIds = new Set(managedSubscriptions.map((s) => s.id));
     const q = auditSearch.trim().toLowerCase();
-    return deposits.filter((d) => {
-      if (d.status_verifikasi !== 'verified') return false;
-      if (!isAdmin && !subIds.has(d.subscription_id)) return false;
-      const jenis = getTxType(d);
-      if (auditTypeFilter !== 'all' && jenis !== auditTypeFilter) return false;
-      if (auditWilayahFilter !== 'all' && d.wilayah !== auditWilayahFilter) return false;
+    return deposits
+      .filter((d) => {
+        if (txHistoryStatusFilter !== 'all' && d.status_verifikasi !== txHistoryStatusFilter) {
+          return false;
+        }
+        if (!isAdmin && !subIds.has(d.subscription_id)) return false;
+        const jenis = getTxType(d);
+        if (auditTypeFilter !== 'all' && jenis !== auditTypeFilter) return false;
+        if (auditWilayahFilter !== 'all' && d.wilayah !== auditWilayahFilter) return false;
+        if (!q) return true;
+        const hay = [
+          d.member_nama || '',
+          d.catatan || '',
+          d.validated_by || '',
+          d.tanggal,
+          getMethodLabel(d),
+        ]
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
+      })
+      .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  }, [
+    deposits,
+    managedSubscriptions,
+    isAdmin,
+    txHistoryStatusFilter,
+    auditSearch,
+    auditTypeFilter,
+    auditWilayahFilter,
+  ]);
+
+  // Recruited Members Directory (unified online accounts + offline contracts + per-member deposits)
+  const recruitedMemberProfiles = useMemo(() => {
+    type MemberGroup = {
+      memberKey: string;
+      nama: string;
+      no_wa: string;
+      username: string;
+      email: string;
+      wilayah: WilayahPriangan;
+      isRegisteredAccount: boolean;
+      subscriptions: Subscription[];
+      deposits: Deposit[];
+      totalTerkumpul: number;
+      totalTarget: number;
+      totalPendingCount: number;
+      verifiedTxCount: number;
+      lastTxDate: string;
+      agenLabel: string;
+    };
+
+    const userMap = new Map<string, UserProfile>();
+    allUsers
+      .filter((u) => u.role === 'member')
+      .forEach((u) => {
+        userMap.set(u.uid, u);
+      });
+
+    const groups = new Map<string, MemberGroup>();
+
+    const extractPhoneFromLabel = (label: string): string => {
+      const m = label.match(/\((08\d{6,14}|62\d{7,15}|\+62\d{7,15})\)/);
+      return m ? m[1] : '';
+    };
+
+    const stripPhoneFromLabel = (label: string): string =>
+      label.replace(/\s*\((08\d{6,14}|62\d{7,15}|\+62\d{7,15})\)\s*$/, '').trim();
+
+    userMap.forEach((u) => {
+      groups.set(u.uid, {
+        memberKey: u.uid,
+        nama: u.nama,
+        no_wa: u.no_wa || '',
+        username: u.username || '',
+        email: u.email || '',
+        wilayah: u.wilayah,
+        isRegisteredAccount: true,
+        subscriptions: [],
+        deposits: [],
+        totalTerkumpul: 0,
+        totalTarget: 0,
+        totalPendingCount: 0,
+        verifiedTxCount: 0,
+        lastTxDate: '',
+        agenLabel: u.kode_agen || userProfile?.kode_agen || '-',
+      });
+    });
+
+    managedSubscriptions.forEach((sub) => {
+      const key = sub.member_id || sub.id;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.subscriptions.push(sub);
+        existing.totalTerkumpul += sub.total_terkumpul || 0;
+        existing.totalTarget += sub.target_nominal || 0;
+        if (!existing.no_wa) {
+          existing.no_wa = extractPhoneFromLabel(sub.member_nama);
+        }
+      } else {
+        groups.set(key, {
+          memberKey: key,
+          nama: stripPhoneFromLabel(sub.member_nama) || sub.member_nama,
+          no_wa: extractPhoneFromLabel(sub.member_nama),
+          username: '',
+          email: '',
+          wilayah: sub.wilayah,
+          isRegisteredAccount: userMap.has(sub.member_id),
+          subscriptions: [sub],
+          deposits: [],
+          totalTerkumpul: sub.total_terkumpul || 0,
+          totalTarget: sub.target_nominal || 0,
+          totalPendingCount: 0,
+          verifiedTxCount: 0,
+          lastTxDate: '',
+          agenLabel: sub.agen_nama || sub.agen_kode || '-',
+        });
+      }
+    });
+
+    const subToMemberKey = new Map<string, string>();
+    groups.forEach((grp, key) => {
+      grp.subscriptions.forEach((s) => subToMemberKey.set(s.id, key));
+    });
+
+    deposits.forEach((dep) => {
+      const key = groups.has(dep.member_id)
+        ? dep.member_id
+        : subToMemberKey.get(dep.subscription_id);
+      if (!key) return;
+      const grp = groups.get(key);
+      if (!grp) return;
+      grp.deposits.push(dep);
+      if (dep.status_verifikasi === 'pending') grp.totalPendingCount += 1;
+      if (dep.status_verifikasi === 'verified') grp.verifiedTxCount += 1;
+      if (!grp.lastTxDate || dep.tanggal > grp.lastTxDate) {
+        grp.lastTxDate = dep.tanggal;
+      }
+    });
+
+    groups.forEach((grp) => {
+      grp.deposits.sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+    });
+
+    return Array.from(groups.values()).sort(
+      (a, b) =>
+        b.totalPendingCount - a.totalPendingCount ||
+        b.totalTerkumpul - a.totalTerkumpul ||
+        a.nama.localeCompare(b.nama)
+    );
+  }, [allUsers, managedSubscriptions, deposits, userProfile?.kode_agen]);
+
+  const filteredMemberProfiles = useMemo(() => {
+    const q = contractSearch.trim().toLowerCase();
+    return recruitedMemberProfiles.filter((m) => {
+      if (contractWilayahFilter !== 'all' && m.wilayah !== contractWilayahFilter) return false;
+      if (contractStatusFilter !== 'all') {
+        const hasStatus = m.subscriptions.some((s) => s.status === contractStatusFilter);
+        if (!hasStatus) return false;
+      }
+      if (contractGroupFilter !== 'all') {
+        const hasGroup = m.subscriptions.some(
+          (s) => (s.grup_arisan || '').trim() === contractGroupFilter
+        );
+        if (!hasGroup) return false;
+      }
       if (!q) return true;
       const hay = [
-        d.member_nama || '',
-        d.catatan || '',
-        d.validated_by || '',
-        d.tanggal,
-        getMethodLabel(d),
+        m.nama,
+        m.no_wa,
+        m.username,
+        m.email,
+        m.wilayah,
+        ...m.subscriptions.map((s) => `${s.package_nama} ${s.qr_code_token} ${s.grup_arisan || ''}`),
       ]
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [deposits, managedSubscriptions, isAdmin, auditSearch, auditTypeFilter, auditWilayahFilter]);
+  }, [
+    recruitedMemberProfiles,
+    contractSearch,
+    contractStatusFilter,
+    contractWilayahFilter,
+    contractGroupFilter,
+  ]);
+
+  const selectedDetailMember = useMemo(
+    () =>
+      selectedDetailMemberKey
+        ? recruitedMemberProfiles.find((m) => m.memberKey === selectedDetailMemberKey) || null
+        : null,
+    [recruitedMemberProfiles, selectedDetailMemberKey]
+  );
+
+  // Logged-in Reseller / Agent Commission, Cash Reconciliation & Eligibility Breakdown
+  const myResellerCommissionStats = useMemo(() => {
+    const anakCount = managedSubscriptions.filter((s) => s.kategori === 'anak').length;
+    const bundaCount = managedSubscriptions.filter((s) => s.kategori === 'bunda').length;
+    const pilihanCount = managedSubscriptions.filter((s) => s.kategori === 'pilihan').length;
+    const lainnyaSubs = managedSubscriptions.filter(
+      (s) => s.kategori !== 'anak' && s.kategori !== 'bunda' && s.kategori !== 'pilihan'
+    );
+    const lainnyaCollected = lainnyaSubs.reduce((sum, s) => sum + (s.total_terkumpul || 0), 0);
+
+    const komisiAnak = anakCount * 50000;
+    const komisiBunda = bundaCount * 60000;
+    const komisiPilihan = pilihanCount * 75000;
+    const komisiLainnya = Math.round(lainnyaCollected * 0.04);
+    const estimasiKomisiPaket = komisiAnak + komisiBunda + komisiPilihan + komisiLainnya;
+
+    const totalPaketReseller = anakCount + bundaCount + pilihanCount;
+    const activeConsumersCount = recruitedMemberProfiles.filter(
+      (m) => m.subscriptions.length > 0 || m.totalTerkumpul > 0
+    ).length;
+    const nextBonusTarget =
+      totalPaketReseller >= 200
+        ? 200
+        : totalPaketReseller >= 100
+          ? 200
+          : totalPaketReseller >= 50
+            ? 100
+            : totalPaketReseller >= 20
+              ? 50
+              : 20;
+
+    let totalSetorPusatVerified = 0;
+    let totalSetorPusatPending = 0;
+    let totalKomisiCairVerified = 0;
+    let totalKomisiCairPending = 0;
+
+    agentSettlements.forEach((st) => {
+      if (st.jenis === 'setor_tunai_pusat') {
+        if (st.status === 'verified') totalSetorPusatVerified += st.nominal || 0;
+        if (st.status === 'pending') totalSetorPusatPending += st.nominal || 0;
+      } else {
+        if (st.status === 'verified') totalKomisiCairVerified += st.nominal || 0;
+        if (st.status === 'pending') totalKomisiCairPending += st.nominal || 0;
+      }
+    });
+
+    const subIds = new Set(managedSubscriptions.map((s) => s.id));
+    let totalTunaiMemberDiterima = 0;
+    let totalPencairanTunaiAgen = 0;
+    deposits.forEach((d) => {
+      if (d.status_verifikasi !== 'verified') return;
+      if (!isAdmin && !subIds.has(d.subscription_id)) return;
+      const jenis = getTxType(d);
+      if (jenis === 'setoran' && d.metode === 'tunai_agen') {
+        totalTunaiMemberDiterima += d.nominal || 0;
+      } else if (jenis === 'penarikan' && d.metode === 'pencairan_tunai') {
+        totalPencairanTunaiAgen += d.nominal || 0;
+      }
+    });
+
+    const sisaKasKotorSebelumPending = Math.max(
+      0,
+      totalTunaiMemberDiterima - totalPencairanTunaiAgen - totalSetorPusatVerified
+    );
+    const sisaKasBelumDisetor = Math.max(
+      0,
+      sisaKasKotorSebelumPending - totalSetorPusatPending
+    );
+
+    const barangPaketCount = managedSubscriptions.filter(
+      (s) => s.kategori !== 'uang' && s.status !== 'diambil'
+    ).length;
+
+    const daysProgressRows = managedSubscriptions.map((s) => {
+      const pkgDurasi = packages.find((p) => p.id === s.package_id)?.durasi_hari || 325;
+      const hariTerbayar = Math.min(
+        pkgDurasi,
+        Math.round(((s.total_terkumpul || 0) / Math.max(1, s.target_nominal)) * pkgDurasi)
+      );
+      const lolos150Hari = hariTerbayar >= 150;
+      const eligibleDoorprize = (s.total_terkumpul || 0) > 0 && s.status !== 'diambil';
+      const waMatch = s.member_nama.match(/\((08\d{6,14}|62\d{7,15}|\+62\d{7,15})\)/);
+      const matchedUser = allUsers.find((u) => u.uid === s.member_id);
+      return {
+        sub: s,
+        pkgDurasi,
+        hariTerbayar,
+        lolos150Hari,
+        eligibleDoorprize,
+        kuponKode: getCouponCode(s),
+        memberWa: matchedUser?.no_wa || (waMatch ? waMatch[1] : ''),
+      };
+    });
+
+    const lolos150Count = daysProgressRows.filter((r) => r.lolos150Hari).length;
+    const belum150Count = daysProgressRows.length - lolos150Count;
+    const eligibleDoorprizeCount = daysProgressRows.filter((r) => r.eligibleDoorprize).length;
+
+    return {
+      anakCount,
+      bundaCount,
+      pilihanCount,
+      lainnyaCount: lainnyaSubs.length,
+      komisiAnak,
+      komisiBunda,
+      komisiPilihan,
+      komisiLainnya,
+      estimasiKomisiPaket,
+      totalPaketReseller,
+      activeConsumersCount,
+      meetsMin5Consumers: activeConsumersCount >= 5,
+      meets200AgenResmi: activeConsumersCount >= 200,
+      barangPaketCount,
+      meetsMin10BarangPaket: barangPaketCount >= 10,
+      lolos150Count,
+      belum150Count,
+      eligibleDoorprizeCount,
+      daysProgressRows,
+      nextBonusTarget,
+      totalSetorPusatVerified,
+      totalSetorPusatPending,
+      totalKomisiCairVerified,
+      totalKomisiCairPending,
+      totalTunaiMemberDiterima,
+      totalPencairanTunaiAgen,
+      sisaKasKotorSebelumPending,
+      sisaKasBelumDisetor,
+    };
+  }, [
+    managedSubscriptions,
+    recruitedMemberProfiles,
+    agentSettlements,
+    deposits,
+    isAdmin,
+    packages,
+    allUsers,
+  ]);
+
+  const filteredSettlements = useMemo(() => {
+    return agentSettlements.filter((st) =>
+      settlementTypeFilter === 'all' ? true : st.jenis === settlementTypeFilter
+    );
+  }, [agentSettlements, settlementTypeFilter]);
 
   // Calculate Agent Commission up to 7%
   const agentCommissionSummary = useMemo(() => {
@@ -538,10 +913,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       0
     );
     const pendingTotal = pendingDeposits.reduce((sum, d) => sum + (d.nominal || 0), 0);
-    const totalCommission = agentCommissionSummary.reduce(
-      (sum, a) => sum + a.commissionEarned,
-      0
-    );
+    const totalCommission = isAgen
+      ? myResellerCommissionStats.estimasiKomisiPaket
+      : agentCommissionSummary.reduce((sum, a) => sum + a.commissionEarned, 0);
     const lunasCount = managedSubscriptions.filter((s) => s.status === 'lunas').length;
     const diambilCount = managedSubscriptions.filter((s) => s.status === 'diambil').length;
     const avgProgress =
@@ -557,7 +931,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       lunasCount,
       diambilCount,
     };
-  }, [managedSubscriptions, pendingDeposits, agentCommissionSummary]);
+  }, [
+    managedSubscriptions,
+    pendingDeposits,
+    isAgen,
+    myResellerCommissionStats.estimasiKomisiPaket,
+    agentCommissionSummary,
+  ]);
 
   // Korwil Regional Recapitulation (5 Wilayah Priangan Timur)
   const korwilRecap = useMemo(() => {
@@ -794,7 +1174,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     };
   }, [allUsers]);
 
-  // Checklist Jemput Bola Member Binaan
+  // Checklist Jemput Bola & Tagihan Hari Ini Member Binaan
   const checklistItems = useMemo(() => {
     const todayMs = Date.now();
     const rows = managedSubscriptions
@@ -809,6 +1189,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           )
           .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
         const lastDate = verifiedSets[0]?.tanggal || '';
+        const hasPaidToday = verifiedSets.some((d) => d.tanggal === todayIsoDate);
         const daysSince = lastDate
           ? Math.floor((todayMs - new Date(lastDate).getTime()) / 86400000)
           : 999;
@@ -816,22 +1197,27 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           100,
           Math.round(((s.total_terkumpul || 0) / Math.max(1, s.target_nominal)) * 100)
         );
+        const sisa = Math.max(0, s.target_nominal - (s.total_terkumpul || 0));
         const memberUser = allUsers.find((u) => u.uid === s.member_id);
+        const phoneMatch = s.member_nama.match(/\((08\d{6,14}|62\d{7,15}|\+62\d{7,15})\)/);
         return {
           sub: s,
           lastDate,
+          hasPaidToday,
           daysSince,
           pct,
-          memberWa: memberUser?.no_wa || '',
+          sisa,
+          memberWa: memberUser?.no_wa || (phoneMatch ? phoneMatch[1] : ''),
         };
       });
 
     return rows.filter((r) => {
+      if (checklistFilter === 'due_today') return !r.hasPaidToday;
       if (checklistFilter === 'overdue') return r.daysSince > 6;
       if (checklistFilter === 'near_lunas') return r.pct >= 80;
       return true;
     });
-  }, [managedSubscriptions, deposits, checklistFilter, allUsers]);
+  }, [managedSubscriptions, deposits, checklistFilter, allUsers, todayIsoDate]);
 
   // Door Prize Eligible Coupons
   const doorPrizeEligible = useMemo(() => {
@@ -1104,6 +1490,171 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       handleFirestoreError(err, OperationType.WRITE, 'deposits/subscriptions');
     } finally {
       setSubmittingCash(false);
+    }
+  };
+
+  // --- Handler: Batch Kolektif Setoran Tunai (Multiple Members in One Atomic Transaction) ---
+  const handleBatchCashDeposits = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userProfile) return;
+
+    const selectedEntries = managedSubscriptions
+      .filter((s) => s.status === 'aktif' && batchSelectedIds[s.id])
+      .map((s) => {
+        const rawNominal = Number(batchNominals[s.id] ?? s.setoran_nominal ?? 20000);
+        return {
+          sub: s,
+          nominal: Math.round(rawNominal),
+        };
+      })
+      .filter((entry) => Number.isFinite(entry.nominal) && entry.nominal >= 1000);
+
+    if (selectedEntries.length === 0) {
+      setStatusMessage('Centang minimal 1 kontrak member aktif dengan nominal setoran minimal Rp 1.000.');
+      return;
+    }
+    if (selectedEntries.length > 25) {
+      setStatusMessage('Maksimal 25 member per sekali proses setoran kolektif.');
+      return;
+    }
+
+    setSubmittingBatch(true);
+    setStatusMessage('');
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const finalNote = (batchNote.trim() || 'Setoran Kolektif Harian').slice(0, 250);
+
+    try {
+      const batchResult = await runTransaction(db, async (tx) => {
+        const subSnaps = await Promise.all(
+          selectedEntries.map((entry) => tx.get(doc(db, 'subscriptions', entry.sub.id)))
+        );
+
+        const committedItems: Array<{
+          subId: string;
+          freshSub: Omit<Subscription, 'id'>;
+          nominal: number;
+          newTotal: number;
+        }> = [];
+
+        subSnaps.forEach((snap, idx) => {
+          if (!snap.exists()) return;
+          const entry = selectedEntries[idx];
+          const freshSub = snap.data() as Omit<Subscription, 'id'>;
+          if (freshSub.status === 'diambil') return;
+
+          const currentTotal = Number(freshSub.total_terkumpul) || 0;
+          const targetNominal = Number(freshSub.target_nominal) || 0;
+          const newTotal = currentTotal + entry.nominal;
+          const newStatus: SubscriptionStatus =
+            newTotal >= targetNominal ? 'lunas' : 'aktif';
+
+          const depRef = doc(collection(db, 'deposits'));
+          const subRef = doc(db, 'subscriptions', entry.sub.id);
+
+          tx.set(depRef, {
+            subscription_id: entry.sub.id,
+            member_id: freshSub.member_id,
+            member_nama: freshSub.member_nama,
+            agen_id: freshSub.agen_id,
+            wilayah: freshSub.wilayah,
+            jenis_transaksi: 'setoran',
+            nominal: entry.nominal,
+            metode: 'tunai_agen',
+            catatan: finalNote,
+            status_verifikasi: 'verified',
+            validated_by: userProfile.nama,
+            tanggal: todayDate,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+
+          tx.update(subRef, {
+            total_terkumpul: newTotal,
+            status: newStatus,
+            updatedAt: serverTimestamp(),
+          });
+
+          if (canWriteAuditAction('SETORAN_TUNAI_AGEN')) {
+            tx.set(
+              doc(collection(db, 'audit_logs')),
+              buildAuditLogPayload(
+                'SETORAN_TUNAI_AGEN',
+                freshSub.member_nama,
+                `Setoran kolektif ${formatRupiah(entry.nominal)} (${freshSub.package_nama}) · Saldo: ${formatRupiah(
+                  currentTotal
+                )} -> ${formatRupiah(newTotal)}`
+              )
+            );
+          }
+
+          committedItems.push({
+            subId: entry.sub.id,
+            freshSub,
+            nominal: entry.nominal,
+            newTotal,
+          });
+        });
+
+        if (committedItems.length === 0) {
+          throw new Error('NO_VALID_BATCH_ITEMS');
+        }
+        return committedItems;
+      });
+
+      const totalBatchNominal = batchResult.reduce((sum, item) => sum + item.nominal, 0);
+      const batchNotifs: Record<string, unknown>[] = batchResult.map((item) => ({
+        recipient_type: 'user',
+        recipient_uid: item.freshSub.member_id,
+        wilayah: item.freshSub.wilayah,
+        kategori: 'setoran',
+        judul: `Setoran ${formatRupiah(item.nominal)} Dicatat`,
+        pesan: `${userProfile.nama} mencatat setoran kolektif pada paket ${item.freshSub.package_nama}. Saldo saat ini: ${formatRupiah(item.newTotal)}.`,
+        tautan_view: 'member',
+        sender_uid: userProfile.uid,
+        sender_nama: userProfile.nama,
+        is_read: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+
+      if (!isAdmin) {
+        batchNotifs.push({
+          recipient_type: 'admin',
+          recipient_uid: 'staff_admin',
+          wilayah: userProfile.wilayah,
+          kategori: 'setoran',
+          judul: `Setoran Kolektif ${batchResult.length} Member (${userProfile.nama})`,
+          pesan: `${userProfile.nama} mencatat setoran kolektif untuk ${batchResult.length} kontrak member senilai total ${formatRupiah(totalBatchNominal)}.`,
+          tautan_view: 'operasional',
+          tautan_tab: 'agen',
+          sender_uid: userProfile.uid,
+          sender_nama: userProfile.nama,
+          is_read: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      await Promise.allSettled(
+        batchNotifs.map((n) => addDoc(collection(db, 'notifications'), n))
+      );
+
+      setBatchSelectedIds({});
+      setShowBatchPanel(false);
+      setStatusMessage(
+        `Setoran kolektif berhasil untuk ${batchResult.length} member dengan total ${formatRupiah(
+          totalBatchNominal
+        )}.`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'NO_VALID_BATCH_ITEMS') {
+        setStatusMessage('Tidak ada kontrak aktif yang valid untuk diproses.');
+        return;
+      }
+      handleFirestoreError(err, OperationType.WRITE, 'deposits/subscriptions');
+    } finally {
+      setSubmittingBatch(false);
     }
   };
 
@@ -1801,15 +2352,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     }
   };
 
-  // --- Handler: Warehouse QR Pickup (Atomic Firestore Transaction) ---
+  // --- Handler: Warehouse / Agent QR Pickup (Atomic Firestore Transaction) ---
   const handleMarkQrPickedUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = qrInput.trim();
-    const matched = subscriptions.find(
+    const matched = managedSubscriptions.find(
       (s) => s.qr_code_token.toLowerCase() === token.toLowerCase()
     );
     if (!matched) {
-      setStatusMessage(`Token QR "${token}" tidak ditemukan dalam database kontrak.`);
+      setStatusMessage(`Token QR "${token}" tidak ditemukan dalam daftar kontrak binaan Anda.`);
       return;
     }
     try {
@@ -1825,6 +2376,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         }
         tx.update(subRef, {
           status: 'diambil',
+          status_pengiriman: 'selesai',
           updatedAt: serverTimestamp(),
         });
         if (canWriteAuditAction('SERAH_TERIMA_QR')) {
@@ -2122,15 +2674,16 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
   };
 
   // --- Handler: Open & Save Offline Member Contract ---
-  const openOfflineRegistration = () => {
+  const openOfflineRegistration = (preselectedPkgId?: string) => {
     setOffNama('');
     setOffWa('');
     setOffGrupArisan('');
-    const firstPkg = packages[0];
-    setOffPackageId(firstPkg?.id || '');
+    const chosenPkg =
+      (preselectedPkgId ? packages.find((p) => p.id === preselectedPkgId) : null) || packages[0];
+    setOffPackageId(chosenPkg?.id || '');
     setOffFrekuensi('mingguan');
     setOffDurasiMinggu(
-      String(firstPkg ? Math.min(60, Math.max(12, Math.round(firstPkg.durasi_hari / 7))) : 46)
+      String(chosenPkg ? Math.min(60, Math.max(12, Math.round(chosenPkg.durasi_hari / 7))) : 46)
     );
     setOffWilayah(userProfile?.wilayah || 'Tasikmalaya');
     setOffAgentId(agents[0]?.id || '');
@@ -2295,7 +2848,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           judul: `${settleLabel} Terkirim`,
           pesan: `Pengajuan ${settleLabel} sebesar ${formatRupiah(nominal)} sedang menunggu validasi Admin Pusat.`,
           tautan_view: 'operasional',
-          tautan_tab: 'agen',
+          tautan_tab: 'korwil',
           sender_uid: userProfile.uid,
           sender_nama: userProfile.nama,
           is_read: false,
@@ -2784,26 +3337,69 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
     icon: React.ComponentType<{ className?: string }>;
     badge?: number;
     adminOnly?: boolean;
-  }> = [
-    { id: 'agen', label: 'Transaksi & Validasi', group: 'operasional', icon: ClipboardCheck, badge: pendingDeposits.length },
-    { id: 'kontrak', label: 'Kontrak Member', group: 'operasional', icon: Layers, badge: managedSubscriptions.length },
-    { id: 'gudang', label: 'Gudang & Pengiriman', group: 'operasional', icon: Warehouse },
-    { id: 'korwil', label: 'Komisi & Setoran Kas', group: 'keuangan', icon: Coins, badge: pendingSettlementsCount },
-    { id: 'doorprize', label: 'Door Prize', group: 'keuangan', icon: Gift, badge: doorPrizeDraws.length },
-    { id: 'analitik', label: 'Analitik & Audit', group: 'keuangan', icon: BarChart3, adminOnly: true },
-    { id: 'master', label: 'Katalog & Agen', group: 'pusat', icon: PackageIcon, adminOnly: true },
-    { id: 'users', label: 'Pengguna & RBAC', group: 'pusat', icon: Users, badge: pendingAgentApps.length > 0 ? pendingAgentApps.length : allUsers.length, adminOnly: true },
-    { id: 'pesan', label: 'Pesan Masuk', group: 'pusat', icon: MessageCircle, badge: unreadMessagesCount, adminOnly: true },
-    { id: 'pengaturan', label: 'Rekening & Info', group: 'pusat', icon: Settings, adminOnly: true },
-  ];
+    hideForAgen?: boolean;
+  }> = isAgen
+    ? [
+        {
+          id: 'kontrak',
+          label: 'Member Rekrutan',
+          group: 'operasional',
+          icon: Users,
+          badge: recruitedMemberProfiles.length,
+        },
+        {
+          id: 'agen',
+          label: 'Transaksi & Setoran',
+          group: 'operasional',
+          icon: ClipboardCheck,
+          badge: pendingDeposits.length,
+        },
+        {
+          id: 'katalog',
+          label: 'Katalog & Brosur',
+          group: 'operasional',
+          icon: BookOpen,
+        },
+        {
+          id: 'korwil',
+          label: 'Komisi & Riwayat Reseller',
+          group: 'keuangan',
+          icon: Coins,
+          badge: pendingSettlementsCount,
+        },
+        {
+          id: 'bantuan',
+          label: 'Bantuan Pusat',
+          group: 'pusat',
+          icon: LifeBuoy,
+        },
+      ]
+    : [
+        { id: 'agen', label: 'Transaksi & Validasi', group: 'operasional', icon: ClipboardCheck, badge: pendingDeposits.length },
+        { id: 'kontrak', label: 'Kontrak Member', group: 'operasional', icon: Layers, badge: managedSubscriptions.length },
+        { id: 'gudang', label: 'Gudang & Pengiriman', group: 'operasional', icon: Warehouse },
+        { id: 'korwil', label: 'Komisi & Setoran Kas', group: 'keuangan', icon: Coins, badge: pendingSettlementsCount },
+        { id: 'doorprize', label: 'Door Prize', group: 'keuangan', icon: Gift, badge: doorPrizeDraws.length },
+        { id: 'analitik', label: 'Analitik & Audit', group: 'keuangan', icon: BarChart3, adminOnly: true },
+        { id: 'master', label: 'Katalog & Agen', group: 'pusat', icon: PackageIcon, adminOnly: true },
+        { id: 'users', label: 'Pengguna & RBAC', group: 'pusat', icon: Users, badge: pendingAgentApps.length > 0 ? pendingAgentApps.length : allUsers.length, adminOnly: true },
+        { id: 'pesan', label: 'Pesan Masuk', group: 'pusat', icon: MessageCircle, badge: unreadMessagesCount, adminOnly: true },
+        { id: 'pengaturan', label: 'Rekening & Info', group: 'pusat', icon: Settings, adminOnly: true },
+      ];
 
-  const visibleTabs = tabs.filter((t) => !t.adminOnly || isAdmin);
+  const visibleTabs = tabs.filter((t) => (!t.adminOnly || isAdmin) && (!t.hideForAgen || !isAgen));
   const activeTabMeta = visibleTabs.find((t) => t.id === activeTab) || visibleTabs[0];
-  const sidebarGroups: Array<{ key: 'operasional' | 'keuangan' | 'pusat'; title: string }> = [
-    { key: 'operasional', title: 'Operasional' },
-    { key: 'keuangan', title: 'Keuangan & Program' },
-    { key: 'pusat', title: 'Pengaturan Pusat' },
-  ];
+  const sidebarGroups: Array<{ key: 'operasional' | 'keuangan' | 'pusat'; title: string }> = isAgen
+    ? [
+        { key: 'operasional', title: 'Operasional Reseller' },
+        { key: 'keuangan', title: 'Keuangan & Referral' },
+        { key: 'pusat', title: 'Layanan & Bantuan' },
+      ]
+    : [
+        { key: 'operasional', title: 'Operasional' },
+        { key: 'keuangan', title: 'Keuangan & Program' },
+        { key: 'pusat', title: 'Pengaturan Pusat' },
+      ];
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -2812,7 +3408,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         <aside className="hidden lg:block w-60 shrink-0 rounded-xl border border-stone-200 bg-white p-3">
           <div className="border-b border-stone-100 px-3 pb-3 mb-3">
             <p className="text-[11px] font-semibold text-[#0C3328]">
-              {isAdmin ? 'Admin Pusat' : userProfile.role.toUpperCase()}
+              {isAdmin
+                ? 'Admin Pusat'
+                : isAgen
+                  ? `Reseller / Agen${userProfile.kode_agen ? ` · ${userProfile.kode_agen}` : ''}`
+                  : userProfile.role.toUpperCase()}
             </p>
             <p className="truncate text-sm font-bold text-stone-900">{userProfile.nama}</p>
             <p className="text-[11px] text-stone-500">Wilayah {userProfile.wilayah}</p>
@@ -2876,7 +3476,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-stone-200 pb-4">
             <div>
               <p className="text-xs text-stone-500">
-                Dashboard {isAdmin ? 'Admin Pusat' : userProfile.role} / {activeTabMeta?.label}
+                Dashboard {isAdmin ? 'Admin Pusat' : isAgen ? 'Agen & Reseller' : userProfile.role} / {activeTabMeta?.label}
               </p>
               <h1 className="mt-0.5 font-display text-xl font-bold text-stone-900 sm:text-2xl">
                 {activeTabMeta?.label}
@@ -2885,11 +3485,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={openOfflineRegistration}
+                onClick={() => openOfflineRegistration()}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <UserPlus className="h-3.5 w-3.5" />
-                <span>Kontrak Baru</span>
+                <span>{isAgen ? 'Tambah Member / Kontrak' : 'Kontrak Baru'}</span>
               </button>
               {isAdmin && (
                 <button
@@ -2933,7 +3533,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           {/* Clean 4-Column Summary Strip */}
           <div className="grid grid-cols-2 divide-y divide-stone-200 rounded-xl border border-stone-200 bg-white sm:grid-cols-4 sm:divide-y-0 sm:divide-x">
             <div className="p-4">
-              <p className="text-[11px] font-medium text-stone-500">Dana Terkumpul</p>
+              <p className="text-[11px] font-medium text-stone-500">
+                {isAgen ? 'Dana Member Terkumpul' : 'Dana Terkumpul'}
+              </p>
               <p className="mt-1 font-mono-nums text-base font-bold text-[#0C3328]">
                 {formatRupiah(executiveKpi.totalCollected)}
               </p>
@@ -2942,7 +3544,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </p>
             </div>
             <div className="p-4">
-              <p className="text-[11px] font-medium text-stone-500">Antrean Validasi</p>
+              <p className="text-[11px] font-medium text-stone-500">
+                {isAgen ? 'Validasi Pembayaran' : 'Antrean Validasi'}
+              </p>
               <p className="mt-1 font-mono-nums text-base font-bold text-amber-800">
                 {executiveKpi.pendingCount} Pending
               </p>
@@ -2951,21 +3555,33 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </p>
             </div>
             <div className="p-4">
-              <p className="text-[11px] font-medium text-stone-500">Kontrak &amp; Logistik</p>
+              <p className="text-[11px] font-medium text-stone-500">
+                {isAgen ? 'Member & Kontrak' : 'Kontrak & Logistik'}
+              </p>
               <p className="mt-1 font-mono-nums text-base font-bold text-stone-900">
-                {managedSubscriptions.length} Kontrak
+                {isAgen
+                  ? `${recruitedMemberProfiles.length} Member`
+                  : `${managedSubscriptions.length} Kontrak`}
               </p>
               <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-                {executiveKpi.lunasCount} lunas · {executiveKpi.diambilCount} diambil
+                {isAgen
+                  ? `${managedSubscriptions.length} kontrak · ${executiveKpi.lunasCount} lunas`
+                  : `${executiveKpi.lunasCount} lunas · ${executiveKpi.diambilCount} diambil`}
               </p>
             </div>
             <div className="p-4">
-              <p className="text-[11px] font-medium text-stone-500">Komisi &amp; Jaringan</p>
+              <p className="text-[11px] font-medium text-stone-500">
+                {isAgen ? 'Estimasi Komisi Saya' : 'Komisi & Jaringan'}
+              </p>
               <p className="mt-1 font-mono-nums text-base font-bold text-[#381E5A]">
                 {formatRupiah(executiveKpi.totalCommission)}
               </p>
               <p className="mt-0.5 font-mono-nums text-[11px] text-stone-500">
-                {agents.filter((a) => a.aktif).length} agen · {allUsers.length || '—'} akun
+                {isAgen
+                  ? myResellerCommissionStats.totalKomisiCairVerified > 0
+                    ? `Cair: ${formatRupiah(myResellerCommissionStats.totalKomisiCairVerified)}`
+                    : `${myResellerCommissionStats.activeConsumersCount}/5 konsumen aktif`
+                  : `${agents.filter((a) => a.aktif).length} agen · ${allUsers.length || '—'} akun`}
               </p>
             </div>
           </div>
@@ -3045,7 +3661,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Riwayat Tervalidasi ({verifiedTransactions.length})
+                {isAgen
+                  ? `Riwayat Transaksi Member (${verifiedTransactions.length})`
+                  : `Riwayat Tervalidasi (${verifiedTransactions.length})`}
               </button>
             </div>
           </div>
@@ -3300,8 +3918,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
-                  Daily Closing Sheet · {dailyClosingSummary.todayIsoDate}
+                <p className="text-[11px] font-semibold text-amber-800">
+                  Rekap Kas Harian · {dailyClosingSummary.todayIsoDate}
                 </p>
                 <h2 className="font-display text-lg font-bold text-stone-900">
                   Rekap Kas Harian &amp; Tutup Kas Otomatis
@@ -3310,24 +3928,34 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                   Ringkasan mutasi tervalidasi hari ini ({dailyClosingSummary.txCountToday} transaksi) sebelum disetorkan ke Admin Pusat.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setSettleJenis('setor_tunai_pusat');
-                  setSettleNominal(String(Math.max(1000, dailyClosingSummary.netCashInHand)));
-                  setSettleCatatan(
-                    `Tutup kas harian ${dailyClosingSummary.todayIsoDate}: Tunai ${formatRupiah(
-                      dailyClosingSummary.cashIn
-                    )}, Pencairan ${formatRupiah(dailyClosingSummary.cashOut)}`
-                  );
-                  setKorwilSubTab('tutup_kas');
-                  setActiveTab('korwil');
-                }}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                <span>Ajukan Tutup Kas Hari Ini</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchPanel((v) => !v)}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#381E5A] bg-white px-3.5 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>{showBatchPanel ? 'Tutup Input Kolektif' : 'Input Setoran Kolektif'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettleJenis('setor_tunai_pusat');
+                    setSettleNominal(String(Math.max(1000, dailyClosingSummary.netCashInHand)));
+                    setSettleCatatan(
+                      `Tutup kas harian ${dailyClosingSummary.todayIsoDate}: Tunai ${formatRupiah(
+                        dailyClosingSummary.cashIn
+                      )}, Pencairan ${formatRupiah(dailyClosingSummary.cashOut)}`
+                    );
+                    setKorwilSubTab('tutup_kas');
+                    setActiveTab('korwil');
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  <span>Ajukan Tutup Kas Hari Ini</span>
+                </button>
+              </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5">
@@ -3357,18 +3985,176 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
           </div>
 
-          {/* Checklist Jemput Bola Member Binaan */}
+          {/* Input Setoran Kolektif (Beberapa Member Sekaligus) */}
+          {showBatchPanel && (
+            <form
+              onSubmit={handleBatchCashDeposits}
+              className="rounded-xl border border-[#C8A053]/60 bg-white p-5 space-y-4"
+            >
+              <div className="flex flex-col gap-3 border-b border-stone-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-[#381E5A]">
+                    Input Setoran Kolektif Cepat (Maks. 25 Member)
+                  </h2>
+                  <p className="text-xs text-stone-600">
+                    Centang member yang sudah menyetor tunai saat penagihan keliling, sesuaikan nominal jika perlu, lalu simpan sekaligus dalam satu klik.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextSel: Record<string, boolean> = {};
+                      const nextNom: Record<string, string> = { ...batchNominals };
+                      checklistItems
+                        .filter((r) => !r.hasPaidToday)
+                        .slice(0, 25)
+                        .forEach((r) => {
+                          nextSel[r.sub.id] = true;
+                          if (!nextNom[r.sub.id]) {
+                            nextNom[r.sub.id] = String(r.sub.setoran_nominal || 20000);
+                          }
+                        });
+                      setBatchSelectedIds(nextSel);
+                      setBatchNominals(nextNom);
+                    }}
+                    className="rounded-lg border border-stone-300 bg-[#FAF7F2] px-3 py-1.5 text-xs font-semibold text-stone-800 hover:bg-stone-100 cursor-pointer"
+                  >
+                    Centang Belum Setor Hari Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBatchSelectedIds({})}
+                    className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50 cursor-pointer"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              {managedSubscriptions.filter((s) => s.status === 'aktif').length === 0 ? (
+                <p className="rounded-lg bg-[#FAF7F2] p-4 text-center text-xs text-stone-500">
+                  Belum ada kontrak member aktif untuk dicatat secara kolektif.
+                </p>
+              ) : (
+                <>
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-stone-200 divide-y divide-stone-100">
+                    {managedSubscriptions
+                      .filter((s) => s.status === 'aktif')
+                      .map((s) => {
+                        const checked = Boolean(batchSelectedIds[s.id]);
+                        const nomVal = batchNominals[s.id] ?? String(s.setoran_nominal || 20000);
+                        return (
+                          <div
+                            key={s.id}
+                            className={`flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 text-xs ${
+                              checked ? 'bg-emerald-50/70' : 'bg-white'
+                            }`}
+                          >
+                            <label className="flex flex-1 items-center gap-2.5 min-w-[200px] cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const isChecked = e.target.checked;
+                                  setBatchSelectedIds((prev) => ({
+                                    ...prev,
+                                    [s.id]: isChecked,
+                                  }));
+                                  if (isChecked && !batchNominals[s.id]) {
+                                    setBatchNominals((prev) => ({
+                                      ...prev,
+                                      [s.id]: String(s.setoran_nominal || 20000),
+                                    }));
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-stone-300 text-[#0C3328]"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate font-bold text-stone-900">{s.member_nama}</p>
+                                <p className="truncate text-[11px] text-stone-500">
+                                  {s.package_nama} · Saldo {formatRupiah(s.total_terkumpul)}
+                                </p>
+                              </div>
+                            </label>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[11px] text-stone-500">Rp</span>
+                              <input
+                                type="number"
+                                min={1000}
+                                step={500}
+                                value={nomVal}
+                                onChange={(e) =>
+                                  setBatchNominals((prev) => ({
+                                    ...prev,
+                                    [s.id]: e.target.value,
+                                  }))
+                                }
+                                className="w-28 rounded-md border border-stone-300 bg-white px-2.5 py-1 font-mono-nums text-xs font-semibold text-stone-900"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+
+                  {(() => {
+                    const selectedList = managedSubscriptions.filter(
+                      (s) => s.status === 'aktif' && batchSelectedIds[s.id]
+                    );
+                    const totalBatch = selectedList.reduce(
+                      (sum, s) =>
+                        sum + Math.max(0, Number(batchNominals[s.id] ?? s.setoran_nominal ?? 20000) || 0),
+                      0
+                    );
+                    return (
+                      <div className="flex flex-col gap-3 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                          <input
+                            type="text"
+                            maxLength={250}
+                            value={batchNote}
+                            onChange={(e) => setBatchNote(e.target.value)}
+                            placeholder="Catatan setoran kolektif..."
+                            className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-900"
+                          />
+                          <div className="text-xs font-mono-nums text-stone-800 whitespace-nowrap">
+                            Dipilih: <strong>{selectedList.length}</strong> · Total:{' '}
+                            <strong className="text-[#0C3328]">{formatRupiah(totalBatch)}</strong>
+                          </div>
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={submittingBatch || selectedList.length === 0}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-50 whitespace-nowrap shrink-0 cursor-pointer"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>
+                            {submittingBatch
+                              ? 'Menyimpan Kolektif...'
+                              : `Simpan ${selectedList.length} Setoran Sekaligus`}
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </form>
+          )}
+
+          {/* Daftar Tagihan Hari Ini & Checklist Jemput Bola Member Binaan */}
           <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-col gap-3 border-b border-stone-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-lg font-bold text-stone-900">
-                  Checklist Jemput Bola Member Binaan ({checklistItems.length})
+                  Daftar Tagihan Hari Ini &amp; Jemput Bola ({checklistItems.length})
                 </h2>
                 <p className="text-xs text-stone-600">
-                  Pantau member aktif yang belum menyetor lebih dari 6 hari atau mendekati lunas, lalu catat setoran 1-klik atau kirim pengingat halus.
+                  Pantau member yang belum setor hari ini atau menunggak lebih dari 6 hari, lalu catat setoran atau kirim pengingat WA cepat.
                 </p>
               </div>
-              <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
+              <div className="inline-flex flex-wrap rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setChecklistFilter('all')}
@@ -3382,14 +4168,25 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setChecklistFilter('overdue')}
+                  onClick={() => setChecklistFilter('due_today')}
                   className={`rounded-md px-3 py-1 font-semibold cursor-pointer ${
-                    checklistFilter === 'overdue'
-                      ? 'bg-amber-700 text-white'
+                    checklistFilter === 'due_today'
+                      ? 'bg-amber-800 text-white'
                       : 'text-stone-600 hover:text-stone-900'
                   }`}
                 >
-                  Perlu Setor (&gt;6 hari)
+                  Belum Setor Hari Ini
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChecklistFilter('overdue')}
+                  className={`rounded-md px-3 py-1 font-semibold cursor-pointer ${
+                    checklistFilter === 'overdue'
+                      ? 'bg-rose-800 text-white'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Tunggakan (&gt;6 hari)
                 </button>
                 <button
                   type="button"
@@ -3411,11 +4208,15 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </p>
             ) : (
               <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {checklistItems.slice(0, 12).map((row) => {
+                {checklistItems.slice(0, 18).map((row) => {
                   const s = row.sub;
-                  const waMessage = `Assalamu'alaikum ${s.member_nama}, pengingat ramah dari Sagitarius Parcel mengenai tabungan ${s.package_nama}. Saldo saat ini ${formatRupiah(
+                  const waMessage = `Assalamu'alaikum ${s.member_nama}, pengingat ramah dari Sagitarius Parcel mengenai tabungan ${s.package_nama}. Cicilan rutin ${formatRupiah(
+                    s.setoran_nominal || 20000
+                  )}/${s.frekuensi || 'mingguan'}. Saldo terkumpul saat ini ${formatRupiah(
                     s.total_terkumpul
-                  )} (${row.pct}%). Setoran rutin dapat dititipkan ke agen atau transfer ke rekening resmi. Terima kasih.`;
+                  )} dari ${formatRupiah(s.target_nominal)} (${row.pct}%), sisa ${formatRupiah(
+                    row.sisa
+                  )}. Terima kasih.`;
                   const waHref = row.memberWa
                     ? formatWhatsAppUrl(row.memberWa, waMessage)
                     : `https://wa.me/?text=${encodeURIComponent(waMessage)}`;
@@ -3427,18 +4228,32 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                     >
                       <div>
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-bold text-[#381E5A]">{s.member_nama}</p>
-                            <p className="text-xs text-stone-600">{s.package_nama}</p>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-[#381E5A]">
+                              {s.member_nama}
+                            </p>
+                            <p className="truncate text-xs text-stone-600">
+                              {s.package_nama} ·{' '}
+                              <span className="font-mono-nums">
+                                {formatRupiah(s.setoran_nominal || 20000)}/
+                                {s.frekuensi === 'harian' ? 'hr' : 'mgg'}
+                              </span>
+                            </p>
                           </div>
                           <span
-                            className={`rounded px-2 py-0.5 font-mono-nums text-[10px] font-bold ${
-                              row.daysSince > 6
-                                ? 'bg-amber-100 text-amber-900'
-                                : 'bg-emerald-100 text-emerald-900'
+                            className={`shrink-0 font-mono-nums text-[11px] font-semibold ${
+                              row.hasPaidToday
+                                ? 'text-emerald-800'
+                                : row.daysSince > 6
+                                  ? 'text-rose-700'
+                                  : 'text-amber-800'
                             }`}
                           >
-                            {row.lastDate ? `${row.daysSince} hr lalu` : 'Belum setor'}
+                            {row.hasPaidToday
+                              ? 'Sudah setor'
+                              : row.lastDate
+                                ? `${row.daysSince} hr lalu`
+                                : 'Belum setor'}
                           </span>
                         </div>
                         <div className="mt-3 flex items-center justify-between text-xs">
@@ -3446,7 +4261,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                             {formatRupiah(s.total_terkumpul)}
                           </span>
                           <span className="font-mono-nums text-stone-500">
-                            / {formatRupiah(s.target_nominal)} ({row.pct}%)
+                            Sisa {formatRupiah(row.sisa)} ({row.pct}%)
                           </span>
                         </div>
                         <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white">
@@ -3497,23 +4312,27 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           )}
 
           {txSubTab === 'riwayat' && (
-          /* Log Audit Transaksi Tervalidasi (Admin & Staff) */
+          /* Riwayat Transaksi Member (with Status Filter) */
           <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-display text-lg font-bold text-stone-900">
-                  Log Audit Transaksi Tervalidasi ({verifiedTransactions.length})
+                  {isAgen
+                    ? `History Transaksi Member Rekrutan (${verifiedTransactions.length})`
+                    : `Log Audit Transaksi Tervalidasi (${verifiedTransactions.length})`}
                 </h2>
                 <p className="text-xs text-stone-500">
-                  Seluruh mutasi setoran dan penarikan yang telah diverifikasi dan masuk ke buku tabungan member.
+                  {isAgen
+                    ? 'Seluruh riwayat setoran dan penarikan dari member rekrutan Anda beserta status validasinya.'
+                    : 'Seluruh mutasi setoran dan penarikan yang telah diverifikasi dan masuk ke buku tabungan member.'}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() =>
                   downloadCsv(
-                    `audit-transaksi-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`,
-                    ['Tanggal', 'Member', 'Wilayah', 'Jenis', 'Metode', 'Nominal', 'Validator', 'Catatan'],
+                    `transaksi-member-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`,
+                    ['Tanggal', 'Member', 'Wilayah', 'Jenis', 'Metode', 'Nominal', 'Status', 'Validator', 'Catatan'],
                     verifiedTransactions.map((d) => [
                       d.tanggal,
                       d.member_nama || d.member_id,
@@ -3521,6 +4340,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                       getTxType(d),
                       getMethodLabel(d),
                       d.nominal,
+                      d.status_verifikasi,
                       d.validated_by || '-',
                       d.catatan || '',
                     ])
@@ -3533,8 +4353,8 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </button>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div className="relative flex-1 min-w-[200px]">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
                 <input
                   type="text"
@@ -3545,6 +4365,20 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 />
               </div>
               <select
+                value={txHistoryStatusFilter}
+                onChange={(e) =>
+                  setTxHistoryStatusFilter(
+                    e.target.value as 'all' | 'verified' | 'pending' | 'rejected'
+                  )
+                }
+                className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
+              >
+                <option value="all">Semua Status</option>
+                <option value="verified">Tervalidasi (Verified)</option>
+                <option value="pending">Menunggu Cek (Pending)</option>
+                <option value="rejected">Ditolak (Rejected)</option>
+              </select>
+              <select
                 value={auditTypeFilter}
                 onChange={(e) => setAuditTypeFilter(e.target.value as 'all' | TransactionType)}
                 className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
@@ -3553,23 +4387,25 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 <option value="setoran">Hanya Setoran (+)</option>
                 <option value="penarikan">Hanya Penarikan (-)</option>
               </select>
-              <select
-                value={auditWilayahFilter}
-                onChange={(e) => setAuditWilayahFilter(e.target.value as 'all' | WilayahPriangan)}
-                className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
-              >
-                <option value="all">Semua Wilayah</option>
-                {WILAYAH_LIST.map((w) => (
-                  <option key={w} value={w}>
-                    {w}
-                  </option>
-                ))}
-              </select>
+              {!isAgen && (
+                <select
+                  value={auditWilayahFilter}
+                  onChange={(e) => setAuditWilayahFilter(e.target.value as 'all' | WilayahPriangan)}
+                  className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
+                >
+                  <option value="all">Semua Wilayah</option>
+                  {WILAYAH_LIST.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {verifiedTransactions.length === 0 ? (
               <p className="mt-5 rounded-xl bg-stone-50 p-6 text-center text-xs text-stone-500">
-                Tidak ada transaksi tervalidasi sesuai filter saat ini.
+                Tidak ada transaksi member yang sesuai dengan filter saat ini.
               </p>
             ) : (
               <div className="mt-4 overflow-x-auto">
@@ -3579,13 +4415,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                       <th className="py-2 pr-4 font-semibold">Tanggal</th>
                       <th className="py-2 pr-4 font-semibold">Member</th>
                       <th className="py-2 pr-4 font-semibold">Jenis &amp; Metode</th>
-                      <th className="py-2 pr-4 font-semibold">Validator</th>
+                      <th className="py-2 pr-4 font-semibold">Status &amp; Validator</th>
                       <th className="py-2 pr-4 text-right font-semibold">Nominal</th>
                       <th className="py-2 text-right font-semibold">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {verifiedTransactions.slice(0, 60).map((d) => {
+                    {verifiedTransactions.slice(0, 80).map((d) => {
                       const isWithdraw = getTxType(d) === 'penarikan';
                       return (
                         <tr key={d.id} className="hover:bg-stone-50">
@@ -3614,10 +4450,23 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                             )}
                           </td>
                           <td className="py-2.5 pr-4 text-xs text-stone-700 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1">
-                              <UserCheck className="h-3.5 w-3.5 text-emerald-800" />
-                              {d.validated_by || 'Agen / Admin'}
+                            <span
+                              className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                d.status_verifikasi === 'verified'
+                                  ? 'bg-emerald-100 text-emerald-900'
+                                  : d.status_verifikasi === 'rejected'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : 'bg-amber-100 text-amber-900'
+                              }`}
+                            >
+                              {d.status_verifikasi}
                             </span>
+                            {d.validated_by && (
+                              <p className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-stone-500 ml-1.5">
+                                <UserCheck className="h-3 w-3 text-emerald-800" />
+                                {d.validated_by}
+                              </p>
+                            )}
                           </td>
                           <td
                             className={`py-2.5 pr-4 text-right font-mono-nums text-xs font-bold whitespace-nowrap ${
@@ -3629,14 +4478,16 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                           </td>
                           <td className="py-2.5 text-right whitespace-nowrap">
                             <div className="inline-flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setReceiptDeposit(d)}
-                                className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-0.5 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
-                              >
-                                <Printer className="h-3 w-3" />
-                                <span>Struk PNG</span>
-                              </button>
+                              {d.status_verifikasi === 'verified' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setReceiptDeposit(d)}
+                                  className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-0.5 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
+                                >
+                                  <Printer className="h-3 w-3" />
+                                  <span>Struk PNG</span>
+                                </button>
+                              )}
                               {d.bukti_foto_url && (
                                 <button
                                   type="button"
@@ -3660,32 +4511,36 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         </div>
       )}
 
-      {/* TAB 2: MANAJEMEN KONTRAK MEMBER */}
+      {/* TAB 2: MEMBER REKRUTAN & KONTRAK + PENGIRIMAN QR */}
       {activeTab === 'kontrak' && (
         <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-5">
           <div className="flex flex-col gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-display text-xl font-bold text-stone-900">
-                Manajemen Kontrak Tabungan Member ({filteredContracts.length})
+                {isAgen
+                  ? `Data Member Rekrutan & Paket (${filteredMemberProfiles.length} Member)`
+                  : `Manajemen Kontrak Tabungan Member (${filteredContracts.length})`}
               </h2>
               <p className="text-xs text-stone-600">
-                Pantau progres pelunasan, token QR pengambilan, ubah status kontrak, atau koreksi saldo member.
+                {isAgen
+                  ? 'Lihat data member yang Anda rekrut, detail profil & paket, riwayat transaksi per member, serta status pengiriman.'
+                  : 'Pantau progres pelunasan, token QR pengambilan, ubah status kontrak, atau koreksi saldo member.'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={openOfflineRegistration}
+                onClick={() => openOfflineRegistration()}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[#381E5A] px-3.5 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
               >
                 <UserPlus className="h-3.5 w-3.5" />
-                <span>Daftarkan Kontrak Member</span>
+                <span>{isAgen ? 'Daftarkan Member Baru' : 'Daftarkan Kontrak Member'}</span>
               </button>
               <button
                 type="button"
                 onClick={() =>
                   downloadCsv(
-                    `kontrak-member-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`,
+                    `member-kontrak-sagitarius-${new Date().toISOString().slice(0, 10)}.csv`,
                     ['Token QR', 'Member', 'Paket', 'Wilayah', 'Agen', 'Terkumpul', 'Target', 'Status'],
                     filteredContracts.map((s) => [
                       s.qr_code_token,
@@ -3702,64 +4557,263 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3.5 py-2 text-xs font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5 text-[#0C3328]" />
-                <span>Export CSV Kontrak</span>
+                <span>Export CSV</span>
               </button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
-              <input
-                type="text"
-                value={contractSearch}
-                onChange={(e) => setContractSearch(e.target.value)}
-                placeholder="Cari nama member, grup arisan, paket, token QR, atau kode agen..."
-                className="w-full rounded-lg border border-stone-300 py-2 pl-8 pr-3 text-xs text-stone-900"
-              />
-            </div>
-            <select
-              value={contractStatusFilter}
-              onChange={(e) =>
-                setContractStatusFilter(e.target.value as 'all' | SubscriptionStatus)
-              }
-              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-800"
-            >
-              <option value="all">Semua Status</option>
-              <option value="aktif">Aktif</option>
-              <option value="lunas">Lunas (Siap Ambil)</option>
-              <option value="diambil">Sudah Diambil</option>
-            </select>
-            <select
-              value={contractWilayahFilter}
-              onChange={(e) =>
-                setContractWilayahFilter(e.target.value as 'all' | WilayahPriangan)
-              }
-              className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-800"
-            >
-              <option value="all">Semua Wilayah</option>
-              {WILAYAH_LIST.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
-            {arisanGroups.length > 0 && (
-              <select
-                value={contractGroupFilter}
-                onChange={(e) => setContractGroupFilter(e.target.value)}
-                className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-[#381E5A]"
+          {/* Sub-tab switcher: Data Member Rekrutan | Daftar Kontrak | Pengiriman & Serah Terima QR */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                type="button"
+                onClick={() => setKontrakSubTab('members')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  kontrakSubTab === 'members'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
               >
-                <option value="all">Semua Grup / Arisan ({arisanGroups.length})</option>
-                {arisanGroups.map((g) => (
-                  <option key={g} value={g}>
-                    Grup: {g}
-                  </option>
-                ))}
-              </select>
-            )}
+                Data Member Rekrutan ({filteredMemberProfiles.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setKontrakSubTab('contracts')}
+                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                  kontrakSubTab === 'contracts'
+                    ? 'bg-emerald-900 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                Daftar Kontrak ({filteredContracts.length})
+              </button>
+              {isAgen && (
+                <button
+                  type="button"
+                  onClick={() => setKontrakSubTab('pengiriman')}
+                  className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    kontrakSubTab === 'pengiriman'
+                      ? 'bg-emerald-900 text-white shadow-xs'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Pengiriman &amp; Serah Terima QR ({executiveKpi.lunasCount} Siap)
+                </button>
+              )}
+            </div>
           </div>
 
+          {kontrakSubTab !== 'pengiriman' && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+                <input
+                  type="text"
+                  value={contractSearch}
+                  onChange={(e) => setContractSearch(e.target.value)}
+                  placeholder="Cari nama member, No. WA, grup arisan, paket, atau token QR..."
+                  className="w-full rounded-lg border border-stone-300 py-2 pl-8 pr-3 text-xs text-stone-900"
+                />
+              </div>
+              <select
+                value={contractStatusFilter}
+                onChange={(e) =>
+                  setContractStatusFilter(e.target.value as 'all' | SubscriptionStatus)
+                }
+                className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-800"
+              >
+                <option value="all">Semua Status</option>
+                <option value="aktif">Aktif</option>
+                <option value="lunas">Lunas (Siap Ambil)</option>
+                <option value="diambil">Sudah Diambil</option>
+              </select>
+              {!isAgen && (
+                <select
+                  value={contractWilayahFilter}
+                  onChange={(e) =>
+                    setContractWilayahFilter(e.target.value as 'all' | WilayahPriangan)
+                  }
+                  className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-800"
+                >
+                  <option value="all">Semua Wilayah</option>
+                  {WILAYAH_LIST.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {arisanGroups.length > 0 && (
+                <select
+                  value={contractGroupFilter}
+                  onChange={(e) => setContractGroupFilter(e.target.value)}
+                  className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-[#381E5A]"
+                >
+                  <option value="all">Semua Grup / Arisan ({arisanGroups.length})</option>
+                  {arisanGroups.map((g) => (
+                    <option key={g} value={g}>
+                      Grup: {g}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {kontrakSubTab === 'members' && (
+            filteredMemberProfiles.length === 0 ? (
+              <div className="rounded-xl bg-[#FAF7F2] p-8 text-center">
+                <Users className="mx-auto h-8 w-8 text-[#C8A053]" />
+                <p className="mt-2 text-sm font-bold text-stone-800">
+                  Belum ada data member rekrutan
+                </p>
+                <p className="mt-1 text-xs text-stone-500">
+                  Bagikan link referral Anda di tab Komisi &amp; Riwayat Reseller atau daftarkan member baru secara langsung.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openOfflineRegistration()}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] cursor-pointer"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  <span>Daftarkan Member Pertama</span>
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-stone-200 text-xs text-stone-500">
+                      <th className="py-2.5 pr-4 font-semibold">Member &amp; Kontak</th>
+                      <th className="py-2.5 pr-4 font-semibold">Paket Diikuti</th>
+                      <th className="py-2.5 pr-4 text-right font-semibold">Total Saldo / Target</th>
+                      <th className="py-2.5 pr-4 font-semibold">Riwayat Setoran</th>
+                      <th className="py-2.5 text-right font-semibold">Detail &amp; Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {filteredMemberProfiles.map((m) => {
+                      const pct =
+                        m.totalTarget > 0
+                          ? Math.min(100, Math.round((m.totalTerkumpul / m.totalTarget) * 100))
+                          : 0;
+                      const primarySub = m.subscriptions[0];
+                      return (
+                        <tr key={m.memberKey} className="hover:bg-stone-50">
+                          <td className="py-3 pr-4">
+                            <p className="text-xs font-bold text-stone-900">{m.nama}</p>
+                            <p className="text-[11px] text-stone-500">
+                              {m.isRegisteredAccount ? 'Akun Terdaftar' : 'Member Offline'} · {m.wilayah}
+                            </p>
+                            {m.no_wa && (
+                              <p className="mt-0.5 font-mono-nums text-[11px] font-medium text-[#0C3328]">
+                                WA: {m.no_wa}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4">
+                            {m.subscriptions.length === 0 ? (
+                              <span className="text-xs text-stone-400">Belum memilih paket</span>
+                            ) : (
+                              <div className="space-y-1">
+                                {m.subscriptions.slice(0, 2).map((sub) => (
+                                  <p key={sub.id} className="text-xs font-semibold text-stone-800">
+                                    {sub.package_nama}{' '}
+                                    <span className="font-mono-nums text-[10px] font-normal text-stone-500">
+                                      ({sub.status.toUpperCase()})
+                                    </span>
+                                  </p>
+                                ))}
+                                {m.subscriptions.length > 2 && (
+                                  <p className="text-[11px] text-stone-500">
+                                    +{m.subscriptions.length - 2} kontrak lainnya
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-3 pr-4 text-right whitespace-nowrap">
+                            <p className="font-mono-nums text-xs font-bold text-[#0C3328]">
+                              {formatRupiah(m.totalTerkumpul)}
+                            </p>
+                            <p className="font-mono-nums text-[11px] text-stone-500">
+                              / {formatRupiah(m.totalTarget)} ({pct}%)
+                            </p>
+                          </td>
+                          <td className="py-3 pr-4 whitespace-nowrap">
+                            <p className="font-mono-nums text-xs font-semibold text-stone-800">
+                              {m.deposits.length} Transaksi
+                            </p>
+                            <p className="text-[11px] text-stone-500">
+                              {m.totalPendingCount > 0 ? (
+                                <span className="font-semibold text-amber-700">
+                                  {m.totalPendingCount} menunggu cek
+                                </span>
+                              ) : m.lastTxDate ? (
+                                `Terakhir ${m.lastTxDate}`
+                              ) : (
+                                'Belum ada setoran'
+                              )}
+                            </p>
+                          </td>
+                          <td className="py-3 text-right whitespace-nowrap">
+                            <div className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDetailTxStatusFilter('all');
+                                  setSelectedDetailMemberKey(m.memberKey);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-lg bg-[#381E5A] px-2.5 py-1.5 text-[11px] font-semibold text-[#E8CA82] hover:bg-[#492975] cursor-pointer"
+                              >
+                                <Eye className="h-3 w-3" />
+                                <span>Detail &amp; Riwayat</span>
+                              </button>
+                              {primarySub && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSubId(primarySub.id);
+                                    setCashTxType('setoran');
+                                    setCashNominal(String(primarySub.setoran_nominal || 20000));
+                                    setCashNote('Setoran Tunai Jemput Bola');
+                                    setTxSubTab('input');
+                                    setActiveTab('agen');
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-[#0C3328] px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#144738] cursor-pointer"
+                                >
+                                  <Wallet className="h-3 w-3" />
+                                  <span>Setor</span>
+                                </button>
+                              )}
+                              {m.no_wa && (
+                                <a
+                                  href={formatWhatsAppUrl(
+                                    m.no_wa,
+                                    `Assalamu'alaikum ${m.nama}, saya agen Sagitarius Parcel Anda. Ada yang bisa kami bantu untuk tabungan Lebaran Anda?`
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100"
+                                  title={`Chat WA ${m.nama}`}
+                                >
+                                  <MessageCircle className="h-3 w-3" />
+                                  <span>WA</span>
+                                </a>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
+
+          {kontrakSubTab === 'contracts' && (
+          <>
           {contractGroupFilter !== 'all' && filteredContracts.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#C8A053]/60 bg-[#FAF7F2] px-4 py-3 text-xs">
               <div>
@@ -3814,7 +4868,9 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                     <th className="py-2.5 pr-4 font-semibold">Paket, Grup &amp; Wilayah</th>
                     <th className="py-2.5 pr-4 text-right font-semibold">Terkumpul / Target</th>
                     <th className="py-2.5 pr-4 font-semibold">Status &amp; Pengiriman</th>
-                    {isAdmin && <th className="py-2.5 text-right font-semibold">Aksi Admin</th>}
+                    <th className="py-2.5 text-right font-semibold">
+                      {isAdmin ? 'Aksi Admin' : 'Detail Member'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -3933,58 +4989,193 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                             </select>
                           </div>
                         </td>
-                        {isAdmin && (
-                          <td className="py-3 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingBalanceSubId(s.id);
-                                  setEditBalanceValue(String(s.total_terkumpul || 0));
-                                }}
-                                className="inline-flex items-center gap-1 rounded border border-stone-200 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 cursor-pointer"
-                              >
-                                <Edit3 className="h-3 w-3" />
-                                Koreksi Saldo
-                              </button>
+                        <td className="py-3 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDetailTxStatusFilter('all');
+                                setSelectedDetailMemberKey(s.member_id || s.id);
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2.5 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
+                            >
+                              <Eye className="h-3 w-3" />
+                              <span>Detail</span>
+                            </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingBalanceSubId(s.id);
+                                    setEditBalanceValue(String(s.total_terkumpul || 0));
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-stone-200 px-2 py-1 text-[11px] font-semibold text-stone-700 hover:bg-stone-100 cursor-pointer"
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                  Koreksi Saldo
+                                </button>
 
-                              {(s.total_terkumpul || 0) === 0 && (
-                                confirmDeleteSubId === s.id ? (
-                                  <span className="inline-flex items-center gap-1">
+                                {(s.total_terkumpul || 0) === 0 && (
+                                  confirmDeleteSubId === s.id ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteContract(s.id)}
+                                        className="rounded bg-rose-700 px-2 py-1 text-[11px] font-semibold text-white cursor-pointer"
+                                      >
+                                        Ya, Hapus
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmDeleteSubId(null)}
+                                        className="text-[11px] text-stone-500 cursor-pointer"
+                                      >
+                                        Batal
+                                      </button>
+                                    </span>
+                                  ) : (
                                     <button
                                       type="button"
-                                      onClick={() => handleDeleteContract(s.id)}
-                                      className="rounded bg-rose-700 px-2 py-1 text-[11px] font-semibold text-white cursor-pointer"
+                                      onClick={() => setConfirmDeleteSubId(s.id)}
+                                      className="rounded p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
+                                      title="Hapus Kontrak Kosong"
                                     >
-                                      Ya, Hapus
+                                      <Trash2 className="h-3.5 w-3.5" />
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmDeleteSubId(null)}
-                                      className="text-[11px] text-stone-500 cursor-pointer"
-                                    >
-                                      Batal
-                                    </button>
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => setConfirmDeleteSubId(s.id)}
-                                    className="rounded p-1 text-stone-400 hover:text-rose-700 cursor-pointer"
-                                    title="Hapus Kontrak Kosong"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                )
-                              )}
-                            </div>
-                          </td>
-                        )}
+                                  )
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          </>
+          )}
+
+          {kontrakSubTab === 'pengiriman' && isAgen && (
+            <div className="grid gap-5 lg:grid-cols-12">
+              <div className="space-y-4 lg:col-span-5">
+                <form
+                  onSubmit={handleMarkQrPickedUp}
+                  className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-5"
+                >
+                  <div className="flex items-center gap-2">
+                    <QrCode className="h-5 w-5 text-emerald-900" />
+                    <h3 className="font-display text-lg font-bold text-stone-900">
+                      Verifikasi Tiket QR Serah Terima
+                    </h3>
+                  </div>
+                  <p className="mt-1 text-xs text-stone-600">
+                    Scan kamera atau masukkan token QR milik member binaan berstatus Lunas saat penyerahan paket.
+                  </p>
+
+                  <QrCameraScanner
+                    onScan={(code) => {
+                      setQrInput(code.toUpperCase());
+                      setStatusMessage(
+                        `QR terdeteksi: ${code.toUpperCase()}. Klik "Konfirmasi Serah Terima Paket" untuk menyelesaikan.`
+                      );
+                    }}
+                  />
+
+                  <input
+                    type="text"
+                    required
+                    value={qrInput}
+                    onChange={(e) => setQrInput(e.target.value)}
+                    placeholder="Contoh: SGT-TSM-M2X9A"
+                    className="mt-3 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono-nums text-sm text-stone-900 uppercase"
+                  />
+                  <button
+                    type="submit"
+                    className="mt-3 w-full rounded-lg bg-[#0C3328] py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                  >
+                    Konfirmasi Serah Terima Paket
+                  </button>
+                </form>
+              </div>
+
+              <div className="space-y-4 lg:col-span-7">
+                <div className="rounded-xl border border-stone-200 p-4">
+                  <div className="flex items-center justify-between gap-2 border-b border-stone-100 pb-3">
+                    <div>
+                      <h3 className="font-display text-base font-bold text-stone-900">
+                        Status Pengiriman Paket Member Rekrutan ({managedSubscriptions.length})
+                      </h3>
+                      <p className="text-xs text-stone-600">
+                        Ketentuan reseller: pengiriman barang minimal 10 paket dalam satu wilayah.
+                      </p>
+                    </div>
+                  </div>
+                  {managedSubscriptions.length === 0 ? (
+                    <p className="mt-4 rounded-lg bg-stone-50 p-6 text-center text-xs text-stone-500">
+                      Belum ada kontrak paket untuk dilacak pengirimannya.
+                    </p>
+                  ) : (
+                    <div className="mt-3 max-h-96 divide-y divide-stone-100 overflow-y-auto">
+                      {managedSubscriptions.map((s) => {
+                        const stage: DeliveryStage =
+                          s.status_pengiriman ||
+                          (s.status === 'diambil'
+                            ? 'selesai'
+                            : s.status === 'lunas'
+                              ? 'siap_diambil'
+                              : 'menunggu_lunas');
+                        return (
+                          <div
+                            key={s.id}
+                            className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-bold text-stone-900">
+                                {s.member_nama}
+                              </p>
+                              <p className="truncate text-[11px] text-stone-600">
+                                {s.package_nama} ·{' '}
+                                <span className="font-mono-nums text-emerald-900">
+                                  {s.qr_code_token}
+                                </span>
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {s.status === 'lunas' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setQrInput(s.qr_code_token)}
+                                  className="rounded border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer"
+                                >
+                                  Pilih QR
+                                </button>
+                              )}
+                              <select
+                                value={stage}
+                                disabled={s.status === 'diambil'}
+                                onChange={(e) =>
+                                  handleUpdateDeliveryStage(s, e.target.value as DeliveryStage)
+                                }
+                                className="rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#0C3328] disabled:opacity-60"
+                              >
+                                {DELIVERY_STAGE_OPTIONS.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -4240,7 +5431,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
         </div>
       )}
 
-      {/* TAB 4: KOMISI OTOMATIS & REKAP KORWIL */}
+      {/* TAB 4: KOMISI OTOMATIS & RIWAYAT TRANSAKSI RESELLER / REKAP KORWIL */}
       {activeTab === 'korwil' && (
         <div className="space-y-5">
           {/* Sub-Tab Navigasi Komisi & Setoran Kas */}
@@ -4255,19 +5446,23 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Tutup Kas &amp; Pencairan ({agentSettlements.length})
+                {isAgen
+                  ? `History & Setor Kas Reseller (${agentSettlements.length})`
+                  : `Tutup Kas & Pencairan (${agentSettlements.length})`}
               </button>
-              <button
-                type="button"
-                onClick={() => setKorwilSubTab('wilayah')}
-                className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
-                  korwilSubTab === 'wilayah'
-                    ? 'bg-emerald-900 text-white shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                Rekap Wilayah &amp; Komisi 7%
-              </button>
+              {!isAgen && (
+                <button
+                  type="button"
+                  onClick={() => setKorwilSubTab('wilayah')}
+                  className={`whitespace-nowrap rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                    korwilSubTab === 'wilayah'
+                      ? 'bg-emerald-900 text-white shadow-xs'
+                      : 'text-stone-600 hover:text-stone-900'
+                  }`}
+                >
+                  Rekap Wilayah &amp; Komisi 7%
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setKorwilSubTab('referral')}
@@ -4277,12 +5472,12 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                     : 'text-stone-600 hover:text-stone-900'
                 }`}
               >
-                Link QR &amp; Leaderboard
+                {isAgen ? 'Komisi, Bonus & Link Referral' : 'Link QR & Leaderboard'}
               </button>
             </div>
           </div>
 
-          {korwilSubTab === 'wilayah' && (
+          {korwilSubTab === 'wilayah' && !isAgen && (
           <div className="space-y-5">
           <div className="rounded-xl border border-stone-200 bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4428,7 +5623,73 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           )}
 
           {korwilSubTab === 'tutup_kas' && (
-          /* Tutup Kas Setor Tunai Agen -> Pusat & Klaim Pencairan Komisi */
+          /* Tutup Kas Setor Tunai Agen -> Pusat & Rekonsiliasi Kas Lapangan */
+          <div className="space-y-5">
+            {isAgen && (
+              <div className="rounded-xl border border-stone-200 bg-white p-5 space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-stone-900">
+                      Rekap Kas Tunai di Tangan vs Setor Pusat
+                    </h2>
+                    <p className="text-xs text-stone-600">
+                      Selisih otomatis dari total setoran tunai member yang Anda terima dikurangi pencairan tunai dan uang yang sudah disetor ke rekening/QRIS pusat.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={myResellerCommissionStats.sisaKasBelumDisetor < 1000}
+                    onClick={() => {
+                      setSettleJenis('setor_tunai_pusat');
+                      setSettleNominal(
+                        String(Math.max(1000, myResellerCommissionStats.sisaKasBelumDisetor))
+                      );
+                      setSettleCatatan(
+                        `Pelunasan sisa kas tunai lapangan per ${todayIsoDate}`
+                      );
+                    }}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#0C3328] px-4 py-2 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:opacity-50 cursor-pointer"
+                  >
+                    <Wallet className="h-3.5 w-3.5" />
+                    <span>Setor Semua Sisa Kas ke Pusat</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Tunai Member Masuk</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#0C3328]">
+                      +{formatRupiah(myResellerCommissionStats.totalTunaiMemberDiterima)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Pencairan Tunai</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-rose-700">
+                      -{formatRupiah(myResellerCommissionStats.totalPencairanTunaiAgen)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Disetor &amp; Tervalidasi</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#381E5A]">
+                      -{formatRupiah(myResellerCommissionStats.totalSetorPusatVerified)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Pending Cek Pusat</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-amber-800">
+                      -{formatRupiah(myResellerCommissionStats.totalSetorPusatPending)}
+                    </p>
+                  </div>
+                  <div className="col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:col-span-1">
+                    <p className="text-[11px] font-semibold text-emerald-900">Sisa Kas di Tangan</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-emerald-950">
+                      {formatRupiah(myResellerCommissionStats.sisaKasBelumDisetor)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
           <div className="grid gap-5 lg:grid-cols-12">
             <form
               onSubmit={handleCreateSettlement}
@@ -4594,24 +5855,88 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </button>
             </form>
 
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
-              <div className="flex items-center justify-between gap-2 border-b border-stone-200 pb-3">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7 space-y-4">
+              <div className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="font-display text-lg font-bold text-stone-900">
-                    Riwayat Setor Kas &amp; Pencairan Komisi ({agentSettlements.length})
+                    {isAgen
+                      ? `History Transaksi Reseller (${filteredSettlements.length})`
+                      : `Riwayat Setor Kas & Pencairan Komisi (${filteredSettlements.length})`}
                   </h3>
                   <p className="text-xs text-stone-600">
-                    Validasi Admin Pusat atas setoran kas agen dan pencairan komisi resmi.
+                    {isAgen
+                      ? 'Seluruh riwayat setoran tunai Anda ke Pusat dan klaim pencairan komisi beserta status verifikasinya.'
+                      : 'Validasi Admin Pusat atas setoran kas agen dan pencairan komisi resmi.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={settlementTypeFilter}
+                    onChange={(e) =>
+                      setSettlementTypeFilter(e.target.value as 'all' | AgentSettlementType)
+                    }
+                    className="rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-800"
+                  >
+                    <option value="all">Semua Transaksi</option>
+                    <option value="setor_tunai_pusat">Setor Tunai Pusat</option>
+                    <option value="pencairan_komisi">Pencairan Komisi</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadCsv(
+                        `history-reseller-${new Date().toISOString().slice(0, 10)}.csv`,
+                        ['Tanggal', 'Agen', 'Wilayah', 'Jenis', 'Nominal', 'Status', 'Validator', 'Catatan'],
+                        filteredSettlements.map((st) => [
+                          st.tanggal,
+                          st.agen_nama,
+                          st.wilayah,
+                          st.jenis === 'setor_tunai_pusat' ? 'Setor Tunai Pusat' : 'Pencairan Komisi',
+                          st.nominal,
+                          st.status,
+                          st.validated_by || '-',
+                          st.catatan || '',
+                        ])
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <div className="rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2.5">
+                  <p className="text-[11px] text-stone-500">Setor Pusat Tervalidasi</p>
+                  <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#0C3328]">
+                    {formatRupiah(myResellerCommissionStats.totalSetorPusatVerified)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2.5">
+                  <p className="text-[11px] text-stone-500">Komisi Dicairkan</p>
+                  <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#381E5A]">
+                    {formatRupiah(myResellerCommissionStats.totalKomisiCairVerified)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <p className="text-[11px] text-amber-900">Menunggu Validasi Pusat</p>
+                  <p className="mt-0.5 font-mono-nums text-sm font-bold text-amber-950">
+                    {formatRupiah(
+                      myResellerCommissionStats.totalSetorPusatPending +
+                        myResellerCommissionStats.totalKomisiCairPending
+                    )}
                   </p>
                 </div>
               </div>
 
-              {agentSettlements.length === 0 ? (
-                <p className="mt-6 rounded-xl bg-[#FAF7F2] p-6 text-center text-xs text-stone-500">
-                  Belum ada riwayat tutup kas atau klaim pencairan komisi.
+              {filteredSettlements.length === 0 ? (
+                <p className="mt-4 rounded-xl bg-[#FAF7F2] p-6 text-center text-xs text-stone-500">
+                  Belum ada riwayat transaksi tutup kas atau klaim pencairan komisi.
                 </p>
               ) : (
-                <div className="mt-4 overflow-x-auto">
+                <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-[#E4DCCB] text-stone-500">
@@ -4623,7 +5948,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
-                      {agentSettlements.map((st) => (
+                      {filteredSettlements.map((st) => (
                         <tr key={st.id} className="hover:bg-[#FAF7F2]/60">
                           <td className="py-2.5 pr-3">
                             <p className="font-mono-nums font-semibold text-stone-800">{st.tanggal}</p>
@@ -4692,16 +6017,17 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
           </div>
+          </div>
           )}
 
           {korwilSubTab === 'referral' && (
-          /* Link & QR Pendaftaran Khusus Agen + Leaderboard Agen */
+          /* Link & QR Pendaftaran Khusus Agen + Komisi Reseller Pribadi / Leaderboard */
           <div className="grid gap-5 lg:grid-cols-12">
             <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5">
               <div className="flex items-center gap-2">
                 <Link2 className="h-5 w-5 text-emerald-900" />
                 <h2 className="font-display text-lg font-bold text-stone-900">
-                  Link &amp; QR Pendaftaran Agen
+                  Link &amp; QR Rekrut Member
                 </h2>
               </div>
               <p className="mt-1 text-xs text-stone-600">
@@ -4781,6 +6107,285 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               })()}
             </div>
 
+            {isAgen ? (
+              <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7 space-y-5">
+                <div className="flex items-center gap-2">
+                  <Coins className="h-5 w-5 text-amber-700" />
+                  <div>
+                    <h2 className="font-display text-lg font-bold text-stone-900">
+                      Perhitungan Komisi &amp; Monitor Kelayakan Reseller
+                    </h2>
+                    <p className="text-xs text-stone-600">
+                      Pantau syarat pencairan komisi 150 hari, kuota pengiriman wilayah, kupon Doorprize member, dan peluang jenjang Agen Resmi.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Paket Anak (50rb)</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#381E5A]">
+                      {myResellerCommissionStats.anakCount} Paket
+                    </p>
+                    <p className="font-mono-nums text-[11px] text-[#0C3328]">
+                      {formatRupiah(myResellerCommissionStats.komisiAnak)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Paket Bunda (60rb)</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#381E5A]">
+                      {myResellerCommissionStats.bundaCount} Paket
+                    </p>
+                    <p className="font-mono-nums text-[11px] text-[#0C3328]">
+                      {formatRupiah(myResellerCommissionStats.komisiBunda)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3">
+                    <p className="text-[11px] text-stone-500">Paket Pilihan (75rb)</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#381E5A]">
+                      {myResellerCommissionStats.pilihanCount} Paket
+                    </p>
+                    <p className="font-mono-nums text-[11px] text-[#0C3328]">
+                      {formatRupiah(myResellerCommissionStats.komisiPilihan)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                    <p className="text-[11px] font-semibold text-emerald-900">Estimasi Total</p>
+                    <p className="mt-0.5 font-mono-nums text-sm font-bold text-emerald-950">
+                      {formatRupiah(myResellerCommissionStats.estimasiKomisiPaket)}
+                    </p>
+                    <p className="font-mono-nums text-[11px] text-emerald-800">
+                      {myResellerCommissionStats.totalPaketReseller} paket utama
+                    </p>
+                  </div>
+                </div>
+
+                {/* 4 Monitor Kelayakan Program Sagitarius Parcel */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-[#381E5A]">Min. 5 Konsumen Aktif</span>
+                      <span
+                        className={`font-mono-nums font-bold ${
+                          myResellerCommissionStats.meetsMin5Consumers
+                            ? 'text-emerald-800'
+                            : 'text-amber-800'
+                        }`}
+                      >
+                        {myResellerCommissionStats.activeConsumersCount}/5
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-[#0C3328]"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round((myResellerCommissionStats.activeConsumersCount / 5) * 100)
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-stone-600">
+                      {myResellerCommissionStats.meetsMin5Consumers
+                        ? 'Syarat konsumen aktif sudah terpenuhi.'
+                        : `Butuh ${5 - myResellerCommissionStats.activeConsumersCount} konsumen lagi agar komisi aktif.`}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-[#381E5A]">Syarat Cair 150 Hari Penuh</span>
+                      <span className="font-mono-nums font-bold text-[#0C3328]">
+                        {myResellerCommissionStats.lolos150Count} Lolos
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-[#381E5A]"
+                        style={{
+                          width: `${
+                            myResellerCommissionStats.daysProgressRows.length > 0
+                              ? Math.round(
+                                  (myResellerCommissionStats.lolos150Count /
+                                    myResellerCommissionStats.daysProgressRows.length) *
+                                    100
+                                )
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-stone-600">
+                      {myResellerCommissionStats.belum150Count > 0
+                        ? `${myResellerCommissionStats.belum150Count} kontrak masih di bawah 150 hari terbayar.`
+                        : 'Seluruh kontrak telah mencapai 150 hari terbayar.'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-[#381E5A]">
+                        Kuota Kirim Wilayah (Min. 10 Paket)
+                      </span>
+                      <span
+                        className={`font-mono-nums font-bold ${
+                          myResellerCommissionStats.meetsMin10BarangPaket
+                            ? 'text-emerald-800'
+                            : 'text-amber-800'
+                        }`}
+                      >
+                        {myResellerCommissionStats.barangPaketCount}/10
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-[#0C3328]"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round((myResellerCommissionStats.barangPaketCount / 10) * 100)
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-stone-600">
+                      {myResellerCommissionStats.meetsMin10BarangPaket
+                        ? `Kuota kirim wilayah ${userProfile.wilayah} terpenuhi.`
+                        : `Kurang ${10 - myResellerCommissionStats.barangPaketCount} paket barang untuk pengiriman satu wilayah.`}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-[#381E5A]">
+                        Target Agen Resmi (&gt;200 Anggota)
+                      </span>
+                      <span className="font-mono-nums font-bold text-[#381E5A]">
+                        {myResellerCommissionStats.activeConsumersCount}/200
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-[#C8A053]"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              (myResellerCommissionStats.activeConsumersCount / 200) * 100
+                            )
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-stone-600">
+                      {myResellerCommissionStats.meets200AgenResmi
+                        ? 'Selamat! Memenuhi syarat menjadi Agen Resmi & rekrut 10 Reseller.'
+                        : `Kupon Doorprize aktif: ${myResellerCommissionStats.eligibleDoorprizeCount} kontrak member.`}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Daftar Status 150 Hari & Kupon Doorprize per Kontrak */}
+                <div className="border-t border-stone-100 pt-3 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-bold text-stone-900">
+                      Status 150 Hari &amp; Kupon Doorprize Member ({myResellerCommissionStats.daysProgressRows.length})
+                    </p>
+                    <span className="font-mono-nums text-[11px] text-stone-500">
+                      Target Bonus Paket Berikutnya: {myResellerCommissionStats.totalPaketReseller}/
+                      {myResellerCommissionStats.nextBonusTarget}
+                    </span>
+                  </div>
+
+                  {myResellerCommissionStats.daysProgressRows.length === 0 ? (
+                    <p className="rounded-lg bg-[#FAF7F2] p-4 text-center text-xs text-stone-500">
+                      Belum ada kontrak member untuk dipantau kelayakannya.
+                    </p>
+                  ) : (
+                    <div className="max-h-60 overflow-y-auto rounded-lg border border-stone-200">
+                      <table className="w-full text-left text-xs">
+                        <thead className="sticky top-0 bg-[#FAF7F2] text-stone-500">
+                          <tr className="border-b border-stone-200">
+                            <th className="px-3 py-2 font-semibold">Member &amp; Paket</th>
+                            <th className="px-3 py-2 font-semibold">Hari Terbayar</th>
+                            <th className="px-3 py-2 font-semibold">Kupon Doorprize</th>
+                            <th className="px-3 py-2 text-right font-semibold">Tindak Lanjut</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100 bg-white">
+                          {myResellerCommissionStats.daysProgressRows.map((item) => {
+                            const waText = `Assalamu'alaikum ${item.sub.member_nama}, tabungan paket ${item.sub.package_nama} Anda saat ini setara ${item.hariTerbayar} hari terbayar.${
+                              item.eligibleDoorprize
+                                ? ` Kupon Doorprize Anda sudah aktif (${item.kuponKode}).`
+                                : ' Ayo lakukan setoran perdana agar kupon Doorprize Anda aktif.'
+                            }`;
+                            const waHref = item.memberWa
+                              ? formatWhatsAppUrl(item.memberWa, waText)
+                              : `https://wa.me/?text=${encodeURIComponent(waText)}`;
+                            return (
+                              <tr key={item.sub.id} className="hover:bg-[#FAF7F2]/60">
+                                <td className="px-3 py-2">
+                                  <p className="font-semibold text-stone-900">
+                                    {item.sub.member_nama}
+                                  </p>
+                                  <p className="text-[11px] text-stone-500">
+                                    {item.sub.package_nama}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-2 font-mono-nums whitespace-nowrap">
+                                  <span
+                                    className={`font-bold ${
+                                      item.lolos150Hari ? 'text-emerald-800' : 'text-amber-800'
+                                    }`}
+                                  >
+                                    {item.hariTerbayar} / {item.pkgDurasi} hr
+                                  </span>
+                                  <p className="text-[10px] text-stone-500">
+                                    {item.lolos150Hari ? 'Lolos 150 hr' : 'Menuju 150 hr'}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-2 font-mono-nums whitespace-nowrap">
+                                  {item.eligibleDoorprize ? (
+                                    <span className="font-semibold text-[#381E5A]">
+                                      {item.kuponKode}
+                                    </span>
+                                  ) : (
+                                    <span className="text-stone-400">Belum setor</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap">
+                                  <a
+                                    href={waHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#15803D] hover:bg-emerald-50"
+                                  >
+                                    <MessageCircle className="h-3 w-3" />
+                                    <span>Info WA</span>
+                                  </a>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-stone-100 pt-3">
+                  <p className="text-xs font-bold text-stone-800 mb-2">
+                    Ketentuan Resmi Komisi Reseller
+                  </p>
+                  <ul className="space-y-1 text-[11px] text-stone-600 list-disc pl-4">
+                    {RESELLER_PROGRAM.ketentuan.map((rule, idx) => (
+                      <li key={idx}>{rule}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
             <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
@@ -4850,6 +6455,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 ))}
               </div>
             </div>
+            )}
           </div>
           )}
         </div>
@@ -6263,6 +7869,26 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           </div>
         </form>
       )}
+
+      {/* TAB RESELLER: KATALOG & BROSUR DIGITAL */}
+      {activeTab === 'katalog' && isAgen && (
+        <ResellerCatalogToolsTab
+          packages={packages}
+          agentCode={referralAgentCode || userProfile.kode_agen || 'AGT-RESMI'}
+          onRegisterMemberWithPackage={(pkgId) => openOfflineRegistration(pkgId)}
+          onPreviewImage={(src) => setPreviewProof(src)}
+        />
+      )}
+
+      {/* TAB RESELLER: BANTUAN & TIKET ADMIN PUSAT */}
+      {activeTab === 'bantuan' && isAgen && (
+        <ResellerHelpTab
+          userProfile={userProfile}
+          managedSubscriptions={managedSubscriptions}
+          appSettings={appSettings}
+          onStatusMessage={(msg) => setStatusMessage(msg)}
+        />
+      )}
         </div>
       </div>
 
@@ -6772,6 +8398,359 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal Detail Member & History Transaksi Member */}
+      {selectedDetailMember && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/70 p-3 sm:p-5"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF7F2] shadow-2xl">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-3 border-b border-[#C8A053]/40 bg-[#381E5A] px-5 py-4 text-white">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-[#E8CA82]">
+                  {selectedDetailMember.isRegisteredAccount
+                    ? 'Akun Member Terdaftar'
+                    : 'Member Binaan Offline'}{' '}
+                  · Wilayah {selectedDetailMember.wilayah}
+                </p>
+                <h3 className="truncate font-display text-lg sm:text-xl font-bold text-white">
+                  {selectedDetailMember.nama}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedDetailMember.no_wa && (
+                  <a
+                    href={formatWhatsAppUrl(
+                      selectedDetailMember.no_wa,
+                      `Assalamu'alaikum ${selectedDetailMember.nama}, saya agen Sagitarius Parcel Anda.`
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-lg bg-[#16A34A] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#15803D]"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Chat WA</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailMemberKey(null)}
+                  className="rounded-lg p-1.5 text-stone-200 hover:bg-white/10 cursor-pointer"
+                  aria-label="Tutup detail member"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
+              {/* Profil Lengkap Member */}
+              <div className="grid gap-3 rounded-xl border border-[#E4DCCB] bg-white p-4 sm:grid-cols-4 text-xs">
+                <div>
+                  <p className="text-[11px] text-stone-500">Nomor WhatsApp</p>
+                  <p className="mt-0.5 inline-flex items-center gap-1 font-mono-nums font-bold text-stone-900">
+                    <Phone className="h-3 w-3 text-[#0C3328]" />
+                    {selectedDetailMember.no_wa || 'Belum dicatat'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-stone-500">Username / Email</p>
+                  <p className="mt-0.5 truncate font-semibold text-stone-800">
+                    {selectedDetailMember.username
+                      ? `@${selectedDetailMember.username}`
+                      : selectedDetailMember.email || '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-stone-500">Total Saldo Terkumpul</p>
+                  <p className="mt-0.5 font-mono-nums font-bold text-[#0C3328]">
+                    {formatRupiah(selectedDetailMember.totalTerkumpul)}{' '}
+                    <span className="font-normal text-stone-500">
+                      / {formatRupiah(selectedDetailMember.totalTarget)}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-stone-500">Ringkasan Transaksi</p>
+                  <p className="mt-0.5 font-mono-nums font-semibold text-stone-900">
+                    {selectedDetailMember.verifiedTxCount} Tervalidasi ·{' '}
+                    <span className="text-amber-700">
+                      {selectedDetailMember.totalPendingCount} Pending
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Daftar Paket / Kontrak Member */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-display text-base font-bold text-stone-900">
+                    Paket &amp; Kontrak Tabungan ({selectedDetailMember.subscriptions.length})
+                  </h4>
+                </div>
+                {selectedDetailMember.subscriptions.length === 0 ? (
+                  <p className="rounded-xl border border-[#E4DCCB] bg-white p-4 text-xs text-stone-500">
+                    Member ini telah terdaftar melalui link Anda namun belum memilih paket tabungan.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {selectedDetailMember.subscriptions.map((sub) => {
+                      const pct = Math.min(
+                        100,
+                        Math.round(((sub.total_terkumpul || 0) / Math.max(1, sub.target_nominal)) * 100)
+                      );
+                      const sisa = Math.max(0, sub.target_nominal - (sub.total_terkumpul || 0));
+                      const stage: DeliveryStage =
+                        sub.status_pengiriman ||
+                        (sub.status === 'diambil'
+                          ? 'selesai'
+                          : sub.status === 'lunas'
+                            ? 'siap_diambil'
+                            : 'menunggu_lunas');
+                      return (
+                        <div
+                          key={sub.id}
+                          className="rounded-xl border border-[#E4DCCB] bg-white p-4 space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-bold text-[#381E5A]">{sub.package_nama}</p>
+                              <p className="font-mono-nums text-[11px] text-stone-500">
+                                {sub.qr_code_token} · {sub.jadwal_ambil || 'H-7 Lebaran'}
+                              </p>
+                            </div>
+                            <span className="rounded bg-[#0C3328]/10 px-2 py-0.5 text-[10px] font-bold uppercase text-[#0C3328]">
+                              {sub.status}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <p className="text-[11px] text-stone-500">Terkumpul ({pct}%)</p>
+                              <p className="font-mono-nums font-bold text-[#0C3328]">
+                                {formatRupiah(sub.total_terkumpul)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[11px] text-stone-500">Sisa Target</p>
+                              <p className="font-mono-nums font-semibold text-stone-800">
+                                {formatRupiah(sisa)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-100">
+                            <div
+                              className="h-full rounded-full bg-[#0C3328]"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                            <span className="font-mono-nums text-stone-600">
+                              Rutin: {formatRupiah(sub.setoran_nominal || 0)}/{sub.frekuensi || 'mingguan'}
+                            </span>
+                            {sub.grup_arisan && (
+                              <span className="font-semibold text-[#381E5A]">
+                                Grup: {sub.grup_arisan}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-2.5">
+                            <select
+                              value={stage}
+                              disabled={!isAdmin && sub.status === 'diambil'}
+                              onChange={(e) =>
+                                handleUpdateDeliveryStage(sub, e.target.value as DeliveryStage)
+                              }
+                              className="rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#0C3328] disabled:opacity-60"
+                            >
+                              {DELIVERY_STAGE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDetailMemberKey(null);
+                                setSelectedSubId(sub.id);
+                                setCashTxType('setoran');
+                                setCashNominal(String(sub.setoran_nominal || 20000));
+                                setCashNote('Setoran Tunai Jemput Bola');
+                                setTxSubTab('input');
+                                setActiveTab('agen');
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-[#0C3328] px-3 py-1.5 text-[11px] font-bold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                            >
+                              <Wallet className="h-3 w-3" />
+                              <span>Input Setoran</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* History Transaksi Member Ini */}
+              <div className="rounded-xl border border-[#E4DCCB] bg-white p-4 space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="font-display text-base font-bold text-stone-900">
+                      History Transaksi Member ({selectedDetailMember.deposits.length})
+                    </h4>
+                    <p className="text-[11px] text-stone-500">
+                      Seluruh riwayat setoran tunai, transfer, maupun penarikan khusus untuk {selectedDetailMember.nama}.
+                    </p>
+                  </div>
+                  <select
+                    value={detailTxStatusFilter}
+                    onChange={(e) =>
+                      setDetailTxStatusFilter(
+                        e.target.value as 'all' | 'verified' | 'pending' | 'rejected'
+                      )
+                    }
+                    className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-800"
+                  >
+                    <option value="all">Semua Status</option>
+                    <option value="verified">Tervalidasi (Verified)</option>
+                    <option value="pending">Menunggu Cek (Pending)</option>
+                    <option value="rejected">Ditolak (Rejected)</option>
+                  </select>
+                </div>
+
+                {(() => {
+                  const memberTxs = selectedDetailMember.deposits.filter((d) =>
+                    detailTxStatusFilter === 'all'
+                      ? true
+                      : d.status_verifikasi === detailTxStatusFilter
+                  );
+                  if (memberTxs.length === 0) {
+                    return (
+                      <p className="rounded-lg bg-[#FAF7F2] p-5 text-center text-xs text-stone-500">
+                        Belum ada catatan transaksi untuk member ini sesuai filter status.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-stone-200 text-stone-500">
+                            <th className="py-2 pr-3 font-semibold">Tanggal</th>
+                            <th className="py-2 pr-3 font-semibold">Paket &amp; Metode</th>
+                            <th className="py-2 pr-3 font-semibold">Status</th>
+                            <th className="py-2 pr-3 text-right font-semibold">Nominal</th>
+                            <th className="py-2 text-right font-semibold">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-100">
+                          {memberTxs.map((dep) => {
+                            const isWithdraw = getTxType(dep) === 'penarikan';
+                            const subObj = selectedDetailMember.subscriptions.find(
+                              (s) => s.id === dep.subscription_id
+                            );
+                            return (
+                              <tr key={dep.id} className="hover:bg-stone-50">
+                                <td className="py-2.5 pr-3 font-mono-nums text-stone-700 whitespace-nowrap">
+                                  {dep.tanggal}
+                                </td>
+                                <td className="py-2.5 pr-3">
+                                  <p className="font-semibold text-stone-900">
+                                    {subObj?.package_nama || 'Paket Tabungan'} · {getMethodLabel(dep)}
+                                  </p>
+                                  {dep.catatan && (
+                                    <p className="text-[11px] text-stone-500">{dep.catatan}</p>
+                                  )}
+                                </td>
+                                <td className="py-2.5 pr-3 whitespace-nowrap">
+                                  <span
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                                      dep.status_verifikasi === 'verified'
+                                        ? 'bg-emerald-100 text-emerald-900'
+                                        : dep.status_verifikasi === 'rejected'
+                                          ? 'bg-rose-100 text-rose-800'
+                                          : 'bg-amber-100 text-amber-900'
+                                    }`}
+                                  >
+                                    {dep.status_verifikasi}
+                                  </span>
+                                  {dep.validated_by && (
+                                    <p className="mt-0.5 text-[10px] text-stone-500">
+                                      oleh {dep.validated_by}
+                                    </p>
+                                  )}
+                                </td>
+                                <td
+                                  className={`py-2.5 pr-3 text-right font-mono-nums font-bold whitespace-nowrap ${
+                                    isWithdraw ? 'text-rose-700' : 'text-emerald-900'
+                                  }`}
+                                >
+                                  {isWithdraw ? '-' : '+'}
+                                  {formatRupiah(dep.nominal)}
+                                </td>
+                                <td className="py-2.5 text-right whitespace-nowrap">
+                                  <div className="inline-flex items-center gap-1.5">
+                                    {dep.bukti_foto_url && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewProof(dep.bukti_foto_url || null)}
+                                        className="rounded border border-stone-200 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 hover:bg-stone-50 cursor-pointer"
+                                      >
+                                        Bukti
+                                      </button>
+                                    )}
+                                    {dep.status_verifikasi === 'verified' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setReceiptDeposit(dep)}
+                                        className="inline-flex items-center gap-1 rounded border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-0.5 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
+                                      >
+                                        <Printer className="h-3 w-3" />
+                                        <span>Struk</span>
+                                      </button>
+                                    )}
+                                    {dep.status_verifikasi === 'pending' && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleVerifyDeposit(dep, 'verified')}
+                                          className="rounded bg-[#0C3328] px-2 py-0.5 text-[10px] font-bold text-[#E8CA82] cursor-pointer"
+                                        >
+                                          Validasi
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleVerifyDeposit(dep, 'rejected')}
+                                          className="rounded border border-rose-200 px-2 py-0.5 text-[10px] font-bold text-rose-700 cursor-pointer"
+                                        >
+                                          Tolak
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

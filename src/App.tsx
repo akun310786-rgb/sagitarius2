@@ -188,12 +188,14 @@ export default function App() {
         userProfile.role === 'admin')
   );
   const showDashboardNav = !userProfile || canAccessOperational;
-  const isAdminOnlySession = userProfile?.role === 'admin';
+  const isAgenOnlySession = userProfile?.role === 'agen';
+  const isDashboardOnlySession =
+    userProfile?.role === 'admin' || userProfile?.role === 'agen';
 
-  // Enforce strict role guard & direct dashboard mode for Admin
+  // Enforce strict role guard & direct dashboard mode for Admin and Agen/Reseller
   useEffect(() => {
     if (!authReady || !userProfile) return;
-    if (userProfile.role === 'admin') {
+    if (userProfile.role === 'admin' || userProfile.role === 'agen') {
       if (activeView !== 'operasional') {
         setActiveView('operasional');
       }
@@ -1134,7 +1136,7 @@ export default function App() {
   };
 
   const navigatePublicPage = (page: PublicPage, category?: MainCatalogCategory) => {
-    if (isAdminOnlySession) return;
+    if (isDashboardOnlySession) return;
     setActiveView('landing');
     setPublicPage(page);
     if (category) {
@@ -1145,7 +1147,7 @@ export default function App() {
   };
 
   const handleOpenDetail = (pkg: ParcelPackage) => {
-    if (isAdminOnlySession) return;
+    if (isDashboardOnlySession) return;
     setDetailPackageId(pkg.id);
     setActiveView('landing');
     setPublicPage('detail_paket');
@@ -1168,7 +1170,7 @@ export default function App() {
   };
 
   const handleHeaderSearchClick = () => {
-    if (isAdminOnlySession) return;
+    if (isDashboardOnlySession) return;
     setActiveView('landing');
     setPublicPage('katalog');
     setMobileMenuOpen(false);
@@ -1189,7 +1191,7 @@ export default function App() {
     <ErrorBoundary>
       <div className="bg-arabesque-ivory min-h-screen flex flex-col overflow-x-hidden text-stone-900">
         {/* TOP BAR matching Royal Purple + Gold Border Mockups */}
-        {isAdminOnlySession && userProfile ? (
+        {isDashboardOnlySession && userProfile ? (
           <header className="bg-arabesque-purple sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
             <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1200,10 +1202,12 @@ export default function App() {
                 />
                 <div className="min-w-0">
                   <p className="font-display truncate text-sm sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
-                    Dashboard Admin Pusat
+                    {isAgenOnlySession ? 'Dashboard Agen & Reseller' : 'Dashboard Admin Pusat'}
                   </p>
                   <p className="truncate text-[10px] sm:text-[11px] font-medium text-stone-300 leading-tight">
-                    Sagitarius Parcel · {COMPANY_INFO.legalName}
+                    {isAgenOnlySession
+                      ? `${userProfile.kode_agen ? `${userProfile.kode_agen} · ` : ''}Wilayah ${userProfile.wilayah} · ${COMPANY_INFO.brandName}`
+                      : `Sagitarius Parcel · ${COMPANY_INFO.legalName}`}
                   </p>
                 </div>
               </div>
@@ -1487,8 +1491,8 @@ export default function App() {
         </header>
         )}
 
-        {/* Sub-toolbar for PWA Install & Official Contact Context (hidden in Admin-only workspace) */}
-        {!isAdminOnlySession && (
+        {/* Sub-toolbar for PWA Install & Official Contact Context (hidden in Dashboard-only workspace) */}
+        {!isDashboardOnlySession && (
           <div className="border-b border-[#E4DCCB] bg-white/90 backdrop-blur-xs no-print">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
               <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
@@ -1539,7 +1543,7 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1">
-          {!isAdminOnlySession && activeView === 'landing' && (
+          {!isDashboardOnlySession && activeView === 'landing' && (
             <LandingCatalog
               activePage={publicPage}
               onNavigate={navigatePublicPage}
@@ -1561,7 +1565,7 @@ export default function App() {
             />
           )}
 
-          {!isAdminOnlySession && activeView === 'member' && (
+          {!isDashboardOnlySession && activeView === 'member' && (
             <MemberDashboard
               userProfile={userProfile}
               packages={packages}
@@ -1580,7 +1584,7 @@ export default function App() {
             />
           )}
 
-          {(isAdminOnlySession || activeView === 'operasional') && (
+          {(isDashboardOnlySession || activeView === 'operasional') && (
             <AgentKorwilAdminDashboard
               userProfile={userProfile}
               allUsers={allUsers}
@@ -1603,8 +1607,8 @@ export default function App() {
           )}
         </main>
 
-        {/* Official Dark Emerald Footer (hidden in Admin-only workspace) */}
-        {!isAdminOnlySession && (
+        {/* Official Dark Emerald Footer (hidden in Dashboard-only workspace) */}
+        {!isDashboardOnlySession && (
         <footer className="bg-arabesque-emerald border-t-2 border-[#C8A053]/60 py-10 text-stone-200 no-print">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 text-xs sm:grid-cols-2 lg:grid-cols-5 sm:px-6 lg:px-8">
             <div className="space-y-3 lg:col-span-2">
@@ -1752,7 +1756,7 @@ export default function App() {
         )}
 
         {/* Wishlist / Daftar Paket Pilihan Drawer */}
-        {!isAdminOnlySession && showWishlistDrawer && (
+        {!isDashboardOnlySession && showWishlistDrawer && (
           <div
             className="fixed inset-0 z-50 flex justify-end bg-stone-950/60 backdrop-blur-xs"
             role="dialog"
@@ -2002,7 +2006,7 @@ export default function App() {
           appSettings={appSettings}
           allUsers={allUsers}
           onNavigateTarget={(view, tab) => {
-            if (isAdminOnlySession) {
+            if (isDashboardOnlySession) {
               setActiveView('operasional');
               if (tab) {
                 setDashboardTargetTab({ tab, nonce: Date.now() });
