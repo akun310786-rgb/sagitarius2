@@ -188,10 +188,20 @@ export default function App() {
         userProfile.role === 'admin')
   );
   const showDashboardNav = !userProfile || canAccessOperational;
+  const isAdminOnlySession = userProfile?.role === 'admin';
 
-  // Enforce strict role guard on operational view
+  // Enforce strict role guard & direct dashboard mode for Admin
   useEffect(() => {
-    if (authReady && activeView === 'operasional' && userProfile && !canAccessOperational) {
+    if (!authReady || !userProfile) return;
+    if (userProfile.role === 'admin') {
+      if (activeView !== 'operasional') {
+        setActiveView('operasional');
+      }
+      setMobileMenuOpen(false);
+      setShowWishlistDrawer(false);
+      return;
+    }
+    if (activeView === 'operasional' && !canAccessOperational) {
       setActiveView('member');
       setAuthError('Akses Dashboard Operasional khusus untuk Agen, Korwil, dan Admin Pusat.');
     }
@@ -1124,6 +1134,7 @@ export default function App() {
   };
 
   const navigatePublicPage = (page: PublicPage, category?: MainCatalogCategory) => {
+    if (isAdminOnlySession) return;
     setActiveView('landing');
     setPublicPage(page);
     if (category) {
@@ -1134,6 +1145,7 @@ export default function App() {
   };
 
   const handleOpenDetail = (pkg: ParcelPackage) => {
+    if (isAdminOnlySession) return;
     setDetailPackageId(pkg.id);
     setActiveView('landing');
     setPublicPage('detail_paket');
@@ -1156,6 +1168,7 @@ export default function App() {
   };
 
   const handleHeaderSearchClick = () => {
+    if (isAdminOnlySession) return;
     setActiveView('landing');
     setPublicPage('katalog');
     setMobileMenuOpen(false);
@@ -1176,6 +1189,46 @@ export default function App() {
     <ErrorBoundary>
       <div className="bg-arabesque-ivory min-h-screen flex flex-col overflow-x-hidden text-stone-900">
         {/* TOP BAR matching Royal Purple + Gold Border Mockups */}
+        {isAdminOnlySession && userProfile ? (
+          <header className="bg-arabesque-purple sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
+            <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src={LOGO_SAGITARIUS}
+                  alt="Logo Sagitarius Parcel"
+                  className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
+                />
+                <div className="min-w-0">
+                  <p className="font-display truncate text-sm sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
+                    Dashboard Admin Pusat
+                  </p>
+                  <p className="truncate text-[10px] sm:text-[11px] font-medium text-stone-300 leading-tight">
+                    Sagitarius Parcel · {COMPANY_INFO.legalName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={openProfileEdit}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 sm:px-3.5 py-1.5 text-xs font-bold text-[#1D122B] transition hover:brightness-105 cursor-pointer"
+                >
+                  <UserIcon className="h-3.5 w-3.5" />
+                  <span className="max-w-[110px] truncate">{userProfile.nama}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-600/80 hover:border-rose-300/60 cursor-pointer"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  <span>Keluar</span>
+                </button>
+              </div>
+            </div>
+          </header>
+        ) : (
         <header className="bg-arabesque-purple sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
           <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
             {/* Zone 1: Brand Crest */}
@@ -1432,46 +1485,49 @@ export default function App() {
             </div>
           )}
         </header>
+        )}
 
-        {/* Sub-toolbar for PWA Install & Official Contact Context */}
-        <div className="border-b border-[#E4DCCB] bg-white/90 backdrop-blur-xs no-print">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-              <span className="font-semibold text-[#381E5A]">{COMPANY_INFO.legalName}</span>
-              <span aria-hidden="true">·</span>
-              <a
-                href={formatWhatsAppUrl(
-                  COMPANY_INFO.csWhatsappDigits,
-                  'Halo CS Sagitarius Parcel, saya ingin bertanya tentang katalog paket Lebaran.'
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-[#15803D] hover:underline"
-              >
-                CS WA: {COMPANY_INFO.csWhatsappDisplay}
-              </a>
-              <span aria-hidden="true">·</span>
-              <span className="font-medium text-[#0C3328]">
-                {userProfile
-                  ? `Masuk sebagai ${userProfile.nama} (${userProfile.role.toUpperCase()})`
-                  : 'Pengunjung Publik'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <PWAInstallButton />
-              {userProfile && (
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-1 rounded-lg border border-[#E4DCCB] px-3 py-1 text-xs font-medium text-stone-600 hover:bg-[#FAF7F2] cursor-pointer"
+        {/* Sub-toolbar for PWA Install & Official Contact Context (hidden in Admin-only workspace) */}
+        {!isAdminOnlySession && (
+          <div className="border-b border-[#E4DCCB] bg-white/90 backdrop-blur-xs no-print">
+            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
+                <span className="font-semibold text-[#381E5A]">{COMPANY_INFO.legalName}</span>
+                <span aria-hidden="true">·</span>
+                <a
+                  href={formatWhatsAppUrl(
+                    COMPANY_INFO.csWhatsappDigits,
+                    'Halo CS Sagitarius Parcel, saya ingin bertanya tentang katalog paket Lebaran.'
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-semibold text-[#15803D] hover:underline"
                 >
-                  <LogOut className="h-3.5 w-3.5" />
-                  <span>Keluar</span>
-                </button>
-              )}
+                  CS WA: {COMPANY_INFO.csWhatsappDisplay}
+                </a>
+                <span aria-hidden="true">·</span>
+                <span className="font-medium text-[#0C3328]">
+                  {userProfile
+                    ? `Masuk sebagai ${userProfile.nama} (${userProfile.role.toUpperCase()})`
+                    : 'Pengunjung Publik'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <PWAInstallButton />
+                {userProfile && (
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#E4DCCB] px-3 py-1 text-xs font-medium text-stone-600 hover:bg-[#FAF7F2] cursor-pointer"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span>Keluar</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {authError && (
           <div className="mx-auto mt-4 max-w-4xl px-4">
@@ -1483,7 +1539,7 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1">
-          {activeView === 'landing' && (
+          {!isAdminOnlySession && activeView === 'landing' && (
             <LandingCatalog
               activePage={publicPage}
               onNavigate={navigatePublicPage}
@@ -1505,7 +1561,7 @@ export default function App() {
             />
           )}
 
-          {activeView === 'member' && (
+          {!isAdminOnlySession && activeView === 'member' && (
             <MemberDashboard
               userProfile={userProfile}
               packages={packages}
@@ -1524,7 +1580,7 @@ export default function App() {
             />
           )}
 
-          {activeView === 'operasional' && (
+          {(isAdminOnlySession || activeView === 'operasional') && (
             <AgentKorwilAdminDashboard
               userProfile={userProfile}
               allUsers={allUsers}
@@ -1547,7 +1603,8 @@ export default function App() {
           )}
         </main>
 
-        {/* Official Dark Emerald Footer */}
+        {/* Official Dark Emerald Footer (hidden in Admin-only workspace) */}
+        {!isAdminOnlySession && (
         <footer className="bg-arabesque-emerald border-t-2 border-[#C8A053]/60 py-10 text-stone-200 no-print">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 text-xs sm:grid-cols-2 lg:grid-cols-5 sm:px-6 lg:px-8">
             <div className="space-y-3 lg:col-span-2">
@@ -1692,9 +1749,10 @@ export default function App() {
             </div>
           </div>
         </footer>
+        )}
 
         {/* Wishlist / Daftar Paket Pilihan Drawer */}
-        {showWishlistDrawer && (
+        {!isAdminOnlySession && showWishlistDrawer && (
           <div
             className="fixed inset-0 z-50 flex justify-end bg-stone-950/60 backdrop-blur-xs"
             role="dialog"
@@ -1944,6 +2002,14 @@ export default function App() {
           appSettings={appSettings}
           allUsers={allUsers}
           onNavigateTarget={(view, tab) => {
+            if (isAdminOnlySession) {
+              setActiveView('operasional');
+              if (tab) {
+                setDashboardTargetTab({ tab, nonce: Date.now() });
+              }
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+              return;
+            }
             if (view === 'operasional' && !canAccessOperational) {
               setActiveView('member');
               return;
