@@ -36,11 +36,11 @@ export const PWAInstallButton: React.FC = () => {
 
       {showGuide && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-4 backdrop-blur-xs safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md rounded-xl border border-stone-200 bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold text-emerald-800">Aplikasi Layar Utama</p>

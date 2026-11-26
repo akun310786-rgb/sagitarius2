@@ -136,7 +136,7 @@ export const ResellerHelpTab: React.FC<ResellerHelpTabProps> = ({
       <div className="grid gap-5 lg:grid-cols-12">
         <form
           onSubmit={handleSubmitTicket}
-          className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7"
+          className="min-w-0 space-y-4 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7"
         >
           <div className="flex items-center gap-2 border-b border-stone-100 pb-3">
             <LifeBuoy className="h-5 w-5 text-[#0C3328]" />
@@ -229,7 +229,7 @@ export const ResellerHelpTab: React.FC<ResellerHelpTabProps> = ({
           </div>
         </form>
 
-        <div className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5">
+        <div className="min-w-0 space-y-4 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-5">
           <div>
             <h3 className="font-display text-base font-bold text-stone-900">
               Ringkasan Ketentuan &amp; Jadwal Layanan

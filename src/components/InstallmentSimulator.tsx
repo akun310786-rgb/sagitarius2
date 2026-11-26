@@ -67,10 +67,10 @@ export const InstallmentSimulator: React.FC<InstallmentSimulatorProps> = ({
   return (
     <div
       id="simulator"
-      className="rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xs sm:p-8"
+      className="rounded-2xl border border-[#E4DCCB] bg-white p-4 shadow-xs sm:p-8"
     >
-      <div className="grid gap-8 lg:grid-cols-12">
-        <div className="space-y-5 lg:col-span-7">
+      <div className="grid gap-6 sm:gap-8 lg:grid-cols-12">
+        <div className="min-w-0 space-y-5 lg:col-span-7">
           <div>
             <p className="text-xs font-semibold text-[#C8A053]">
               Kalkulator &amp; Simulator Cicilan Resmi
@@ -196,7 +196,7 @@ export const InstallmentSimulator: React.FC<InstallmentSimulatorProps> = ({
         </div>
 
         {/* Simulation Summary Panel (Dark Emerald + Gold luxury accent) */}
-        <div className="bg-arabesque-emerald flex flex-col justify-between rounded-2xl border border-[#C8A053]/40 p-6 text-white lg:col-span-5">
+        <div className="min-w-0 bg-arabesque-emerald flex flex-col justify-between rounded-2xl border border-[#C8A053]/40 p-5 sm:p-6 text-white lg:col-span-5">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-[#E8CA82]">
               <Sparkles className="h-4 w-4" />

@@ -99,7 +99,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
       {/* Editorial Intro */}
       <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
         <div className="grid items-center gap-8 lg:grid-cols-12">
-          <div className="space-y-4 lg:col-span-5">
+          <div className="min-w-0 space-y-4 lg:col-span-5">
             <p className="text-xs font-semibold text-[#C8A053]">
               {COMPANY_INFO.legalName}
             </p>
@@ -123,7 +123,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
             </button>
           </div>
 
-          <div className="lg:col-span-7">
+          <div className="min-w-0 lg:col-span-7">
             <div className="overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] shadow-xs">
               <img
                 src={IMG_HERO}
@@ -167,7 +167,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-6 text-white sm:p-8">
           <div className="grid gap-8 lg:grid-cols-12">
-            <div className="space-y-3 lg:col-span-3">
+            <div className="min-w-0 space-y-3 lg:col-span-3">
               <h2 className="font-display text-2xl font-bold text-white">
                 Proses Pengemasan Sagitarius Parcel
               </h2>
@@ -177,7 +177,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
+            <div className="min-w-0 grid gap-4 sm:grid-cols-2 lg:col-span-9 lg:grid-cols-4">
               {packagingSteps.map((s) => (
                 <div key={s.num} className="space-y-2.5">
                   <div className="overflow-hidden rounded-xl border border-[#C8A053]/40 bg-[#FAF5FC]">
@@ -208,8 +208,8 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
 
       {/* Program Komisi Reseller Eksklusif & Mitra Agen */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
-          <div className="space-y-3 lg:col-span-5">
+        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-8 lg:grid-cols-12">
+          <div className="min-w-0 space-y-3 lg:col-span-5">
             <button
               type="button"
               onClick={() => setShowPosterModal(true)}
@@ -227,7 +227,7 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
             </button>
           </div>
 
-          <div className="space-y-5 lg:col-span-7">
+          <div className="min-w-0 space-y-5 lg:col-span-7">
             <div>
               <p className="text-xs font-semibold text-[#C8A053]">Program Kemitraan Resmi</p>
               <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
@@ -332,13 +332,13 @@ export const TentangKamiPage: React.FC<TentangKamiPageProps> = ({
 
       {showPosterModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 p-3 sm:p-4 backdrop-blur-xs safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
           onClick={() => setShowPosterModal(false)}
         >
           <div
-            className="relative max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-stone-950 p-3 shadow-2xl"
+            className="relative max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[#C8A053]/60 bg-stone-950 p-3 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -503,7 +503,7 @@ export const KontakPage: React.FC = () => {
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="grid items-start gap-8 lg:grid-cols-12">
         {/* Left Column: Heading + 4 Clickable Contact Cards */}
-        <div className="space-y-4 lg:col-span-4">
+        <div className="min-w-0 space-y-4 lg:col-span-4">
           <h1 className="font-display text-3xl leading-tight font-bold text-[#381E5A] sm:text-4xl">
             Mari Terhubung dengan Sagitarius Parcel
           </h1>
@@ -595,7 +595,7 @@ export const KontakPage: React.FC = () => {
         </div>
 
         {/* Center Column: Dark Forest Emerald Contact Form + Hubungi Admin */}
-        <div className="space-y-4 lg:col-span-4">
+        <div className="min-w-0 space-y-4 lg:col-span-4">
           <form
             onSubmit={handleSubmitMessage}
             className="bg-arabesque-emerald rounded-2xl border-2 border-[#C8A053]/60 p-6 text-white shadow-sm"
@@ -693,7 +693,7 @@ export const KontakPage: React.FC = () => {
         </div>
 
         {/* Right Column: Arched Hamper Photo + Peta Lokasi Kami */}
-        <div className="space-y-4 lg:col-span-4">
+        <div className="min-w-0 space-y-4 lg:col-span-4">
           <div className="overflow-hidden rounded-tl-[140px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-xs">
             <img
               src={IMG_HERO}

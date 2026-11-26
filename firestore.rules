@@ -455,15 +455,12 @@ service cloud.firestore {
           (
             existing().member_id == request.auth.uid &&
             existing().status == 'aktif' &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['agen_id', 'agen_kode', 'agen_nama', 'wilayah', 'grup_arisan', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['grup_arisan', 'updatedAt'])
           )
         );
       allow delete: if isSignedIn() && isValidId(subscriptionId) &&
         existing().total_terkumpul == 0 &&
-        (
-          isAdmin() ||
-          (existing().member_id == request.auth.uid && existing().status == 'aktif')
-        );
+        isAdmin();
     }
 
     // Financial Transactions: strictly scoped, parent-verified, terminal-locked, NEVER deletable

@@ -241,7 +241,7 @@ export const AdminBankReconciliationTab: React.FC<AdminBankReconciliationTabProp
       {/* Input Mutasi & Hasil Pencocokan */}
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Kolom Kiri: Input Paste Teks */}
-        <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5 space-y-3">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-5 space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
               <ClipboardPaste className="h-4 w-4 text-stone-500" />
@@ -263,7 +263,7 @@ export const AdminBankReconciliationTab: React.FC<AdminBankReconciliationTabProp
         </div>
 
         {/* Kolom Kanan: Hasil Pencocokan / Match Engine */}
-        <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7 space-y-4">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7 space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3">
             <div>
               <h3 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">

@@ -339,11 +339,11 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   const renderBrochuresModal = () =>
     showBrochuresModal && (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/75 p-3 sm:p-4 backdrop-blur-xs"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/75 p-3 sm:p-4 backdrop-blur-xs safe-top safe-bottom"
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#C8A053]/50 bg-white shadow-2xl">
+        <div className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#C8A053]/50 bg-white shadow-2xl">
           <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#0C3328] px-4 py-3 sm:px-5 sm:py-3.5 text-white">
             <div className="min-w-0 pr-2">
               <p className="truncate text-[11px] font-semibold text-[#E8CA82]">
@@ -481,7 +481,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         {/* Main Detail Split Grid */}
         <div className="grid gap-6 sm:gap-8 lg:grid-cols-12">
           {/* Left Gallery + 5 Thumbnails */}
-          <div className="space-y-3 lg:col-span-6">
+          <div className="min-w-0 space-y-3 lg:col-span-6">
             <div className="relative overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] shadow-xs">
               <img
                 src={activePhoto.src}
@@ -533,7 +533,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           </div>
 
           {/* Right Spec Card */}
-          <div className="flex flex-col justify-between rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:col-span-6">
+          <div className="min-w-0 flex flex-col justify-between rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-8 lg:col-span-6">
             <div>
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -900,7 +900,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
       <div className="mx-auto max-w-7xl space-y-7 px-4 py-6 sm:px-6 lg:px-8">
         {/* Hero Header */}
         <section className="grid items-center gap-6 lg:grid-cols-12">
-          <div className="space-y-3 lg:col-span-6">
+          <div className="min-w-0 space-y-3 lg:col-span-6">
             <p className="text-xs font-semibold text-[#C8A053]">
               Katalog Resmi 2026–2027 · {COMPANY_INFO.legalName}
             </p>
@@ -936,7 +936,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             </div>
           </div>
 
-          <div className="lg:col-span-6">
+          <div className="min-w-0 lg:col-span-6">
             <div className="overflow-hidden rounded-t-[100px] sm:rounded-t-[150px] rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-xs">
               <img
                 src={isTabunganUang ? BROCHURE_UANG : IMG_HERO}
@@ -1548,7 +1548,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
       {/* Split Hero Section with Gabung Member & Gabung Agen CTA */}
       <section className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-7 lg:px-8">
         <div className="grid items-center gap-7 lg:grid-cols-12 lg:gap-10">
-          <div className="space-y-4 sm:space-y-5 lg:col-span-6">
+          <div className="min-w-0 space-y-4 sm:space-y-5 lg:col-span-6">
             <p className="text-xs font-semibold text-[#C8A053]">
               {COMPANY_INFO.legalName} · {COMPANY_INFO.tagline}
             </p>
@@ -1595,7 +1595,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             </div>
           </div>
 
-          <div className="lg:col-span-6">
+          <div className="min-w-0 lg:col-span-6">
             <div className="relative overflow-hidden rounded-tl-[100px] sm:rounded-tl-[150px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-sm">
               <img
                 src={IMG_HERO}
@@ -1711,8 +1711,8 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
 
       {/* Program Komisi Reseller Eksklusif & Mitra Agen Resmi */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-8 lg:grid-cols-12">
-          <div className="lg:col-span-5">
+        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-8 lg:grid-cols-12">
+          <div className="min-w-0 lg:col-span-5">
             <button
               type="button"
               onClick={() => {
@@ -1732,7 +1732,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
               </span>
             </button>
           </div>
-          <div className="space-y-4 lg:col-span-7">
+          <div className="min-w-0 space-y-4 lg:col-span-7">
             <div>
               <p className="text-xs font-semibold text-[#C8A053]">
                 Program Kemitraan Priangan Timur · Tanpa Modal Stok Barang

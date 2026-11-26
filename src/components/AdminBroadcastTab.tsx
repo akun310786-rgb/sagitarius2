@@ -278,7 +278,7 @@ export const AdminBroadcastTab: React.FC<AdminBroadcastTabProps> = ({
       {/* Template & Form Komposisi Pesan */}
       <div className="grid gap-5 lg:grid-cols-12">
         {/* Kolom Kiri: Template & Editor */}
-        <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-6 space-y-4">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-6 space-y-4">
           <div>
             <label className="block text-xs font-bold text-stone-800 mb-1.5 flex items-center gap-1.5">
               <Sparkles className="h-4 w-4 text-amber-700" />
@@ -352,7 +352,7 @@ export const AdminBroadcastTab: React.FC<AdminBroadcastTabProps> = ({
         </div>
 
         {/* Kolom Kanan: Daftar Penerima & Aksi Kirim Per Kontak */}
-        <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-6 space-y-4">
+        <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-6 space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-stone-100 pb-3">
             <div>
               <h3 className="text-xs font-bold text-stone-900 flex items-center gap-1.5">

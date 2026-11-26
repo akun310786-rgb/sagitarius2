@@ -247,12 +247,12 @@ export const ReceiptGeneratorModal: React.FC<ReceiptGeneratorModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-3 sm:p-4 backdrop-blur-xs safe-top safe-bottom"
       role="dialog"
       aria-modal="true"
     >
       {/* Modal Screen Card */}
-      <div className="no-print w-full max-w-md overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-white shadow-2xl">
+      <div className="no-print w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-[#C8A053]/60 bg-white shadow-2xl">
         <div className="flex items-center justify-between bg-gradient-to-r from-[#381E5A] to-[#0C3328] px-5 py-4 text-white">
           <div>
             <p className="text-[11px] font-semibold text-[#E8CA82]">
@@ -341,7 +341,7 @@ export const ReceiptGeneratorModal: React.FC<ReceiptGeneratorModalProps> = ({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3">
             <button
               type="button"
               onClick={handleDownloadPng}

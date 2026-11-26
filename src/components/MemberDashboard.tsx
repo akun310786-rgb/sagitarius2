@@ -37,7 +37,6 @@ import { QRCodeSVG } from 'qrcode.react';
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   serverTimestamp,
   updateDoc,
@@ -183,14 +182,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   const [copiedBank, setCopiedBank] = useState(false);
   const [copiedQris, setCopiedQris] = useState(false);
 
-  // Contract Controls: Expand Package Items / Change Agent / Grup Arisan / Cancel Contract
+  // Contract Controls: Expand Package Items / Grup Arisan
   const [showPackageContents, setShowPackageContents] = useState(false);
-  const [showAgentSwitch, setShowAgentSwitch] = useState(false);
-  const [switchAgentId, setSwitchAgentId] = useState('');
   const [showGrupEdit, setShowGrupEdit] = useState(false);
   const [editGrupValue, setEditGrupValue] = useState('');
   const [updatingAgent, setUpdatingAgent] = useState(false);
-  const [confirmCancelContract, setConfirmCancelContract] = useState(false);
 
   const mySubscriptions = useMemo(() => {
     if (!userProfile) return [];
@@ -426,47 +422,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       );
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${activeSub.id}`);
-    } finally {
-      setUpdatingAgent(false);
-    }
-  };
-
-  const handleSwitchAgent = async () => {
-    if (!activeSub || !switchAgentId) return;
-    const targetAgent = agents.find((a) => a.id === switchAgentId);
-    if (!targetAgent) return;
-    setUpdatingAgent(true);
-    setFeedbackMsg('');
-    try {
-      await updateDoc(doc(db, 'subscriptions', activeSub.id), {
-        agen_id: targetAgent.id,
-        agen_kode: targetAgent.kode_agen,
-        agen_nama: targetAgent.nama,
-        wilayah: targetAgent.wilayah,
-        updatedAt: serverTimestamp(),
-      });
-      setShowAgentSwitch(false);
-      setFeedbackMsg(
-        `Agen pendamping untuk kontrak ${activeSub.package_nama} berhasil dialihkan ke ${targetAgent.nama} (${targetAgent.wilayah}).`
-      );
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `subscriptions/${activeSub.id}`);
-    } finally {
-      setUpdatingAgent(false);
-    }
-  };
-
-  const handleCancelContract = async () => {
-    if (!activeSub || activeSub.total_terkumpul > 0 || activeSub.status !== 'aktif') return;
-    setUpdatingAgent(true);
-    setFeedbackMsg('');
-    try {
-      await deleteDoc(doc(db, 'subscriptions', activeSub.id));
-      setConfirmCancelContract(false);
-      setSelectedSubId('');
-      setFeedbackMsg(`Kontrak ${activeSub.package_nama} berhasil dibatalkan sebelum setoran pertama.`);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `subscriptions/${activeSub.id}`);
     } finally {
       setUpdatingAgent(false);
     }
@@ -834,16 +789,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-7xl space-y-5 sm:space-y-6 px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
       {/* Broadcast Announcement Banner from Admin */}
       {appSettings.pengumuman_aktif && appSettings.pengumuman_isi && (
-        <div className="no-print flex items-start gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#381E5A] to-[#281443] px-5 py-4 text-white shadow-sm">
+        <div className="no-print flex items-start gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#381E5A] to-[#281443] px-4 py-3.5 sm:px-5 sm:py-4 text-white shadow-sm">
           <Megaphone className="mt-0.5 h-5 w-5 shrink-0 text-[#E8CA82]" />
-          <div className="text-xs leading-relaxed">
-            <p className="font-bold text-[#E8CA82]">
+          <div className="min-w-0 flex-1 text-xs leading-relaxed">
+            <p className="font-bold text-[#E8CA82] break-words">
               {appSettings.pengumuman_judul || 'Pengumuman Resmi Sagitarius Parcel'}
             </p>
-            <p className="mt-0.5 text-stone-100 whitespace-pre-line">{appSettings.pengumuman_isi}</p>
+            <p className="mt-0.5 text-stone-100 whitespace-pre-line break-words">{appSettings.pengumuman_isi}</p>
           </div>
         </div>
       )}
@@ -854,18 +809,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         .map((app) => (
           <div
             key={app.id}
-            className={`no-print rounded-2xl border px-5 py-4 text-xs leading-relaxed ${
+            className={`no-print rounded-2xl border px-4 py-3.5 sm:px-5 sm:py-4 text-xs leading-relaxed ${
               app.status === 'pending'
                 ? 'border-amber-300 bg-amber-50 text-amber-950'
                 : 'border-rose-200 bg-rose-50 text-rose-900'
             }`}
           >
-            <p className="font-bold">
+            <p className="font-bold break-words">
               {app.status === 'pending'
                 ? `Pengajuan Agen Wilayah ${app.wilayah} (${app.kecamatan}) — Menunggu Verifikasi Admin Pusat`
                 : `Pengajuan Agen Wilayah ${app.wilayah} Ditolak`}
             </p>
-            <p className="mt-1">
+            <p className="mt-1 break-words">
               {app.status === 'pending'
                 ? 'Tim Admin Pusat sedang meninjau pengajuan kemitraan agen Anda. Notifikasi realtime akan muncul pada ikon pesan di pojok kanan bawah segera setelah kode agen Anda aktif.'
                 : app.review_note || 'Silakan hubungi CS Resmi 0813 2438 3479 untuk informasi lebih lanjut.'}
@@ -874,39 +829,39 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
         ))}
 
       {/* Header Bar */}
-      <div className="no-print flex flex-col gap-4 border-b border-[#E4DCCB] pb-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="no-print flex flex-col gap-3.5 border-b border-[#E4DCCB] pb-5 sm:flex-row sm:items-center sm:justify-between sm:pb-6">
+        <div className="min-w-0">
           <p className="text-xs font-semibold text-[#0C3328]">
             Dashboard Member · Wilayah {userProfile.wilayah}
           </p>
-          <h1 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
+          <h1 className="mt-1 font-display text-xl font-bold text-[#381E5A] sm:text-3xl break-words">
             Buku Tabungan Digital — {userProfile.nama}
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {activeSub && (
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-2 rounded-xl border border-[#E4DCCB] bg-white px-4 py-2.5 text-xs font-semibold text-[#381E5A] transition hover:bg-[#FAF7F2] whitespace-nowrap cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E4DCCB] bg-white px-3.5 py-2 text-xs font-semibold text-[#381E5A] transition hover:bg-[#FAF7F2] cursor-pointer"
             >
-              <Printer className="h-4 w-4 text-[#C8A053]" />
-              <span>Cetak Kartu Tabungan</span>
+              <Printer className="h-4 w-4 shrink-0 text-[#C8A053]" />
+              <span>Cetak Kartu</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => setShowNewContractForm((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#0C3328] px-4 py-2.5 text-xs font-semibold text-[#E8CA82] transition hover:bg-[#144738] whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0C3328] px-3.5 py-2 text-xs font-semibold text-[#E8CA82] transition hover:bg-[#144738] cursor-pointer"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4 shrink-0" />
             <span>{showNewContractForm ? 'Tutup Form Daftar' : 'Tambah Kontrak Paket'}</span>
           </button>
         </div>
       </div>
 
       {feedbackMsg && (
-        <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950">
+        <div className="no-print rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs sm:text-sm font-medium text-emerald-950 break-words">
           {feedbackMsg}
         </div>
       )}
@@ -915,7 +870,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       {(showNewContractForm || lockedSimulation || mySubscriptions.length === 0) && (
         <form
           onSubmit={handleCreateContract}
-          className="no-print rounded-2xl border border-[#E4DCCB] bg-white p-6 sm:p-8 shadow-xs"
+          className="no-print rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-8 shadow-xs"
         >
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1073,18 +1028,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
       {mySubscriptions.length > 0 && activeSub && (
         <>
           {mySubscriptions.length > 1 && (
-            <div className="no-print rounded-2xl border border-[#C8A053]/50 bg-gradient-to-r from-[#381E5A] to-[#241140] p-5 text-white shadow-xs">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
+            <div className="no-print rounded-2xl border border-[#C8A053]/50 bg-gradient-to-r from-[#381E5A] to-[#241140] p-4 sm:p-5 text-white shadow-xs">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <div className="min-w-0">
                   <p className="text-[11px] font-semibold text-[#E8CA82] uppercase tracking-wide">
                     Portofolio Multi-Kontrak Anda ({mySubscriptions.length} Paket Aktif)
                   </p>
-                  <p className="font-mono-nums text-lg font-bold mt-0.5">
+                  <p className="font-mono-nums text-base sm:text-lg font-bold mt-0.5 break-words">
                     Total Terkumpul: {formatRupiah(mySubscriptions.reduce((s, c) => s + (c.total_terkumpul || 0), 0))}
                   </p>
                 </div>
-                <div className="text-right text-xs">
-                  <p className="text-stone-300">Akumulasi Target: <strong className="text-white">{formatRupiah(mySubscriptions.reduce((s, c) => s + (c.target_nominal || 0), 0))}</strong></p>
+                <div className="text-left sm:text-right text-xs">
+                  <p className="text-stone-300">Akumulasi Target: <strong className="font-mono-nums text-white">{formatRupiah(mySubscriptions.reduce((s, c) => s + (c.target_nominal || 0), 0))}</strong></p>
                 </div>
               </div>
             </div>
@@ -1098,10 +1053,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   type="button"
                   onClick={() => {
                     setSelectedSubId(sub.id);
-                    setShowAgentSwitch(false);
-                    setConfirmCancelContract(false);
+                    setShowGrupEdit(false);
                   }}
-                  className={`rounded-xl px-4 py-2 text-xs font-semibold transition cursor-pointer ${
+                  className={`max-w-full rounded-xl px-3.5 py-2 text-left text-xs font-semibold transition cursor-pointer ${
                     sub.id === activeSub.id
                       ? 'bg-[#381E5A] text-[#E8CA82]'
                       : 'border border-[#E4DCCB] bg-white text-stone-700 hover:bg-[#FAF7F2]'
@@ -1178,29 +1132,29 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           </div>
 
           {/* Main Passbook + QR Grid */}
-          <div className="no-print grid gap-6 lg:grid-cols-12">
+          <div className="no-print grid gap-5 sm:gap-6 lg:grid-cols-12">
             {/* Left 8 cols: Passbook Summary, Tracker, Contents & Upload Transfer */}
-            <div className="space-y-6 lg:col-span-8">
-              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold text-[#0C3328]">
+            <div className="min-w-0 space-y-5 sm:space-y-6 lg:col-span-8">
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-[#0C3328] break-words">
                       {activeSub.wilayah} · Agen: {activeSub.agen_nama || activeSub.agen_kode}
                     </p>
-                    <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A]">
+                    <h2 className="mt-1 font-display text-xl sm:text-2xl font-bold text-[#381E5A] break-words">
                       {activeSub.package_nama}
                     </h2>
                     <button
                       type="button"
                       onClick={handleDownloadPassbookPng}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
+                      className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-1.5 text-left text-xs font-semibold text-[#381E5A] hover:bg-[#EFE8DA] cursor-pointer"
                     >
-                      <Download className="h-3.5 w-3.5 text-[#0C3328]" />
+                      <Download className="h-3.5 w-3.5 shrink-0 text-[#0C3328]" />
                       <span>Simpan Kartu Buku Tabungan (PNG)</span>
                     </button>
                   </div>
                   <span
-                    className={`rounded-md px-3 py-1 text-xs font-semibold ${
+                    className={`shrink-0 rounded-md px-3 py-1 text-xs font-semibold ${
                       activeSub.status === 'diambil'
                         ? 'bg-[#381E5A] text-white'
                         : isPaidOff
@@ -1217,7 +1171,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 </div>
 
                 {/* Progress Bar */}
-                <div className="mt-6">
+                <div className="mt-5 sm:mt-6">
                   <div className="flex items-baseline justify-between text-xs">
                     <span className="font-medium text-stone-600">Progres Pelunasan</span>
                     <span className="font-mono-nums text-base font-bold text-[#0C3328]">
@@ -1233,28 +1187,28 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 </div>
 
                 {/* Financial Stats */}
-                <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#EFE8D8] pt-5 sm:grid-cols-4">
-                  <div>
-                    <p className="text-xs text-stone-500">Total Terkumpul</p>
-                    <p className="mt-1 font-mono-nums text-base font-bold text-[#0C3328]">
+                <div className="mt-5 sm:mt-6 grid grid-cols-2 gap-3 sm:gap-4 border-t border-[#EFE8D8] pt-4 sm:pt-5 sm:grid-cols-4">
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs text-stone-500">Total Terkumpul</p>
+                    <p className="mt-1 font-mono-nums text-sm sm:text-base font-bold text-[#0C3328] break-words">
                       {formatRupiah(activeSub.total_terkumpul)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-stone-500">Target Paket</p>
-                    <p className="mt-1 font-mono-nums text-base font-bold text-[#381E5A]">
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs text-stone-500">Target Paket</p>
+                    <p className="mt-1 font-mono-nums text-sm sm:text-base font-bold text-[#381E5A] break-words">
                       {formatRupiah(activeSub.target_nominal)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-stone-500">Sisa Pelunasan</p>
-                    <p className="mt-1 font-mono-nums text-base font-bold text-[#B98E3A]">
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs text-stone-500">Sisa Pelunasan</p>
+                    <p className="mt-1 font-mono-nums text-sm sm:text-base font-bold text-[#B98E3A] break-words">
                       {formatRupiah(remainingAmount)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-stone-500">Jadwal Ambil</p>
-                    <p className="mt-1 text-sm font-semibold text-stone-900">
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs text-stone-500">Jadwal Ambil</p>
+                    <p className="mt-1 text-xs sm:text-sm font-semibold text-stone-900 break-words">
                       {activeSub.jadwal_ambil || 'H-7 Lebaran'}
                     </p>
                   </div>
@@ -1330,7 +1284,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       return (
                         <div
                           key={step.id}
-                          className={`rounded-lg border px-2.5 py-2 text-[11px] font-semibold transition ${
+                          className={`min-w-0 break-words rounded-lg border px-2.5 py-2 text-[11px] font-semibold transition last:col-span-2 sm:last:col-span-1 ${
                             isCurrent
                               ? 'border-[#0C3328] bg-[#0C3328] text-[#E8CA82]'
                               : isDone
@@ -1413,11 +1367,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </div>
                 )}
 
-                {/* Agent Contact + Switch Agent / Cancel Contract (only if balance == 0 && aktif) */}
+                {/* Agent Contact + Locked Contract Policy & Grup Arisan */}
                 <div className="mt-5 space-y-3">
                   {activeAgentInfo && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#FAF7F2] border border-[#E4DCCB] px-4 py-3 text-xs">
-                      <span className="text-stone-600">
+                    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between rounded-xl bg-[#FAF7F2] border border-[#E4DCCB] px-3.5 py-3 sm:px-4 text-xs">
+                      <span className="min-w-0 text-stone-600 break-words">
                         Setoran tunai jemput bola? Hubungi Agen{' '}
                         <strong className="text-[#381E5A]">{activeAgentInfo.nama}</strong> (
                         {activeAgentInfo.kode_agen}).
@@ -1429,7 +1383,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         )}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 font-semibold text-[#15803D] hover:underline"
+                        className="inline-flex shrink-0 items-center gap-1.5 font-semibold text-[#15803D] hover:underline"
                       >
                         <MessageCircle className="h-3.5 w-3.5" />
                         <span>Chat Agen via WhatsApp</span>
@@ -1438,19 +1392,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   )}
 
                   {activeSub.status === 'aktif' && (
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSwitchAgentId(activeSub.agen_id);
-                            setShowAgentSwitch((v) => !v);
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 font-semibold text-[#381E5A] hover:bg-[#FAF7F2] cursor-pointer"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          <span>Ganti Agen Wilayah</span>
-                        </button>
+                    <div className="space-y-2.5 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -1459,68 +1402,33 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           }}
                           className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 font-semibold text-[#0C3328] hover:bg-[#FAF7F2] cursor-pointer"
                         >
-                          <Layers className="h-3.5 w-3.5" />
+                          <Layers className="h-3.5 w-3.5 shrink-0" />
                           <span>{activeSub.grup_arisan ? 'Ubah Label Grup/Arisan' : 'Tautkan Grup/Arisan'}</span>
                         </button>
+
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] px-2.5 py-1 text-[11px] font-medium text-stone-600">
+                          <Lock className="h-3 w-3 shrink-0 text-[#C8A053]" />
+                          <span>Agen &amp; Kontrak Terkunci Resmi</span>
+                        </span>
                       </div>
 
-                      {activeSub.total_terkumpul === 0 && (
-                        <>
-                          {confirmCancelContract ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-rose-700 font-semibold">Yakin batalkan?</span>
-                              <button
-                                type="button"
-                                disabled={updatingAgent}
-                                onClick={() => void handleCancelContract()}
-                                className="rounded-lg bg-rose-700 px-3 py-1.5 font-semibold text-white hover:bg-rose-800 cursor-pointer"
-                              >
-                                Ya, Batalkan Kontrak
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmCancelContract(false)}
-                                className="rounded-lg border border-stone-300 px-2.5 py-1.5 text-stone-600 cursor-pointer"
-                              >
-                                Batal
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmCancelContract(true)}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>Batalkan Kontrak (Saldo Rp 0)</span>
-                            </button>
+                      <div className="flex flex-col gap-2 rounded-xl border border-stone-200 bg-stone-50/80 px-3.5 py-2.5 text-[11px] text-stone-600 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="leading-relaxed">
+                          Untuk menjaga keamanan komisi agen &amp; audit setoran, perubahan agen pendamping atau pembatalan kontrak hanya dapat diproses oleh Admin Pusat.
+                        </span>
+                        <a
+                          href={formatWhatsAppUrl(
+                            '081324383479',
+                            `Halo Admin Sagitarius Parcel, saya ${userProfile.nama} (${userProfile.no_wa}) ingin mengajukan perubahan/konsultasi kontrak ${activeSub.package_nama} (Token: ${activeSub.qr_code_token}).`
                           )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {showAgentSwitch && activeSub.status === 'aktif' && (
-                    <div className="flex flex-col gap-2 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3 sm:flex-row sm:items-center">
-                      <select
-                        value={switchAgentId}
-                        onChange={(e) => setSwitchAgentId(e.target.value)}
-                        className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
-                      >
-                        {agents.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.wilayah} — {a.nama} ({a.kode_agen})
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        disabled={updatingAgent}
-                        onClick={() => void handleSwitchAgent()}
-                        className="rounded-lg bg-[#381E5A] px-4 py-2 text-xs font-semibold text-white hover:bg-[#492974] disabled:opacity-60 cursor-pointer"
-                      >
-                        {updatingAgent ? 'Menyimpan...' : 'Simpan Agen Baru'}
-                      </button>
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex shrink-0 items-center gap-1 font-semibold text-[#381E5A] hover:underline"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 text-[#0C3328]" />
+                          <span>Ajukan via Admin CS</span>
+                        </a>
+                      </div>
                     </div>
                   )}
 
@@ -1532,7 +1440,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         value={editGrupValue}
                         onChange={(e) => setEditGrupValue(e.target.value)}
                         placeholder="Nama Grup/Arisan Keluarga atau Kantor..."
-                        className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
+                        className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs text-stone-900"
                       />
                       <button
                         type="button"
@@ -1549,7 +1457,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
               {/* Ringkasan Program Grup / Arisan Keluarga & Kantor */}
               {groupArisanSummaries.length > 0 && (
-                <div className="rounded-2xl border border-[#E4DCCB] bg-white p-5">
+                <div className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-5">
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-[#381E5A]" />
                     <h3 className="font-display text-lg font-bold text-[#381E5A]">
@@ -1612,11 +1520,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               {activeSub.status !== 'diambil' && (!isPaidOff || activeSub.total_terkumpul > 0) && (
                 <form
                   onSubmit={handleSubmitTransactionRequest}
-                  className="rounded-2xl border border-[#E4DCCB] bg-white p-6"
+                  className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-6"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EFE8D8] pb-4">
-                    <div>
-                      <h3 className="font-display text-lg font-bold text-[#381E5A]">
+                    <div className="min-w-0">
+                      <h3 className="font-display text-base sm:text-lg font-bold text-[#381E5A]">
                         {txMode === 'setoran'
                           ? 'Kirim Setoran Transfer & Unggah Bukti'
                           : 'Ajukan Penarikan Saldo Tabungan'}
@@ -1628,7 +1536,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       </p>
                     </div>
 
-                    <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
+                    <div className="inline-flex shrink-0 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-0.5 text-xs">
                       {!isPaidOff && (
                         <button
                           type="button"
@@ -1670,10 +1578,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
                   {/* Official Company Bank Account & Unique 3-Digit Invoice / QRIS Box */}
                   {txMode === 'setoran' && (
-                    <div className="mt-4 space-y-3 rounded-xl border border-[#C8A053]/40 bg-[#FAF7F2] p-4">
+                    <div className="mt-4 space-y-3 rounded-xl border border-[#C8A053]/40 bg-[#FAF7F2] p-3.5 sm:p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-xs font-bold text-[#381E5A]">
-                          <Building2 className="h-4 w-4 text-[#C8A053]" />
+                          <Building2 className="h-4 w-4 shrink-0 text-[#C8A053]" />
                           <span>Rekening Resmi Transfer Setoran</span>
                         </div>
                         <span className="rounded bg-[#0C3328] px-2 py-0.5 text-[10px] font-semibold text-[#E8CA82]">
@@ -1681,18 +1589,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="font-mono-nums text-base font-bold text-[#381E5A]">
+                        <div className="min-w-0">
+                          <p className="font-mono-nums text-sm sm:text-base font-bold text-[#381E5A] break-all">
                             {appSettings.bank_rekening}
                           </p>
-                          <p className="text-xs text-stone-600">
+                          <p className="text-xs text-stone-600 break-words">
                             a.n. <strong>{appSettings.bank_atas_nama}</strong>
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={() => void handleCopyRekening()}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-stone-50 cursor-pointer"
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#E4DCCB] bg-white px-3 py-1.5 text-xs font-semibold text-[#381E5A] hover:bg-stone-50 cursor-pointer"
                         >
                           {copiedBank ? (
                             <>
@@ -1712,10 +1620,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                         <div className="border-t border-[#EFE8D8] pt-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-2 text-xs font-bold text-[#381E5A]">
-                              <QrCode className="h-4 w-4 text-[#0C3328]" />
+                              <QrCode className="h-4 w-4 shrink-0 text-[#0C3328]" />
                               <span>QRIS Resmi Perusahaan</span>
                             </div>
-                            <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-[#0C3328]">
+                            <span className="rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-[#0C3328] break-words">
                               {appSettings.qris_merchant?.trim() || appSettings.bank_atas_nama}
                             </span>
                           </div>
@@ -1724,7 +1632,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setPreviewProofUrl(appSettings.qris_kode || null)}
-                                className="group relative shrink-0 self-start overflow-hidden rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-1.5 cursor-pointer"
+                                className="group relative shrink-0 self-center sm:self-start overflow-hidden rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-1.5 cursor-pointer"
                                 title="Klik untuk memperbesar gambar QRIS"
                               >
                                 <img
@@ -1737,7 +1645,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                                 </span>
                               </button>
                             ) : (
-                              <div className="shrink-0 self-start rounded-lg border border-[#E4DCCB] bg-white p-2">
+                              <div className="shrink-0 self-center sm:self-start rounded-lg border border-[#E4DCCB] bg-white p-2">
                                 <QRCodeSVG
                                   value={appSettings.qris_kode.trim()}
                                   size={112}
@@ -1801,7 +1709,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
                         {useUniqueInvoice && baseDepositNum >= 1000 && (
                           <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[#C8A053]/60 bg-white p-3 sm:flex-row sm:items-center">
-                            <div className="shrink-0 rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-2">
+                            <div className="shrink-0 self-center sm:self-start rounded-lg border border-[#E4DCCB] bg-[#FAF7F2] p-2">
                               <QRCodeSVG
                                 value={
                                   appSettings.qris_kode?.trim() &&
@@ -1813,8 +1721,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                                 level="M"
                               />
                             </div>
-                            <div className="flex-1 space-y-1 text-xs">
-                              <p className="font-mono-nums font-bold text-[#381E5A]">
+                            <div className="min-w-0 flex-1 space-y-1 text-xs">
+                              <p className="font-mono-nums font-bold text-[#381E5A] break-all">
                                 {currentInvoiceCode}
                               </p>
                               <p className="text-stone-600">
@@ -1950,12 +1858,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           ? 'Catatan transfer (mis. Setoran minggu ke-4 via BRI/BCA)'
                           : 'Keterangan penarikan / no. rekening tujuan jika transfer'
                       }
-                      className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
+                      className="min-w-0 w-full flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-900 focus:border-[#381E5A] focus:outline-none"
                     />
                     <button
                       type="submit"
                       disabled={uploadingDeposit}
-                      className={`rounded-xl px-5 py-2.5 text-xs font-semibold transition disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer ${
+                      className={`w-full sm:w-auto rounded-xl px-5 py-2.5 text-xs font-semibold transition disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer ${
                         txMode === 'penarikan'
                           ? 'bg-rose-800 text-white hover:bg-rose-700'
                           : 'bg-[#0C3328] text-[#E8CA82] hover:bg-[#144738]'
@@ -1983,7 +1891,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
 
               {/* Antrean Pengajuan Pending / Ditolak */}
               {pendingOrRejectedDeposits.length > 0 && (
-                <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+                <div className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-6">
                   <div>
                     <h3 className="font-display text-base font-bold text-[#381E5A]">
                       Pengajuan Menunggu Validasi / Ditolak ({pendingOrRejectedDeposits.length})
@@ -1992,7 +1900,62 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       Transaksi di bawah ini otomatis masuk ke tabel Riwayat Transaksi setelah divalidasi oleh Agen.
                     </p>
                   </div>
-                  <div className="mt-4 overflow-x-auto">
+
+                  {/* Mobile Card List (< sm) */}
+                  <div className="mt-3 space-y-2.5 sm:hidden">
+                    {pendingOrRejectedDeposits.map((dep) => {
+                      const isWithdraw =
+                        dep.jenis_transaksi === 'penarikan' ||
+                        dep.metode === 'pencairan_tunai' ||
+                        dep.metode === 'transfer_keluar';
+                      return (
+                        <div
+                          key={dep.id}
+                          className="rounded-xl border border-[#EFE8D8] bg-[#FAF7F2] p-3 text-xs space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono-nums text-[11px] text-stone-600">{dep.tanggal}</span>
+                            <span className="font-mono-nums font-bold text-stone-900">
+                              {isWithdraw ? '-' : '+'}
+                              {formatRupiah(dep.nominal)}
+                            </span>
+                          </div>
+                          <p className="font-semibold text-stone-900">
+                            {isWithdraw ? 'Pengajuan Penarikan' : 'Setoran Transfer'}
+                          </p>
+                          {dep.catatan && (
+                            <p className="text-[11px] text-stone-500 break-words">{dep.catatan}</p>
+                          )}
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#EFE8D8]">
+                            {dep.status_verifikasi === 'rejected' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700">
+                                <XCircle className="h-3.5 w-3.5" />
+                                Ditolak
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
+                                <Clock className="h-3.5 w-3.5" />
+                                Menunggu Validasi Agen
+                              </span>
+                            )}
+                            {dep.bukti_foto_url && (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewProofUrl(dep.bukti_foto_url || null)}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#0C3328] hover:underline cursor-pointer"
+                              >
+                                <FileImage className="h-3.5 w-3.5" />
+                                Lihat
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop Table (>= sm) */}
+                  <div className="mt-4 hidden sm:block overflow-x-auto">
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="border-b border-[#EFE8D8] text-xs text-stone-500">
@@ -2064,19 +2027,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
             </div>
 
             {/* Right 4 cols: Tiket QR Pengambilan & Kupon Undian Door Prize */}
-            <div className="space-y-6 lg:col-span-4">
-              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6">
+            <div className="min-w-0 space-y-5 sm:space-y-6 lg:col-span-4">
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-[#0C3328]">Tiket Pengambilan Paket</p>
                   <QrCode className="h-4 w-4 text-[#0C3328]" />
                 </div>
-                <h3 className="mt-1 font-display text-xl font-bold text-[#381E5A]">
+                <h3 className="mt-1 font-display text-lg sm:text-xl font-bold text-[#381E5A]">
                   E-Tiket QR Gudang
                 </h3>
 
                 {isPaidOff ? (
-                  <div className="mt-5 space-y-4">
-                    <div className="flex flex-col items-center rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-5">
+                  <div className="mt-4 sm:mt-5 space-y-4">
+                    <div className="flex flex-col items-center rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4 sm:p-5">
                       <QRCodeSVG
                         value={JSON.stringify({
                           token: activeSub.qr_code_token,
@@ -2084,14 +2047,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                           member: activeSub.member_nama,
                           paket: activeSub.package_nama,
                         })}
-                        size={176}
+                        size={168}
+                        className="max-w-full h-auto"
                         level="M"
                         includeMargin
                       />
-                      <p className="mt-3 font-mono-nums text-xs font-bold text-[#381E5A]">
+                      <p className="mt-3 font-mono-nums text-xs font-bold text-[#381E5A] break-all text-center">
                         {activeSub.qr_code_token}
                       </p>
-                      <p className="mt-1 text-xs text-stone-600">
+                      <p className="mt-1 text-xs text-stone-600 text-center">
                         Jadwal Ambil: <strong>{activeSub.jadwal_ambil || 'H-7 Lebaran'}</strong>
                       </p>
                     </div>
@@ -2111,7 +2075,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     </button>
                   </div>
                 ) : (
-                  <div className="mt-5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-6 text-center">
+                  <div className="mt-4 sm:mt-5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-5 sm:p-6 text-center">
                     <Lock className="mx-auto h-8 w-8 text-[#C8A053]" />
                     <p className="mt-3 text-sm font-semibold text-[#381E5A]">
                       Tiket QR Terkunci
@@ -2128,11 +2092,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
 
               {/* Kupon Undian Door Prize Digital */}
-              <div className="rounded-2xl border border-[#C8A053]/60 bg-gradient-to-br from-[#381E5A] to-[#241140] p-6 text-white shadow-sm">
-                <div className="flex items-center justify-between">
+              <div className="rounded-2xl border border-[#C8A053]/60 bg-gradient-to-br from-[#381E5A] to-[#241140] p-4 sm:p-6 text-white shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#E8CA82]">
-                    <Ticket className="h-4 w-4" />
-                    KUPON DOOR PRIZE LIVE
+                    <Ticket className="h-4 w-4 shrink-0" />
+                    <span>KUPON DOOR PRIZE LIVE</span>
                   </span>
                   <span
                     className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
@@ -2145,9 +2109,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   </span>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-[#C8A053]/50 bg-black/25 p-4 text-center">
+                <div className="mt-4 rounded-xl border border-[#C8A053]/50 bg-black/25 p-3.5 sm:p-4 text-center">
                   <p className="text-[11px] text-stone-300">Nomor Kupon Undian Anda</p>
-                  <p className="mt-1 font-mono-nums text-lg font-bold tracking-wider text-[#E8CA82]">
+                  <p className="mt-1 font-mono-nums text-base sm:text-lg font-bold tracking-wider text-[#E8CA82] break-all">
                     {couponCode}
                   </p>
                   <p className="mt-1.5 text-[11px] leading-relaxed text-stone-300">
@@ -2160,11 +2124,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                 {myWinningDraws.length > 0 && (
                   <div className="mt-4 rounded-xl border border-emerald-400/40 bg-emerald-950/70 p-3 text-xs">
                     <p className="inline-flex items-center gap-1.5 font-bold text-[#E8CA82]">
-                      <Award className="h-4 w-4" />
-                      Selamat! Kupon Anda Memenangkan Hadiah:
+                      <Award className="h-4 w-4 shrink-0" />
+                      <span>Selamat! Kupon Anda Memenangkan Hadiah:</span>
                     </p>
                     {myWinningDraws.map((w) => (
-                      <p key={w.id} className="mt-1 text-emerald-100">
+                      <p key={w.id} className="mt-1 text-emerald-100 break-words">
                         {w.hadiah} ({w.tanggal_undi}) — Kupon {w.kupon_kode}
                       </p>
                     ))}
@@ -2180,12 +2144,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                       {doorPrizeDraws.slice(0, 4).map((d) => (
                         <div
                           key={d.id}
-                          className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5"
+                          className="flex items-center justify-between gap-2 rounded-lg bg-white/5 px-2.5 py-1.5"
                         >
-                          <span className="truncate font-medium text-white">
+                          <span className="min-w-0 truncate font-medium text-white">
                             {d.member_nama} ({d.wilayah})
                           </span>
-                          <span className="ml-2 shrink-0 font-semibold text-[#E8CA82]">
+                          <span className="shrink-0 font-semibold text-[#E8CA82]">
                             {d.hadiah}
                           </span>
                         </div>
@@ -2196,9 +2160,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
               </div>
 
               {/* Bantuan Cepat & Jemput Bola Agen */}
-              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-6 space-y-3">
+              <div className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-6 space-y-3">
                 <h3 className="font-display text-sm font-bold text-[#381E5A] flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-[#0C3328]" />
+                  <Phone className="h-4 w-4 shrink-0 text-[#0C3328]" />
                   <span>Bantuan Agen &amp; Jemput Bola</span>
                 </h3>
                 <p className="text-xs text-stone-600 leading-relaxed">
@@ -2212,10 +2176,10 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                     )}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#16A34A] py-2.5 text-xs font-bold text-white hover:bg-[#15803D]"
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#16A34A] px-3 py-2.5 text-center text-xs font-bold text-white hover:bg-[#15803D]"
                   >
-                    <MessageCircle className="h-4 w-4" />
-                    <span>Minta Jemput Bola ke Agen ({activeAgentInfo.nama})</span>
+                    <MessageCircle className="h-4 w-4 shrink-0" />
+                    <span className="break-words">Minta Jemput Bola ke Agen ({activeAgentInfo.nama})</span>
                   </a>
                 )}
                 <a
@@ -2225,9 +2189,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-stone-50 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-stone-300 bg-stone-50 px-3 py-2 text-center text-xs font-semibold text-stone-700 hover:bg-stone-100"
                 >
-                  <Building2 className="h-3.5 w-3.5 text-stone-500" />
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-stone-500" />
                   <span>Hubungi Customer Service Pusat</span>
                 </a>
               </div>
@@ -2243,7 +2207,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-4">
+          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-bold text-stone-900">Bukti Transfer Member</span>
               <button

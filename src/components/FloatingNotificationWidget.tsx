@@ -561,10 +561,10 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
         : 'Belum ada info umum, pengumuman, atau status akun untuk pengunjung login.';
 
   return (
-    <div className="fixed right-4 bottom-4 z-40 flex flex-col items-end gap-2.5 sm:right-6 sm:bottom-6 no-print">
+    <div className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex flex-col items-end gap-2.5 sm:right-6 sm:bottom-6 no-print">
       {/* Real-time pop-up alert bubble when a new message arrives */}
       {toastNotif && !isOpen && userProfile && (
-        <div className="w-72 sm:w-80 rounded-2xl border border-[#C8A053] bg-white p-3.5 shadow-xl">
+        <div className="w-[calc(100vw-1.5rem)] max-w-80 rounded-2xl border border-[#C8A053] bg-white p-3.5 shadow-xl">
           <div className="flex items-start justify-between gap-2">
             <button
               type="button"
@@ -601,7 +601,7 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
       {/* Floating Notification Drawer / Panel */}
       {isOpen && (
         <div
-          className="flex max-h-[78vh] w-[calc(100vw-2rem)] sm:w-[410px] flex-col overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-white shadow-2xl"
+          className="flex max-h-[75dvh] w-[calc(100vw-1.5rem)] sm:w-[410px] flex-col overflow-hidden rounded-2xl border border-[#C8A053]/60 bg-white shadow-2xl"
           role="dialog"
           aria-label="Pusat Pesan & Notifikasi Realtime"
         >
@@ -731,7 +731,7 @@ export const FloatingNotificationWidget: React.FC<FloatingNotificationWidgetProp
 
           {/* Filter & Actions Bar (Signed-in Users Only) */}
           {userProfile && (
-            <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#FAF7F2] px-4 py-2 text-[11px]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E4DCCB] bg-[#FAF7F2] px-3 sm:px-4 py-2 text-[11px]">
               <div className="inline-flex rounded-lg border border-[#E4DCCB] bg-white p-0.5 font-semibold">
                 <button
                   type="button"

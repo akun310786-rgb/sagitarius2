@@ -376,8 +376,8 @@ export const AdminFleetDispatchTab: React.FC<AdminFleetDispatchTabProps> = ({
 
       {/* Modal Formulir Penugasan Armada Baru */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 safe-top safe-bottom">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 sm:p-6 shadow-xl space-y-4 max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-stone-200 pb-3">
               <h3 className="font-display text-base font-bold text-stone-900 flex items-center gap-2">
                 <Truck className="h-5 w-5 text-emerald-900" />

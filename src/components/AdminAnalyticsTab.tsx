@@ -336,7 +336,7 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         <div className="space-y-5">
           <div className="grid gap-5 lg:grid-cols-12">
             {/* Regional Comparison */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5 sm:p-6 lg:col-span-7">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-6 lg:col-span-7">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-4">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-stone-700" />
@@ -399,7 +399,7 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
             </div>
 
             {/* Cashflow Balance Card */}
-            <div className="flex flex-col justify-between rounded-xl border border-stone-200 bg-white p-5 sm:p-6 lg:col-span-5">
+            <div className="min-w-0 flex flex-col justify-between rounded-xl border border-stone-200 bg-white p-4 sm:p-6 lg:col-span-5">
               <div>
                 <div className="flex items-center gap-2 border-b border-stone-100 pb-4">
                   <Wallet className="h-4 w-4 text-[#0C3328]" />

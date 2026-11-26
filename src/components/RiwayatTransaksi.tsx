@@ -172,7 +172,7 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
   return (
     <section
       aria-label="Riwayat Transaksi Tervalidasi"
-      className="rounded-2xl border border-[#E4DCCB] bg-white p-6"
+      className="rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-6 min-w-0"
     >
       {/* Header */}
       <div className="flex flex-col gap-4 border-b border-[#EFE8D8] pb-5 sm:flex-row sm:items-start sm:justify-between">
@@ -233,28 +233,28 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
       </div>
 
       {/* KPI Strip (Tabular Numerals) */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
+      <div className="mt-5 grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-4">
+        <div className="min-w-0 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2.5 sm:px-3.5 sm:py-3">
           <p className="text-[11px] font-medium text-stone-500">Total Setoran Valid</p>
-          <p className="mt-1 font-mono-nums text-sm font-bold text-[#0C3328] sm:text-base">
+          <p className="mt-1 font-mono-nums text-xs font-bold text-[#0C3328] sm:text-base break-words">
             +{formatRupiah(counts.totalSetoran)}
           </p>
         </div>
-        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
+        <div className="min-w-0 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2.5 sm:px-3.5 sm:py-3">
           <p className="text-[11px] font-medium text-stone-500">Total Penarikan Valid</p>
-          <p className="mt-1 font-mono-nums text-sm font-bold text-rose-700 sm:text-base">
+          <p className="mt-1 font-mono-nums text-xs font-bold text-rose-700 sm:text-base break-words">
             -{formatRupiah(counts.totalPenarikan)}
           </p>
         </div>
-        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
+        <div className="min-w-0 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2.5 sm:px-3.5 sm:py-3">
           <p className="text-[11px] font-medium text-stone-500">Saldo Bersih Mutasi</p>
-          <p className="mt-1 font-mono-nums text-sm font-bold text-[#381E5A] sm:text-base">
+          <p className="mt-1 font-mono-nums text-xs font-bold text-[#381E5A] sm:text-base break-words">
             {formatRupiah(counts.saldoBersih)}
           </p>
         </div>
-        <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3.5 py-3">
+        <div className="min-w-0 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] px-3 py-2.5 sm:px-3.5 sm:py-3">
           <p className="text-[11px] font-medium text-stone-500">Jumlah Transaksi</p>
-          <p className="mt-1 font-mono-nums text-sm font-bold text-stone-900 sm:text-base">
+          <p className="mt-1 font-mono-nums text-xs font-bold text-stone-900 sm:text-base break-words">
             {counts.allCount} Validasi
           </p>
         </div>
@@ -328,106 +328,197 @@ export const RiwayatTransaksi: React.FC<RiwayatTransaksiProps> = ({
           </p>
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-stone-200 text-xs text-stone-500">
-                <th className="py-2.5 pr-4 font-semibold">Tanggal</th>
-                <th className="py-2.5 pr-4 font-semibold">Jenis</th>
-                <th className="py-2.5 pr-4 font-semibold">Metode &amp; Catatan</th>
-                <th className="py-2.5 pr-4 font-semibold">Divalidasi Oleh</th>
-                <th className="py-2.5 pr-4 text-right font-semibold">Nominal</th>
-                <th className="py-2.5 text-right font-semibold">Bukti</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {filteredRows.map((dep) => {
-                const jenis = getTxType(dep);
-                const isPenarikan = jenis === 'penarikan';
-                const sub = subMap.get(dep.subscription_id);
-                const validatorName =
-                  dep.validated_by || sub?.agen_nama || sub?.agen_kode || 'Agen Resmi';
+        <>
+          {/* Mobile Card List (No Horizontal Clipping) */}
+          <div className="mt-4 space-y-2.5 md:hidden">
+            {filteredRows.map((dep) => {
+              const jenis = getTxType(dep);
+              const isPenarikan = jenis === 'penarikan';
+              const sub = subMap.get(dep.subscription_id);
+              const validatorName =
+                dep.validated_by || sub?.agen_nama || sub?.agen_kode || 'Agen Resmi';
 
-                return (
-                  <tr key={dep.id} className="hover:bg-stone-50/80">
-                    <td className="py-3 pr-4 font-mono-nums text-xs text-stone-700 whitespace-nowrap">
-                      {dep.tanggal}
-                    </td>
-                    <td className="py-3 pr-4 whitespace-nowrap">
-                      {isPenarikan ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 border border-rose-200">
-                          <ArrowUpRight className="h-3 w-3" />
-                          Penarikan
+              return (
+                <div
+                  key={`mobile-${dep.id}`}
+                  className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2]/60 p-3.5 space-y-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {isPenarikan ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 border border-rose-200">
+                            <ArrowUpRight className="h-3 w-3" />
+                            Penarikan
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 border border-emerald-200">
+                            <ArrowDownLeft className="h-3 w-3" />
+                            Setoran
+                          </span>
+                        )}
+                        <span className="font-mono-nums text-[11px] text-stone-500">
+                          {dep.tanggal}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 border border-emerald-200">
-                          <ArrowDownLeft className="h-3 w-3" />
-                          Setoran
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <p className="text-xs font-semibold text-stone-900">
+                      </div>
+                      <p className="mt-1.5 text-xs font-semibold text-stone-900">
                         {getMethodLabel(dep)}
                       </p>
-                      {(scope === 'all_contracts' && sub) && (
-                        <p className="text-[11px] font-medium text-[#26124A]">
-                          Paket: {sub.package_nama}
-                        </p>
-                      )}
-                      {dep.catatan && (
-                        <p className="text-xs text-stone-500">{dep.catatan}</p>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4 whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5 text-xs text-stone-700">
-                        <UserCheck className="h-3.5 w-3.5 text-emerald-800" />
-                        <span className="font-medium">{validatorName}</span>
-                      </div>
-                      <p className="text-[10px] font-semibold text-emerald-800">
-                        Tervalidasi Agen
-                      </p>
-                    </td>
-                    <td
-                      className={`py-3 pr-4 text-right font-mono-nums text-xs font-bold whitespace-nowrap ${
+                    </div>
+                    <p
+                      className={`shrink-0 font-mono-nums text-sm font-bold ${
                         isPenarikan ? 'text-rose-700' : 'text-emerald-900'
                       }`}
                     >
                       {isPenarikan ? '-' : '+'}
                       {formatRupiah(dep.nominal)}
-                    </td>
-                    <td className="py-3 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-2.5">
-                        {onOpenReceipt && (
-                          <button
-                            type="button"
-                            onClick={() => onOpenReceipt(dep)}
-                            className="inline-flex items-center gap-1 rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8D8] cursor-pointer"
-                          >
-                            <Download className="h-3 w-3 text-[#C8A053]" />
-                            <span>Struk PNG</span>
-                          </button>
+                    </p>
+                  </div>
+
+                  {scope === 'all_contracts' && sub && (
+                    <p className="text-[11px] font-medium text-[#26124A] break-words">
+                      Paket: {sub.package_nama}
+                    </p>
+                  )}
+                  {dep.catatan && (
+                    <p className="text-xs text-stone-600 break-words">{dep.catatan}</p>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E4DCCB]/80 pt-2">
+                    <div className="inline-flex items-center gap-1.5 text-[11px] text-stone-700 min-w-0">
+                      <UserCheck className="h-3.5 w-3.5 shrink-0 text-emerald-800" />
+                      <span className="truncate font-medium">{validatorName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {onOpenReceipt && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenReceipt(dep)}
+                          className="inline-flex items-center gap-1 rounded-md border border-[#E4DCCB] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8D8] cursor-pointer"
+                        >
+                          <Download className="h-3 w-3 text-[#C8A053]" />
+                          <span>Struk PNG</span>
+                        </button>
+                      )}
+                      {dep.bukti_foto_url && (
+                        <button
+                          type="button"
+                          onClick={() => onPreviewProof(dep.bukti_foto_url || '')}
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 cursor-pointer"
+                        >
+                          <FileImage className="h-3 w-3" />
+                          <span>Bukti</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="mt-4 hidden md:block overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 text-xs text-stone-500">
+                  <th className="py-2.5 pr-4 font-semibold">Tanggal</th>
+                  <th className="py-2.5 pr-4 font-semibold">Jenis</th>
+                  <th className="py-2.5 pr-4 font-semibold">Metode &amp; Catatan</th>
+                  <th className="py-2.5 pr-4 font-semibold">Divalidasi Oleh</th>
+                  <th className="py-2.5 pr-4 text-right font-semibold">Nominal</th>
+                  <th className="py-2.5 text-right font-semibold">Bukti</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100">
+                {filteredRows.map((dep) => {
+                  const jenis = getTxType(dep);
+                  const isPenarikan = jenis === 'penarikan';
+                  const sub = subMap.get(dep.subscription_id);
+                  const validatorName =
+                    dep.validated_by || sub?.agen_nama || sub?.agen_kode || 'Agen Resmi';
+
+                  return (
+                    <tr key={dep.id} className="hover:bg-stone-50/80">
+                      <td className="py-3 pr-4 font-mono-nums text-xs text-stone-700 whitespace-nowrap">
+                        {dep.tanggal}
+                      </td>
+                      <td className="py-3 pr-4 whitespace-nowrap">
+                        {isPenarikan ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-800 border border-rose-200">
+                            <ArrowUpRight className="h-3 w-3" />
+                            Penarikan
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900 border border-emerald-200">
+                            <ArrowDownLeft className="h-3 w-3" />
+                            Setoran
+                          </span>
                         )}
-                        {dep.bukti_foto_url ? (
-                          <button
-                            type="button"
-                            onClick={() => onPreviewProof(dep.bukti_foto_url || '')}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
-                          >
-                            <FileImage className="h-3.5 w-3.5" />
-                            <span>Lihat</span>
-                          </button>
-                        ) : !onOpenReceipt ? (
-                          <span className="text-xs text-stone-400">—</span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <p className="text-xs font-semibold text-stone-900">
+                          {getMethodLabel(dep)}
+                        </p>
+                        {(scope === 'all_contracts' && sub) && (
+                          <p className="text-[11px] font-medium text-[#26124A]">
+                            Paket: {sub.package_nama}
+                          </p>
+                        )}
+                        {dep.catatan && (
+                          <p className="text-xs text-stone-500">{dep.catatan}</p>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 text-xs text-stone-700">
+                          <UserCheck className="h-3.5 w-3.5 text-emerald-800" />
+                          <span className="font-medium">{validatorName}</span>
+                        </div>
+                        <p className="text-[10px] font-semibold text-emerald-800">
+                          Tervalidasi Agen
+                        </p>
+                      </td>
+                      <td
+                        className={`py-3 pr-4 text-right font-mono-nums text-xs font-bold whitespace-nowrap ${
+                          isPenarikan ? 'text-rose-700' : 'text-emerald-900'
+                        }`}
+                      >
+                        {isPenarikan ? '-' : '+'}
+                        {formatRupiah(dep.nominal)}
+                      </td>
+                      <td className="py-3 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-2.5">
+                          {onOpenReceipt && (
+                            <button
+                              type="button"
+                              onClick={() => onOpenReceipt(dep)}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#E4DCCB] bg-[#FAF7F2] px-2 py-1 text-[11px] font-semibold text-[#381E5A] hover:bg-[#EFE8D8] cursor-pointer"
+                            >
+                              <Download className="h-3 w-3 text-[#C8A053]" />
+                              <span>Struk PNG</span>
+                            </button>
+                          )}
+                          {dep.bukti_foto_url ? (
+                            <button
+                              type="button"
+                              onClick={() => onPreviewProof(dep.bukti_foto_url || '')}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 hover:underline cursor-pointer"
+                            >
+                              <FileImage className="h-3.5 w-3.5" />
+                              <span>Lihat</span>
+                            </button>
+                          ) : !onOpenReceipt ? (
+                            <span className="text-xs text-stone-400">—</span>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );

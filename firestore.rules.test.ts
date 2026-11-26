@@ -542,7 +542,15 @@ async function runTests() {
         updatedAt: serverTimestamp(),
       }));
 
-      // Kontrak dengan total_terkumpul > 0 ditolak saat delete, kontrak kosong (0) diizinkan
+      // Member dilarang mengubah agen pendamping/wilayah atau menghapus kontrak secara sepihak
+      await assertFails(updateDoc(doc(memberA, 'subscriptions', 'sub_a'), {
+        agen_id: AGEN_B,
+        wilayah: 'Tasikmalaya',
+        updatedAt: serverTimestamp(),
+      }));
+      await assertFails(deleteDoc(doc(memberA, 'subscriptions', 'sub_a_empty')));
+
+      // Kontrak dengan total_terkumpul > 0 ditolak saat delete, kontrak kosong (0) diizinkan untuk Admin
       await assertFails(deleteDoc(doc(admin, 'subscriptions', 'sub_a')));
       await assertSucceeds(deleteDoc(doc(admin, 'subscriptions', 'sub_a_empty')));
     });

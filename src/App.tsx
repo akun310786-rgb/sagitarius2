@@ -1201,19 +1201,19 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="bg-arabesque-ivory min-h-screen flex flex-col overflow-x-hidden text-stone-900">
+      <div className="bg-arabesque-ivory min-h-dvh flex flex-col overflow-x-clip safe-x text-stone-900">
         {/* TOP BAR matching Royal Purple + Gold Border Mockups */}
         {isDashboardOnlySession && userProfile ? (
-          <header className="bg-arabesque-purple sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
-            <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
-              <div className="flex items-center gap-2.5 min-w-0">
+          <header className="bg-arabesque-purple safe-top sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
+            <div className="mx-auto flex min-h-14 sm:min-h-16 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 py-1.5 sm:px-6 lg:px-8">
+              <div className="flex flex-1 items-center gap-2 sm:gap-2.5 min-w-0">
                 <img
                   src={LOGO_SAGITARIUS}
                   alt="Logo Sagitarius Parcel"
-                  className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
+                  className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
                 />
-                <div className="min-w-0">
-                  <p className="font-display truncate text-sm sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
+                <div className="min-w-0 flex-1">
+                  <p className="font-display truncate text-xs sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
                     {userProfile.role === 'agen'
                       ? 'Dashboard Agen & Reseller'
                       : userProfile.role === 'member'
@@ -1230,29 +1230,29 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={openProfileEdit}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 sm:px-3.5 py-1.5 text-xs font-bold text-[#1D122B] transition hover:brightness-105 cursor-pointer"
+                  className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-2.5 sm:px-3.5 py-1.5 text-[11px] sm:text-xs font-bold text-[#1D122B] transition hover:brightness-105 cursor-pointer"
                 >
-                  <UserIcon className="h-3.5 w-3.5" />
-                  <span className="max-w-[110px] truncate">{userProfile.nama}</span>
+                  <UserIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="max-w-[74px] sm:max-w-[130px] truncate">{userProfile.nama}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-600/80 hover:border-rose-300/60 cursor-pointer"
+                  className="inline-flex items-center gap-1 rounded-full border border-white/25 bg-white/10 px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-semibold text-white transition hover:bg-rose-600/80 hover:border-rose-300/60 cursor-pointer"
                 >
-                  <LogOut className="h-3.5 w-3.5" />
+                  <LogOut className="h-3.5 w-3.5 shrink-0" />
                   <span>Keluar</span>
                 </button>
               </div>
             </div>
           </header>
         ) : (
-        <header className="bg-arabesque-purple sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
-          <div className="mx-auto flex h-14 sm:h-16 max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 lg:px-8">
+        <header className="bg-arabesque-purple safe-top sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
+          <div className="mx-auto flex min-h-14 sm:min-h-16 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 py-1.5 sm:px-6 lg:px-8">
             {/* Zone 1: Brand Crest */}
             <button
               type="button"
@@ -1560,7 +1560,7 @@ export default function App() {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1">
+        <main className="flex-1 min-w-0 w-full pb-24 sm:pb-12 safe-bottom">
           {userProfile?.role === 'member' ? (
             <MemberDashboard
               userProfile={userProfile}
@@ -1670,7 +1670,7 @@ export default function App() {
         {!isDashboardOnlySession && (
         <footer className="bg-arabesque-emerald border-t-2 border-[#C8A053]/60 py-10 text-stone-200 no-print">
           <div className="mx-auto grid max-w-7xl gap-8 px-4 text-xs sm:grid-cols-2 lg:grid-cols-5 sm:px-6 lg:px-8">
-            <div className="space-y-3 lg:col-span-2">
+            <div className="min-w-0 space-y-3 lg:col-span-2">
               <div className="flex items-center gap-3">
                 <img
                   src={LOGO_SAGITARIUS}
@@ -1821,7 +1821,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
           >
-            <div className="flex h-full w-full max-w-md flex-col border-l border-[#E4DCCB] bg-[#FAF7F2] shadow-2xl">
+            <div className="flex h-dvh w-full max-w-md flex-col border-l border-[#E4DCCB] bg-[#FAF7F2] shadow-2xl safe-top safe-bottom">
               <div className="flex items-center justify-between border-b border-[#E4DCCB] bg-[#381E5A] px-5 py-4 text-white">
                 <div className="flex items-center gap-2.5">
                   <Heart className="h-5 w-5 fill-[#E8CA82] text-[#E8CA82]" />
@@ -1935,13 +1935,13 @@ export default function App() {
         {/* Edit Profile Modal */}
         {showProfileModal && userProfile && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/60 p-3 sm:p-4 safe-top safe-bottom"
             role="dialog"
             aria-modal="true"
           >
             <form
               onSubmit={handleSaveProfile}
-              className="w-full max-w-md rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xl"
+              className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-6 shadow-xl"
             >
               <div className="flex items-start justify-between">
                 <div>

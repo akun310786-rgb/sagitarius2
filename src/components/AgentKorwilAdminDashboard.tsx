@@ -3852,7 +3852,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             <form
               ref={cashFormRef}
               onSubmit={handleRecordCashTransaction}
-              className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5"
+              className="min-w-0 space-y-4 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-5"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-emerald-900">
@@ -3992,7 +3992,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </form>
 
             {/* Antrean Verifikasi Setoran & Penarikan Pending */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="h-5 w-5 text-emerald-900" />
@@ -5274,7 +5274,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
           {kontrakSubTab === 'pengiriman' && isAgen && (
             <div className="grid gap-5 lg:grid-cols-12">
-              <div className="space-y-4 lg:col-span-5">
+              <div className="min-w-0 space-y-4 lg:col-span-5">
                 <form
                   onSubmit={handleMarkQrPickedUp}
                   className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-5"
@@ -5315,7 +5315,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 </form>
               </div>
 
-              <div className="space-y-4 lg:col-span-7">
+              <div className="min-w-0 space-y-4 lg:col-span-7">
                 <div className="rounded-xl border border-stone-200 p-4">
                   <div className="flex items-center justify-between gap-2 border-b border-stone-100 pb-3">
                     <div>
@@ -5919,7 +5919,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           <div className="grid gap-5 lg:grid-cols-12">
             <form
               onSubmit={handleCreateSettlement}
-              className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5"
+              className="min-w-0 space-y-4 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-5"
             >
               <div className="flex items-center gap-2">
                 <Wallet className="h-5 w-5 text-emerald-900" />
@@ -6081,7 +6081,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               </button>
             </form>
 
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7 space-y-4">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7 space-y-4">
               <div className="flex flex-col gap-3 border-b border-stone-200 pb-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="font-display text-lg font-bold text-stone-900">
@@ -6260,7 +6260,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           {korwilSubTab === 'referral' && (
           /* Link & QR Pendaftaran Khusus Agen + Komisi Reseller Pribadi / Leaderboard */
           <div className="grid gap-5 lg:grid-cols-12">
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-5">
               <div className="flex items-center gap-2">
                 <Link2 className="h-5 w-5 text-emerald-900" />
                 <h2 className="font-display text-lg font-bold text-stone-900">
@@ -6345,7 +6345,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
 
             {isAgen ? (
-              <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7 space-y-5">
+              <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7 space-y-5">
                 <div className="flex items-center gap-2">
                   <Coins className="h-5 w-5 text-amber-700" />
                   <div>
@@ -6623,7 +6623,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
                 </div>
               </div>
             ) : (
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Trophy className="h-5 w-5 text-amber-700" />
@@ -6753,7 +6753,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
 
           {gudangSubTab === 'kebutuhan' && (
           <div className="grid gap-5 lg:grid-cols-12">
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-8">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-8">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -6849,7 +6849,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
               )}
             </div>
 
-            <div className="space-y-5 lg:col-span-4">
+            <div className="min-w-0 space-y-5 lg:col-span-4">
               <form
                 onSubmit={handleMarkQrPickedUp}
                 className="rounded-xl border border-stone-200 bg-white p-5"
@@ -7087,7 +7087,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
           /* Stok Gudang HPP & Pengumuman Substitusi Produk Resmi */
           <div className="grid gap-5 lg:grid-cols-12">
             {/* Stok Gudang & HPP (Admin CRUD) */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-6 space-y-4">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-6 space-y-4">
               <div className="flex items-center gap-2">
                 <Warehouse className="h-5 w-5 text-emerald-900" />
                 <div>
@@ -7248,7 +7248,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             </div>
 
             {/* Pengumuman Substitusi Produk Resmi */}
-            <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-6 space-y-4">
+            <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-6 space-y-4">
               <div className="flex items-center gap-2">
                 <Replace className="h-5 w-5 text-amber-700" />
                 <div>
@@ -7761,7 +7761,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* TAB: DOOR PRIZE UNDIAN RESMI */}
       {activeTab === 'doorprize' && (
         <div className="grid gap-5 lg:grid-cols-12">
-          <div className="space-y-4 rounded-xl border border-stone-200 bg-white p-5 lg:col-span-5">
+          <div className="min-w-0 space-y-4 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-5">
             <div className="flex items-center gap-2">
               <Gift className="h-5 w-5 text-emerald-900" />
               <h2 className="font-display text-lg font-bold text-stone-900">
@@ -7847,7 +7847,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             )}
           </div>
 
-          <div className="rounded-xl border border-stone-200 bg-white p-5 lg:col-span-7">
+          <div className="min-w-0 rounded-xl border border-stone-200 bg-white p-4 sm:p-5 lg:col-span-7">
             <h3 className="font-display text-lg font-bold text-stone-900">
               Daftar Pemenang Door Prize ({doorPrizeDraws.length})
             </h3>
@@ -8192,13 +8192,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* Modal Form: Daftarkan Kontrak Member Offline (Agen / Korwil / Admin) */}
       {showOfflineModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-3 sm:p-4 safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
         >
           <form
             onSubmit={handleCreateOfflineContract}
-            className="w-full max-w-lg rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xl"
+            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#E4DCCB] bg-white p-5 sm:p-6 shadow-xl"
           >
             <div className="flex items-center justify-between border-b border-[#E4DCCB]/70 pb-3">
               <div>
@@ -8374,13 +8374,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* Modal Form: Tambah / Edit Paket Katalog */}
       {showPkgForm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-3 sm:p-4 safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
         >
           <form
             onSubmit={handleSavePackage}
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
+            className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xl"
           >
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="font-display text-xl font-bold text-stone-900">
@@ -8571,13 +8571,13 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* Modal Form: Tambah / Edit Agen */}
       {showAgentForm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/70 p-3 sm:p-4 safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
         >
           <form
             onSubmit={handleSaveAgent}
-            className="w-full max-w-lg rounded-2xl border border-stone-200 bg-white p-6 shadow-xl"
+            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 shadow-xl"
           >
             <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <h3 className="font-display text-xl font-bold text-stone-900">
@@ -8701,11 +8701,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* Modal Detail Member & History Transaksi Member */}
       {selectedDetailMember && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/70 p-3 sm:p-5"
+          className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/70 p-3 sm:p-5 safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF7F2] shadow-2xl">
+          <div className="flex max-h-[90dvh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF7F2] shadow-2xl">
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-[#C8A053]/40 bg-[#381E5A] px-5 py-4 text-white">
               <div className="min-w-0">
@@ -9054,11 +9054,11 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
       {/* Modal Preview Photo */}
       {previewProof && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/75 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/75 p-3 sm:p-4 safe-top safe-bottom"
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-md rounded-2xl bg-white p-4">
+          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-bold text-stone-900">Verifikasi Foto Bukti</span>
               <button
@@ -9072,7 +9072,7 @@ export const AgentKorwilAdminDashboard: React.FC<AgentKorwilAdminDashboardProps>
             <img
               src={previewProof}
               alt="Bukti Transfer"
-              className="max-h-[70vh] w-full rounded-lg bg-stone-100 object-contain"
+              className="max-h-[70dvh] w-full rounded-lg bg-stone-100 object-contain"
             />
           </div>
         </div>

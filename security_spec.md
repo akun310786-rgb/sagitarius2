@@ -8,7 +8,7 @@
 ## Data Invariants
 1. **User Role & Region Integrity**: Hanya `akun310786@gmail.com` (`email_verified == true`) atau Admin terdaftar yang dapat menetapkan role `agen`, `korwil`, atau `admin`. Pendaftaran baru hanya boleh `role: "member"`. Agen dan Korwil tidak dapat mengubah `role`, `wilayah`, atau `kode_agen` miliknya sendiri melalui update profil.
 2. **Login Alias Isolation**: `/login_aliases/{aliasId}` hanya mengizinkan `get` pada ID valid (`wa_62...` atau `u_...`) dan menolak `list` total untuk mencegah scraping data login.
-3. **Contract Ownership & Initial State**: Kontrak `subscriptions` hanya dapat dibuat dengan `total_terkumpul == 0` dan `status == "aktif"`. Member A tidak dapat membaca atau menulis kontrak Member B. Member tidak dapat mengubah `total_terkumpul`, `target_nominal`, atau `status` melalui browser.
+3. **Contract Ownership & Initial State**: Kontrak `subscriptions` hanya dapat dibuat dengan `total_terkumpul == 0` dan `status == "aktif"`. Member A tidak dapat membaca atau menulis kontrak Member B. Member tidak dapat mengubah `total_terkumpul`, `target_nominal`, `status`, `agen_id`, `agen_kode`, `agen_nama`, atau `wilayah`, maupun menghapus (`delete`) kontrak secara sepihak melalui browser (hanya Admin Pusat yang berwenang memindahkan agen atau menghapus kontrak saldo Rp 0).
 4. **Agent & Korwil Scope Enforcement**:
    - **Agen**: Hanya dapat mengakses/memverifikasi kontrak, member, setoran, dan settlement dengan `agen_id == request.auth.uid` dan `wilayah` yang sesuai wilayah tugasnya. Agen A tidak bisa mengakses atau mengubah transaksi Agen B.
    - **Korwil**: Hanya dapat mengakses/memverifikasi user, kontrak, setoran, dan settlement pada `wilayah` yang ditugaskan kepadanya. Akses lintas wilayah ditolak.

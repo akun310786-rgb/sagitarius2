@@ -149,7 +149,7 @@ export const ResellerCatalogToolsTab: React.FC<ResellerCatalogToolsTabProps> = (
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-12">
-            <div className="grid gap-3 sm:grid-cols-3 lg:col-span-7">
+            <div className="min-w-0 grid gap-3 sm:grid-cols-3 lg:col-span-7">
               <div>
                 <label className="block text-xs font-semibold text-stone-700">Pilih Paket</label>
                 <select
@@ -199,7 +199,7 @@ export const ResellerCatalogToolsTab: React.FC<ResellerCatalogToolsTabProps> = (
               </div>
             </div>
 
-            <div className="grid grid-cols-3 divide-x divide-stone-200 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] lg:col-span-5">
+            <div className="min-w-0 grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-stone-200 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] lg:col-span-5">
               <div className="p-3">
                 <p className="text-[11px] text-stone-500">Setoran/{calcFrek}</p>
                 <p className="mt-0.5 font-mono-nums text-sm font-bold text-[#0C3328]">

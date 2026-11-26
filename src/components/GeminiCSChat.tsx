@@ -122,7 +122,7 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
     : QUICK_PROMPTS;
 
   return (
-    <div className="fixed right-4 bottom-4 z-50 no-print">
+    <div className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:right-6 sm:bottom-6 z-50 no-print">
       {!isOpen ? (
         <button
           type="button"
@@ -137,7 +137,7 @@ export const GeminiCSChat: React.FC<GeminiCSChatProps> = ({
           <span>Chat CS Online</span>
         </button>
       ) : (
-        <div className="flex h-[520px] max-h-[82vh] w-[360px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white shadow-2xl">
+        <div className="flex h-[min(520px,78dvh)] max-h-[78dvh] w-[calc(100vw-1.5rem)] max-w-[360px] flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white shadow-2xl">
           {/* Header */}
           <div className="flex items-center justify-between bg-[#0C3328] px-4 py-3 text-white">
             <div className="flex items-center gap-2.5">
