@@ -1252,19 +1252,19 @@ export default function App() {
           </header>
         ) : (
         <header className="bg-arabesque-purple safe-top sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
-          <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 sm:gap-6 px-4 py-2 sm:px-6 lg:px-8">
+          <div className="mx-auto flex min-h-14 sm:min-h-16 max-w-7xl items-center justify-between gap-2 sm:gap-6 px-3 py-2 sm:px-6 lg:px-8">
             {/* Zone 1: Brand Wordmark */}
             <button
               type="button"
               onClick={() => navigatePublicPage('beranda')}
-              className="flex items-center gap-2.5 text-left whitespace-nowrap shrink-0 cursor-pointer"
+              className="flex min-w-0 items-center gap-2 text-left cursor-pointer"
             >
               <img
                 src={LOGO_SAGITARIUS}
                 alt="Logo Sagitarius Parcel"
-                className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
+                className="h-8 w-8 sm:h-10 sm:w-10 shrink-0 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
               />
-              <span className="font-display text-base sm:text-lg font-bold tracking-tight text-[#E8CA82]">
+              <span className="truncate font-display text-[15px] sm:text-lg font-bold tracking-tight text-[#E8CA82]">
                 Sagitarius Parcel
               </span>
             </button>
@@ -1327,12 +1327,12 @@ export default function App() {
             </nav>
 
             {/* Zone 3: Search, Wishlist Bag & Primary Auth Action */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handleHeaderSearchClick}
                 aria-label="Cari Paket Lebaran"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-stone-100 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
+                className="hidden sm:flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-stone-100 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
               >
                 <Search className="h-4 w-4" />
               </button>
@@ -1341,7 +1341,7 @@ export default function App() {
                 type="button"
                 onClick={() => setShowWishlistDrawer(true)}
                 aria-label="Daftar Paket Pilihan"
-                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-stone-100 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
+                className="relative flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full border border-white/20 text-stone-100 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
               >
                 <ShoppingBag className="h-4 w-4" />
                 <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C8A053] px-1 font-mono-nums text-[10px] font-bold text-[#1D122B]">
@@ -1353,26 +1353,29 @@ export default function App() {
                 <button
                   type="button"
                   onClick={openProfileEdit}
-                  className="hidden sm:inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-4 py-2 text-sm font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
+                  className="inline-flex min-h-[38px] sm:min-h-[40px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
                 >
-                  <UserIcon className="h-4 w-4" />
-                  <span>{userProfile.nama.split(' ')[0]}</span>
+                  <UserIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="max-w-[68px] sm:max-w-[120px] truncate">
+                    {userProfile.nama.split(' ')[0]}
+                  </span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => openAuthModal('login')}
-                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
+                  className="inline-flex min-h-[38px] sm:min-h-[40px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
                 >
-                  <LogIn className="h-4 w-4" />
-                  <span>Masuk / Daftar</span>
+                  <LogIn className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                  <span className="hidden sm:inline">Masuk / Daftar</span>
+                  <span className="sm:hidden">Masuk</span>
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/25 text-white lg:hidden cursor-pointer"
+                className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl border border-white/25 text-white lg:hidden cursor-pointer"
                 aria-label="Menu Navigasi"
               >
                 {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -1418,6 +1421,14 @@ export default function App() {
                   className="min-h-[48px] rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
                 >
                   Kontak &amp; WA
+                </button>
+                <button
+                  type="button"
+                  onClick={handleHeaderSearchClick}
+                  className="min-h-[48px] inline-flex items-center gap-2 rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
+                >
+                  <Search className="h-4 w-4 shrink-0 text-[#E8CA82]" />
+                  <span>Cari Paket</span>
                 </button>
                 <button
                   type="button"

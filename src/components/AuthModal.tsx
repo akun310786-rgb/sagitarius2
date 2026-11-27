@@ -249,16 +249,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     >
       <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#E4DCCB] bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#C8A053]/40 bg-[#381E5A] px-6 py-4 text-white">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3 border-b border-[#C8A053]/40 bg-[#381E5A] px-4 py-3.5 sm:px-6 sm:py-4 text-white">
+          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
             <img
               src={LOGO_SAGITARIUS}
               alt="Logo Sagitarius Parcel"
-              className="h-10 w-10 rounded-full border border-[#C8A053]/60 bg-black object-cover"
+              className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-full border border-[#C8A053]/60 bg-black object-cover"
             />
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold text-[#E8CA82]">Sagitarius Parcel</p>
-              <h2 id="auth-modal-title" className="font-display text-lg font-bold leading-tight">
+              <h2 id="auth-modal-title" className="truncate font-display text-base sm:text-lg font-bold leading-tight">
                 {mode === 'login'
                   ? 'Masuk Akun Sagitarius'
                   : isAgentMode
@@ -270,7 +270,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-stone-300 hover:bg-white/10 hover:text-white cursor-pointer"
+            className="shrink-0 rounded-lg p-1.5 text-stone-300 hover:bg-white/10 hover:text-white cursor-pointer"
             aria-label="Tutup jendela login"
           >
             <X className="h-5 w-5" />
@@ -282,21 +282,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={() => switchMode('login')}
-            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition cursor-pointer ${
+            className={`flex items-center justify-center gap-1 rounded-lg px-1 py-2 text-center transition cursor-pointer ${
               mode === 'login'
                 ? 'bg-white text-[#381E5A] shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
             }`}
           >
-            <LogIn className="h-3.5 w-3.5 shrink-0" />
-            <span>Masuk Akun</span>
+            <LogIn className="hidden h-3.5 w-3.5 shrink-0 sm:block" />
+            <span className="truncate">Masuk Akun</span>
           </button>
           <button
             type="button"
             disabled={isMemberLoggedIn}
             title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
             onClick={() => switchMode('register_member')}
-            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition ${
+            className={`flex items-center justify-center gap-1 rounded-lg px-1 py-2 text-center transition ${
               isMemberLoggedIn
                 ? 'cursor-not-allowed opacity-45 text-stone-400'
                 : mode === 'register_member'
@@ -304,15 +304,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   : 'text-stone-600 hover:text-stone-900 cursor-pointer'
             }`}
           >
-            <UserPlus className="h-3.5 w-3.5 shrink-0" />
-            <span>Daftar Member</span>
+            <UserPlus className="hidden h-3.5 w-3.5 shrink-0 sm:block" />
+            <span className="truncate">Daftar Member</span>
           </button>
           <button
             type="button"
             disabled={isAgentLoggedIn}
             title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
             onClick={() => switchMode('register_agent')}
-            className={`flex items-center justify-center gap-1 rounded-lg py-2 transition ${
+            className={`flex items-center justify-center gap-1 rounded-lg px-1 py-2 text-center transition ${
               isAgentLoggedIn
                 ? 'cursor-not-allowed opacity-45 text-stone-400'
                 : mode === 'register_agent'
@@ -320,12 +320,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   : 'text-stone-600 hover:text-stone-900 cursor-pointer'
             }`}
           >
-            <Briefcase className="h-3.5 w-3.5 shrink-0" />
-            <span>Daftar Agen</span>
+            <Briefcase className="hidden h-3.5 w-3.5 shrink-0 sm:block" />
+            <span className="truncate">Daftar Agen</span>
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {errorMsg && (
             <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs leading-relaxed font-medium text-rose-800">
               {errorMsg}
@@ -407,19 +407,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="space-y-2.5 rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-3 text-xs">
                   <p className="font-semibold text-[#381E5A]">Bantuan Reset Kata Sandi</p>
                   {onSendPasswordReset && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="email"
                         value={resetEmail}
                         onChange={(e) => setResetEmail(e.target.value)}
                         placeholder="Gmail terdaftar Anda..."
-                        className="flex-1 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-xs"
+                        className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-2.5 py-2 text-xs"
                       />
                       <button
                         type="button"
                         disabled={submitting}
                         onClick={() => void handleSendResetClick()}
-                        className="rounded-lg bg-[#0C3328] px-3 py-1.5 text-[11px] font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
+                        className="shrink-0 rounded-lg bg-[#0C3328] px-3 py-2 text-xs font-semibold text-[#E8CA82] hover:bg-[#144738] cursor-pointer"
                       >
                         Kirim Link
                       </button>

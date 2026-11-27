@@ -1633,48 +1633,48 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
           <button
             type="button"
             onClick={() => openMainCategory('paket_lebaran')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer sm:p-6"
+            className="group flex items-center gap-3 sm:gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer sm:p-6"
           >
             <img
               src={IMG_BUNDA_GOLD}
               alt="Paket Barang Lebaran"
-              className="h-24 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-28 sm:w-32"
+              className="h-20 w-20 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-28 sm:w-32"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
+              <h2 className="font-display text-lg font-bold text-[#381E5A] sm:text-2xl">
                 Paket Barang Lebaran
               </h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-base">
+              <p className="mt-1 text-sm leading-relaxed text-stone-600 sm:text-base">
                 Paket Bunda, Paket Anak, Paket Pilihan, hingga 50 barang sembako &amp; kue satuan.
               </p>
             </div>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
-              <ArrowRight className="h-5 w-5" />
+            <span className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => openMainCategory('tabungan_uang')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer sm:p-6"
+            className="group flex items-center gap-3 sm:gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer sm:p-6"
           >
             <img
               src={BROCHURE_UANG}
               alt="Tabungan Uang Tunai"
-              className="h-24 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-28 sm:w-32"
+              className="h-20 w-20 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-28 sm:w-32"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
+              <h2 className="font-display text-lg font-bold text-[#381E5A] sm:text-2xl">
                 Tabungan Uang Tunai
               </h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-base">
+              <p className="mt-1 text-sm leading-relaxed text-stone-600 sm:text-base">
                 Tabungan Munggahan (295 hari) &amp; Lebaran (325 hari), bisa setor harian atau mingguan.
               </p>
             </div>
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
-              <ArrowRight className="h-5 w-5" />
+            <span className="flex h-9 w-9 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
           </button>
         </div>
@@ -1682,38 +1682,38 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
 
       {/* 3. Tiga Langkah Mudah Menabung */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-6 text-white sm:p-8">
+        <div className="bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-5 text-white sm:p-8">
           <h2 className="font-display text-xl font-bold text-[#E8CA82] sm:text-2xl">
             3 Langkah Mudah Menabung
           </h2>
-          <div className="mt-5 grid gap-6 md:grid-cols-3">
-            <div className="flex items-start gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
+          <div className="mt-5 grid gap-5 sm:gap-6 md:grid-cols-3">
+            <div className="flex items-start gap-3.5 sm:gap-4">
+              <span className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
                 1
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-base font-bold text-[#E8CA82]">Pilih Paket yang Diinginkan</p>
                 <p className="mt-1 text-sm leading-relaxed text-stone-100 sm:text-base">
                   Lihat daftar paket sembako, kue lebaran, atau tabungan uang sesuai anggaran Anda.
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
+            <div className="flex items-start gap-3.5 sm:gap-4">
+              <span className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
                 2
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-base font-bold text-[#E8CA82]">Daftar &amp; Setor Ringan</p>
                 <p className="mt-1 text-sm leading-relaxed text-stone-100 sm:text-base">
                   Daftar akun member lalu setorkan tabungan harian atau mingguan melalui agen resmi.
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-4">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
+            <div className="flex items-start gap-3.5 sm:gap-4">
+              <span className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
                 3
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="text-base font-bold text-[#E8CA82]">Pantau Saldo &amp; Terima Paket</p>
                 <p className="mt-1 text-sm leading-relaxed text-stone-100 sm:text-base">
                   Cek catatan setoran di Buku Tabungan kapan saja hingga lunas dan paket siap dikirim.
@@ -1803,8 +1803,8 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         </div>
 
         {/* Kotak Bantuan WhatsApp, Pasang Aplikasi & Info Mitra Agen */}
-        <div className="grid gap-5 rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xs md:grid-cols-2 md:gap-8 sm:p-8">
-          <div className="space-y-3">
+        <div className="grid gap-5 rounded-2xl border border-[#E4DCCB] bg-white p-5 shadow-xs md:grid-cols-2 md:gap-8 sm:p-8">
+          <div className="min-w-0 space-y-3">
             <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
               Butuh Bantuan Memilih Paket?
             </h2>
@@ -1819,7 +1819,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#15803D] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#166534]"
+                className="inline-flex min-h-[46px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#15803D] px-5 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#166534]"
               >
                 <MessageCircle className="h-4 w-4 shrink-0" />
                 <span>Chat WhatsApp ({COMPANY_INFO.csWhatsappDisplay})</span>
@@ -1828,7 +1828,7 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
             </div>
           </div>
 
-          <div className="space-y-3 border-t border-[#E4DCCB] pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-8">
+          <div className="min-w-0 space-y-3 border-t border-[#E4DCCB] pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-8">
             <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
               Ingin Bergabung Menjadi Agen?
             </h2>
@@ -1839,10 +1839,10 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigate('tentang')}
-                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl border-2 border-[#C8A053] bg-[#FAF7F2] px-5 py-2.5 text-sm font-bold text-[#381E5A] transition hover:bg-[#F3ECE0] cursor-pointer"
+                className="inline-flex min-h-[46px] w-full sm:w-auto items-center justify-center gap-2 rounded-xl border-2 border-[#C8A053] bg-[#FAF7F2] px-5 py-2.5 text-center text-sm font-bold text-[#381E5A] transition hover:bg-[#F3ECE0] cursor-pointer"
               >
                 <span>Lihat Info Komisi &amp; Direktori Agen</span>
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4 shrink-0" />
               </button>
             </div>
           </div>
