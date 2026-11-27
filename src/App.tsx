@@ -1193,10 +1193,10 @@ export default function App() {
   const wishlistPackages = packages.filter((p) => wishlistIds.includes(p.id));
 
   const navLinkClass = (isActive: boolean) =>
-    `relative py-1 text-xs lg:text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+    `relative py-1 text-sm font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
       isActive
-        ? 'font-semibold text-[#E8CA82] underline decoration-[#C8A053] decoration-2 underline-offset-8'
-        : 'text-stone-200 hover:text-[#E8CA82]'
+        ? 'font-bold text-[#E8CA82] underline decoration-[#C8A053] decoration-2 underline-offset-8'
+        : 'text-stone-100 hover:text-[#E8CA82]'
     }`;
 
   return (
@@ -1252,30 +1252,25 @@ export default function App() {
           </header>
         ) : (
         <header className="bg-arabesque-purple safe-top sticky top-0 z-40 border-b-2 border-[#C8A053]/60 text-white shadow-sm no-print">
-          <div className="mx-auto flex min-h-14 sm:min-h-16 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 py-1.5 sm:px-6 lg:px-8">
-            {/* Zone 1: Brand Crest */}
+          <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 sm:gap-6 px-4 py-2 sm:px-6 lg:px-8">
+            {/* Zone 1: Brand Wordmark */}
             <button
               type="button"
               onClick={() => navigatePublicPage('beranda')}
-              className="flex items-center gap-2 text-left whitespace-nowrap shrink-0 cursor-pointer"
+              className="flex items-center gap-2.5 text-left whitespace-nowrap shrink-0 cursor-pointer"
             >
               <img
                 src={LOGO_SAGITARIUS}
                 alt="Logo Sagitarius Parcel"
                 className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl border border-[#C8A053]/70 bg-black object-cover"
               />
-              <div>
-                <p className="font-display text-sm sm:text-base font-bold tracking-tight text-[#E8CA82] leading-tight">
-                  Sagitarius Parcel
-                </p>
-                <p className="hidden sm:block text-[10px] font-medium text-stone-300 leading-tight">
-                  Our Eid, Our Happiness
-                </p>
-              </div>
+              <span className="font-display text-base sm:text-lg font-bold tracking-tight text-[#E8CA82]">
+                Sagitarius Parcel
+              </span>
             </button>
 
-            {/* Zone 2: Clean Desktop & Laptop single-line navigation links */}
-            <nav className="hidden lg:flex items-center gap-5">
+            {/* Zone 2: Clean Single-Line Navigation Links */}
+            <nav className="hidden lg:flex items-center gap-6">
               <button
                 type="button"
                 onClick={() => navigatePublicPage('beranda')}
@@ -1291,14 +1286,14 @@ export default function App() {
                     (publicPage === 'katalog' || publicPage === 'detail_paket')
                 )}
               >
-                Paket Lebaran
+                Daftar Paket
               </button>
               <button
                 type="button"
                 onClick={() => navigatePublicPage('tentang')}
                 className={navLinkClass(activeView === 'landing' && publicPage === 'tentang')}
               >
-                Tentang Kami
+                Mitra &amp; Agen
               </button>
               <button
                 type="button"
@@ -1315,7 +1310,7 @@ export default function App() {
                 }}
                 className={navLinkClass(activeView === 'member')}
               >
-                Member
+                Buku Tabungan
               </button>
               {showDashboardNav && (
                 <button
@@ -1331,13 +1326,13 @@ export default function App() {
               )}
             </nav>
 
-            {/* Zone 3: Search, Wishlist Bag, Account & Hubungi Kami */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Zone 3: Search, Wishlist Bag & Primary Auth Action */}
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handleHeaderSearchClick}
                 aria-label="Cari Paket Lebaran"
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-stone-200 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-stone-100 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
               >
                 <Search className="h-4 w-4" />
               </button>
@@ -1346,7 +1341,7 @@ export default function App() {
                 type="button"
                 onClick={() => setShowWishlistDrawer(true)}
                 aria-label="Daftar Paket Pilihan"
-                className="relative flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-stone-200 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
+                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-stone-100 transition hover:bg-white/10 hover:text-[#E8CA82] cursor-pointer"
               >
                 <ShoppingBag className="h-4 w-4" />
                 <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C8A053] px-1 font-mono-nums text-[10px] font-bold text-[#1D122B]">
@@ -1358,38 +1353,29 @@ export default function App() {
                 <button
                   type="button"
                   onClick={openProfileEdit}
-                  className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3.5 py-2 text-xs font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
+                  className="hidden sm:inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-4 py-2 text-sm font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
                 >
-                  <UserIcon className="h-3.5 w-3.5" />
+                  <UserIcon className="h-4 w-4" />
                   <span>{userProfile.nama.split(' ')[0]}</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => openAuthModal('login')}
-                  className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 sm:px-3.5 py-1.5 sm:py-2 text-xs font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-bold text-[#1D122B] transition hover:brightness-105 whitespace-nowrap cursor-pointer"
                 >
-                  <LogIn className="h-3.5 w-3.5" />
-                  <span>Masuk</span>
+                  <LogIn className="h-4 w-4" />
+                  <span>Masuk / Daftar</span>
                 </button>
               )}
 
               <button
                 type="button"
-                onClick={() => navigatePublicPage('kontak')}
-                className="hidden xl:inline-flex items-center gap-1.5 rounded-full border border-[#C8A053]/80 bg-white/10 px-3.5 py-2 text-xs font-semibold text-[#E8CA82] transition hover:bg-white/20 whitespace-nowrap cursor-pointer"
-              >
-                <MessageCircle className="h-3.5 w-3.5" />
-                <span>Hubungi Kami</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setMobileMenuOpen((v) => !v)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-white lg:hidden cursor-pointer"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/25 text-white lg:hidden cursor-pointer"
                 aria-label="Menu Navigasi"
               >
-                {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+                {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             </div>
           </div>
@@ -1397,41 +1383,41 @@ export default function App() {
           {/* Mobile & Tablet Drawer */}
           {mobileMenuOpen && (
             <div className="border-t border-[#C8A053]/30 bg-[#241142] px-4 py-4 text-white lg:hidden">
-              <div className="grid grid-cols-2 gap-2 text-xs font-medium sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2.5 text-sm font-semibold sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('beranda')}
-                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[48px] rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
                 >
                   Beranda
                 </button>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('katalog', 'paket_lebaran')}
-                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[48px] rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
                 >
-                  Paket Lebaran
+                  Daftar Paket
                 </button>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('katalog', 'tabungan_uang')}
-                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[48px] rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
                 >
                   Tabungan Uang
                 </button>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('tentang')}
-                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[48px] rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
                 >
-                  Tentang &amp; Agen
+                  Mitra &amp; Agen
                 </button>
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('kontak')}
-                  className="min-h-[44px] rounded-xl border border-white/10 px-3 py-2.5 text-left hover:bg-white/10"
+                  className="min-h-[48px] rounded-xl border border-white/15 px-3.5 py-2.5 text-left hover:bg-white/10"
                 >
-                  Kontak Resmi
+                  Kontak &amp; WA
                 </button>
                 <button
                   type="button"
@@ -1439,9 +1425,9 @@ export default function App() {
                     setActiveView('member');
                     setMobileMenuOpen(false);
                   }}
-                  className="min-h-[44px] rounded-xl border border-[#C8A053]/40 bg-[#0C3328] px-3 py-2.5 text-left font-bold text-[#E8CA82]"
+                  className="min-h-[48px] rounded-xl border border-[#C8A053]/50 bg-[#0C3328] px-3.5 py-2.5 text-left font-bold text-[#E8CA82]"
                 >
-                  Member
+                  Buku Tabungan
                 </button>
                 {showDashboardNav && (
                   <button
@@ -1450,7 +1436,7 @@ export default function App() {
                       setActiveView('operasional');
                       setMobileMenuOpen(false);
                     }}
-                    className="min-h-[44px] rounded-xl border border-[#C8A053]/40 bg-white/10 px-3 py-2.5 text-left font-bold text-white"
+                    className="min-h-[48px] rounded-xl border border-[#C8A053]/40 bg-white/10 px-3.5 py-2.5 text-left font-bold text-white"
                   >
                     Dashboard
                   </button>
@@ -1458,16 +1444,16 @@ export default function App() {
               </div>
 
               {!userProfile && (
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
+                <div className="mt-3 grid grid-cols-2 gap-2.5 border-t border-white/10 pt-3">
                   <button
                     type="button"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       openAuthModal('register_member');
                     }}
-                    className="min-h-[44px] rounded-xl bg-[#0C3328] px-3 py-2 text-xs font-bold text-[#E8CA82]"
+                    className="min-h-[48px] rounded-xl bg-[#0C3328] px-3 py-2.5 text-sm font-bold text-[#E8CA82]"
                   >
-                    Gabung Member
+                    Daftar Member
                   </button>
                   <button
                     type="button"
@@ -1475,12 +1461,16 @@ export default function App() {
                       setMobileMenuOpen(false);
                       openAuthModal('register_agent');
                     }}
-                    className="min-h-[44px] rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 py-2 text-xs font-bold text-[#1D122B]"
+                    className="min-h-[48px] rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-3 py-2.5 text-sm font-bold text-[#1D122B]"
                   >
-                    Gabung Agen
+                    Daftar Agen
                   </button>
                 </div>
               )}
+
+              <div className="mt-3 border-t border-white/10 pt-3">
+                <PWAInstallButton />
+              </div>
 
               {userProfile && (
                 <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
@@ -1490,16 +1480,16 @@ export default function App() {
                       setMobileMenuOpen(false);
                       openProfileEdit();
                     }}
-                    className="text-xs font-semibold text-[#E8CA82]"
+                    className="text-sm font-semibold text-[#E8CA82]"
                   >
-                    Profil ({userProfile.nama} · {userProfile.role.toUpperCase()})
+                    Profil ({userProfile.nama})
                   </button>
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-rose-300"
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-300"
                   >
-                    <LogOut className="h-3.5 w-3.5" />
+                    <LogOut className="h-4 w-4" />
                     Keluar
                   </button>
                 </div>
@@ -1507,48 +1497,6 @@ export default function App() {
             </div>
           )}
         </header>
-        )}
-
-        {/* Sub-toolbar for PWA Install & Official Contact Context (hidden in Dashboard-only workspace) */}
-        {!isDashboardOnlySession && (
-          <div className="border-b border-[#E4DCCB] bg-white/90 backdrop-blur-xs no-print">
-            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6 lg:px-8">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
-                <span className="font-semibold text-[#381E5A]">{COMPANY_INFO.legalName}</span>
-                <span aria-hidden="true">·</span>
-                <a
-                  href={formatWhatsAppUrl(
-                    COMPANY_INFO.csWhatsappDigits,
-                    'Halo CS Sagitarius Parcel, saya ingin bertanya tentang katalog paket Lebaran.'
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-[#15803D] hover:underline"
-                >
-                  CS WA: {COMPANY_INFO.csWhatsappDisplay}
-                </a>
-                <span aria-hidden="true">·</span>
-                <span className="font-medium text-[#0C3328]">
-                  {userProfile
-                    ? `Masuk sebagai ${userProfile.nama} (${userProfile.role.toUpperCase()})`
-                    : 'Pengunjung Publik'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <PWAInstallButton />
-                {userProfile && (
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="inline-flex items-center gap-1 rounded-lg border border-[#E4DCCB] px-3 py-1 text-xs font-medium text-stone-600 hover:bg-[#FAF7F2] cursor-pointer"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    <span>Keluar</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
         )}
 
         {authError && (
@@ -1782,9 +1730,9 @@ export default function App() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <p className="font-bold text-[#E8CA82]">Bantuan &amp; Kontak</p>
-              <div className="flex flex-col items-start gap-1.5">
+            <div className="space-y-2.5">
+              <p className="text-sm font-bold text-[#E8CA82]">Bantuan &amp; Aplikasi</p>
+              <div className="flex flex-col items-start gap-2 text-sm">
                 <button
                   type="button"
                   onClick={() => navigatePublicPage('kontak')}
@@ -1799,15 +1747,18 @@ export default function App() {
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1.5 font-semibold text-[#E8CA82] hover:underline"
+                  className="inline-flex items-center gap-1.5 font-semibold text-[#E8CA82] hover:underline"
                 >
-                  <MessageCircle className="h-3.5 w-3.5" />
+                  <MessageCircle className="h-4 w-4" />
                   <span>WA {COMPANY_INFO.csWhatsappDisplay}</span>
                 </a>
-                <span className="inline-flex items-center gap-1 text-[11px] text-stone-300">
-                  <Globe className="h-3 w-3 text-[#C8A053]" />
+                <span className="inline-flex items-center gap-1.5 text-xs text-stone-300">
+                  <Globe className="h-3.5 w-3.5 text-[#C8A053]" />
                   {COMPANY_INFO.website}
                 </span>
+                <div className="pt-1">
+                  <PWAInstallButton />
+                </div>
               </div>
             </div>
           </div>

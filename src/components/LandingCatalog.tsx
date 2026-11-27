@@ -12,12 +12,10 @@ import {
   Home,
   MessageCircle,
   Package as PackageIcon,
-  QrCode,
   Search,
   ShieldCheck,
   ShoppingBag,
   Truck,
-  UserCheck,
   UserPlus,
   X,
 } from 'lucide-react';
@@ -36,7 +34,6 @@ import {
   IMG_SULTAN,
   IMG_UANG_DAGING,
   PAKET_UANG_TABLES,
-  RESELLER_PROGRAM,
   formatRupiah,
   formatWhatsAppUrl,
 } from '../data/catalogData';
@@ -49,6 +46,7 @@ import {
   UserRole,
 } from '../types';
 import { KontakPage, TentangKamiPage } from './ContactAndPages';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export type MainCatalogCategory = 'paket_lebaran' | 'tabungan_uang';
 type PaketLebaranSubFilter = 'all_lebaran' | 'bunda' | 'anak' | 'pilihan' | 'satuan';
@@ -133,7 +131,6 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   userRole = null,
 }) => {
   const isMemberLoggedIn = userRole === 'member';
-  const isAgentLoggedIn = userRole === 'agen';
   const [lebaranSubCategory, setLebaranSubCategory] =
     useState<PaketLebaranSubFilter>('all_lebaran');
   const [priceRange, setPriceRange] =
@@ -143,10 +140,9 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAllSatuan, setShowAllSatuan] = useState(false);
 
-  // Brochure Lightbox Modal & Reseller Table Tab
+  // Brochure Lightbox Modal
   const [showBrochuresModal, setShowBrochuresModal] = useState(false);
   const [activeBrochureIdx, setActiveBrochureIdx] = useState(0);
-  const [activeResellerGroup, setActiveResellerGroup] = useState<'anak' | 'ibu' | 'pilihan'>('anak');
 
   // Detail Paket UI State
   const [galleryIdx, setGalleryIdx] = useState(0);
@@ -1518,26 +1514,26 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
     .slice(0, 4);
 
   return (
-    <div className="space-y-10 pb-12 sm:space-y-12 sm:pb-16">
+    <div className="space-y-10 pb-12 sm:space-y-14 sm:pb-16">
       {referralAgent && (
         <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-8">
-          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#0C3328] to-[#164A3B] px-4 py-3.5 text-white shadow-sm sm:flex-row sm:items-center sm:px-5">
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-[#C8A053]/60 bg-gradient-to-r from-[#0C3328] to-[#164A3B] px-4 py-4 text-white shadow-sm sm:flex-row sm:items-center sm:px-6">
             <div className="flex items-start gap-3 sm:items-center">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#E8CA82] sm:mt-0" />
-              <div className="text-xs">
+              <div className="text-sm leading-relaxed">
                 <p className="font-bold text-[#E8CA82]">
-                  Tautan Pendaftaran Resmi Agen ({referralAgent.kode_agen})
+                  Tautan Resmi Agen Pendamping ({referralAgent.kode_agen})
                 </p>
-                <p className="text-stone-200">
+                <p className="text-stone-100">
                   Pendamping Anda: <strong>{referralAgent.nama}</strong> — Wilayah{' '}
-                  {referralAgent.wilayah} ({referralAgent.kecamatan}). Agen otomatis terpilih saat Anda mendaftar paket.
+                  {referralAgent.wilayah} ({referralAgent.kecamatan}).
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => openMainCategory('paket_lebaran')}
-              className="min-h-[40px] shrink-0 rounded-lg bg-[#E8CA82] px-4 py-2 text-xs font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
+              className="min-h-[44px] shrink-0 rounded-xl bg-[#E8CA82] px-4 py-2.5 text-sm font-bold text-[#1D122B] hover:brightness-105 cursor-pointer"
             >
               Pilih Paket Sekarang
             </button>
@@ -1545,58 +1541,70 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         </div>
       )}
 
-      {/* Split Hero Section with Gabung Member & Gabung Agen CTA */}
-      <section className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 sm:pt-7 lg:px-8">
-        <div className="grid items-center gap-7 lg:grid-cols-12 lg:gap-10">
-          <div className="min-w-0 space-y-4 sm:space-y-5 lg:col-span-6">
-            <p className="text-xs font-semibold text-[#C8A053]">
-              {COMPANY_INFO.legalName} · {COMPANY_INFO.tagline}
+      {/* 1. Hero Utama (Maksimal 2 Tombol Besar + Teks Mudah Dibaca) */}
+      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+        <div className="grid items-center gap-8 lg:grid-cols-12 lg:gap-12">
+          <div className="min-w-0 space-y-5 lg:col-span-6">
+            <p className="text-sm font-semibold text-[#0C3328]">
+              {COMPANY_INFO.legalName} · Tabungan &amp; Paket Lebaran Resmi
             </p>
             <h1
-              className="font-display text-[clamp(1.85rem,4.2vw,3.2rem)] leading-[1.12] font-bold text-[#381E5A]"
+              className="font-display text-[clamp(1.9rem,4vw,3rem)] leading-[1.15] font-bold text-[#381E5A]"
               style={{ textWrap: 'balance' }}
             >
-              Sambut Lebaran dengan Bingkisan Bermakna
+              Siapkan Parcel &amp; Tabungan Lebaran Keluarga
             </h1>
-            <p className="max-w-xl text-sm leading-relaxed text-stone-600 sm:text-base">
-              Persiapkan Paket Lebaran atau Tabungan Uang untuk keluarga Anda dengan cicilan ringan mulai Rp 100–Rp 10.000/hari selama 295–325 hari lengkap dengan bonus THR &amp; kupon Door Prize.
+            <p className="max-w-xl text-base leading-relaxed text-stone-700 sm:text-lg">
+              Menabung ringan mulai <strong>Rp 100 – Rp 10.000 per hari</strong> selama 295–325 hari. Lengkap dengan pilihan paket barang, tabungan uang, bonus THR, serta kupon Door Prize.
             </p>
 
-            {/* Primary Onboarding Buttons for Non-Technical Visitors */}
-            <div className="grid grid-cols-1 gap-2.5 pt-1 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+            {/* 2 Tombol Utama Besar */}
+            <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
+              <button
+                type="button"
+                onClick={() => openMainCategory('paket_lebaran')}
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-6 py-3.5 text-base font-bold text-white shadow-xs transition hover:bg-[#144738] sm:w-auto cursor-pointer"
+              >
+                <span>Lihat Daftar Paket</span>
+                <ArrowRight className="h-5 w-5 text-[#E8CA82]" />
+              </button>
               <button
                 type="button"
                 disabled={isMemberLoggedIn}
                 title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
                 onClick={() => onOpenAuth('register_member')}
-                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-[#0C3328] px-5 py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#144738] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#0C3328] sm:w-auto cursor-pointer"
+                className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl border-2 border-[#C8A053] bg-white px-6 py-3.5 text-base font-bold text-[#381E5A] transition hover:bg-[#FAF7F2] disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto cursor-pointer"
               >
-                <UserPlus className="h-4 w-4 text-[#E8CA82]" />
-                <span>Gabung Member</span>
+                <UserPlus className="h-5 w-5 text-[#0C3328]" />
+                <span>Daftar Member</span>
               </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1 text-sm text-stone-700">
               <button
                 type="button"
-                disabled={isAgentLoggedIn}
-                title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
-                onClick={() => onOpenAuth('register_agent')}
-                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#D5B263] to-[#B98E3A] px-5 py-3 text-sm font-bold text-[#1D122B] shadow-xs transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:brightness-100 sm:w-auto cursor-pointer"
+                onClick={() => onOpenAuth('login')}
+                className="font-semibold text-[#381E5A] underline underline-offset-4 hover:text-[#0C3328] cursor-pointer"
               >
-                <UserCheck className="h-4 w-4" />
-                <span>Gabung Agen</span>
+                Sudah punya akun? Masuk di sini
               </button>
-              <button
-                type="button"
-                onClick={() => openMainCategory('paket_lebaran')}
-                className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-3 text-sm font-semibold text-[#381E5A] transition hover:bg-[#FAF7F2] sm:w-auto cursor-pointer"
+              <a
+                href={formatWhatsAppUrl(
+                  COMPANY_INFO.csWhatsappDigits,
+                  'Halo Admin Sagitarius Parcel, saya butuh bantuan memilih paket Lebaran.'
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 font-semibold text-[#15803D] hover:underline"
               >
-                <span>Pilih Paket</span>
-                <ArrowRight className="h-4 w-4 text-[#0C3328]" />
-              </button>
+                <MessageCircle className="h-4 w-4 shrink-0" />
+                <span>Tanya via WhatsApp ({COMPANY_INFO.csWhatsappDisplay})</span>
+              </a>
             </div>
           </div>
 
           <div className="min-w-0 lg:col-span-6">
-            <div className="relative overflow-hidden rounded-tl-[100px] sm:rounded-tl-[150px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-sm">
+            <div className="relative overflow-hidden rounded-tl-[88px] sm:rounded-tl-[130px] rounded-tr-2xl rounded-b-2xl border-2 border-[#C8A053]/60 bg-[#FAF5FC] shadow-sm">
               <img
                 src={IMG_HERO}
                 alt="Bingkisan Parcel Lebaran Sagitarius Parcel"
@@ -1609,99 +1617,106 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
                   setActiveBrochureIdx(0);
                   setShowBrochuresModal(true);
                 }}
-                className="absolute right-3 bottom-3 sm:right-4 sm:bottom-4 inline-flex min-h-[38px] items-center gap-2 rounded-full border border-[#C8A053]/70 bg-[#0C3328]/90 px-3.5 py-2 text-xs font-semibold text-[#E8CA82] backdrop-blur-xs hover:bg-[#0C3328] cursor-pointer"
+                className="absolute right-3 bottom-3 sm:right-4 sm:bottom-4 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#C8A053]/70 bg-[#0C3328]/95 px-4 py-2 text-sm font-semibold text-[#E8CA82] backdrop-blur-xs hover:bg-[#0C3328] cursor-pointer"
               >
-                <BookOpen className="h-3.5 w-3.5" />
+                <BookOpen className="h-4 w-4" />
                 <span>Lihat Brosur Cetak</span>
               </button>
             </div>
           </div>
         </div>
+      </section>
 
-        {/* 2 Simple Category Entry Cards */}
-        <div className="mt-8 grid gap-4 md:grid-cols-2 md:gap-5">
+      {/* 2. Dua Pilihan Program Utama */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid gap-4 md:grid-cols-2 md:gap-6">
           <button
             type="button"
             onClick={() => openMainCategory('paket_lebaran')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
+            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer sm:p-6"
           >
             <img
               src={IMG_BUNDA_GOLD}
-              alt="Paket Lebaran"
-              className="h-20 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-24 sm:w-32"
+              alt="Paket Barang Lebaran"
+              className="h-24 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-28 sm:w-32"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-lg font-bold text-[#381E5A] sm:text-xl">
-                Paket Lebaran
+              <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
+                Paket Barang Lebaran
               </h2>
-              <p className="mt-1 text-xs leading-relaxed text-stone-600">
-                Paket Bunda (Travel Bag, Box &amp; Koper), Paket Anak, Diamond &amp; Sultan, serta 50 Barang Satuan.
+              <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-base">
+                Paket Bunda, Paket Anak, Paket Pilihan, hingga 50 barang sembako &amp; kue satuan.
               </p>
             </div>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
-              <ArrowRight className="h-4 w-4" />
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
+              <ArrowRight className="h-5 w-5" />
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => openMainCategory('tabungan_uang')}
-            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer"
+            className="group flex items-center gap-4 rounded-2xl border border-[#E4DCCB] bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-[#C8A053] hover:shadow-md cursor-pointer sm:p-6"
           >
             <img
               src={BROCHURE_UANG}
-              alt="Tabungan Uang"
-              className="h-20 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-24 sm:w-32"
+              alt="Tabungan Uang Tunai"
+              className="h-24 w-28 shrink-0 rounded-xl bg-[#FAF5FC] object-contain p-1 sm:h-28 sm:w-32"
               referrerPolicy="no-referrer"
             />
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-lg font-bold text-[#381E5A] sm:text-xl">
-                Tabungan Uang
+              <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
+                Tabungan Uang Tunai
               </h2>
-              <p className="mt-1 text-xs leading-relaxed text-stone-600">
-                Tabungan Uang Munggahan (295 Hari / 42 Minggu) &amp; Lebaran (325 Hari / 45 Minggu) harian atau mingguan.
+              <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-base">
+                Tabungan Munggahan (295 hari) &amp; Lebaran (325 hari), bisa setor harian atau mingguan.
               </p>
             </div>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
-              <ArrowRight className="h-4 w-4" />
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D5B263] to-[#B98E3A] text-white transition group-hover:translate-x-0.5">
+              <ArrowRight className="h-5 w-5" />
             </span>
           </button>
         </div>
+      </section>
 
-        {/* Simple 3-Step Guide Strip inline on Beranda */}
-        <div className="mt-6 bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-5 text-white sm:p-6">
-          <div className="grid gap-5 md:grid-cols-3">
-            <div className="flex items-start gap-3.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
-                <ShoppingBag className="h-4 w-4" />
+      {/* 3. Tiga Langkah Mudah Menabung */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="bg-arabesque-emerald rounded-2xl border border-[#C8A053]/40 p-6 text-white sm:p-8">
+          <h2 className="font-display text-xl font-bold text-[#E8CA82] sm:text-2xl">
+            3 Langkah Mudah Menabung
+          </h2>
+          <div className="mt-5 grid gap-6 md:grid-cols-3">
+            <div className="flex items-start gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
+                1
               </span>
               <div>
-                <p className="text-xs font-bold text-[#E8CA82]">1. Pilih Paket / Tabungan</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-stone-200">
-                  Pilih kategori Paket Lebaran atau Tabungan Uang sesuai kebutuhan keluarga.
+                <p className="text-base font-bold text-[#E8CA82]">Pilih Paket yang Diinginkan</p>
+                <p className="mt-1 text-sm leading-relaxed text-stone-100 sm:text-base">
+                  Lihat daftar paket sembako, kue lebaran, atau tabungan uang sesuai anggaran Anda.
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-3.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
-                <UserPlus className="h-4 w-4" />
+            <div className="flex items-start gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
+                2
               </span>
               <div>
-                <p className="text-xs font-bold text-[#E8CA82]">2. Daftar Member / Agen</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-stone-200">
-                  Klik Gabung Member untuk menabung atau Gabung Agen untuk menjadi mitra resmi.
+                <p className="text-base font-bold text-[#E8CA82]">Daftar &amp; Setor Ringan</p>
+                <p className="mt-1 text-sm leading-relaxed text-stone-100 sm:text-base">
+                  Daftar akun member lalu setorkan tabungan harian atau mingguan melalui agen resmi.
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-3.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/60 text-[#E8CA82]">
-                <QrCode className="h-4 w-4" />
+            <div className="flex items-start gap-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#C8A053]/70 text-base font-bold text-[#E8CA82]">
+                3
               </span>
               <div>
-                <p className="text-xs font-bold text-[#E8CA82]">3. Setor &amp; Ambil Pakai QR</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-stone-200">
-                  Pantau saldo real-time di dashboard hingga terbit Tiket QR pengambilan paket.
+                <p className="text-base font-bold text-[#E8CA82]">Pantau Saldo &amp; Terima Paket</p>
+                <p className="mt-1 text-sm leading-relaxed text-stone-100 sm:text-base">
+                  Cek catatan setoran di Buku Tabungan kapan saja hingga lunas dan paket siap dikirim.
                 </p>
               </div>
             </div>
@@ -1709,223 +1724,128 @@ export const LandingCatalog: React.FC<LandingCatalogProps> = ({
         </div>
       </section>
 
-      {/* Program Komisi Reseller Eksklusif & Mitra Agen Resmi */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid items-start gap-6 overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white p-4 sm:p-8 lg:grid-cols-12">
-          <div className="min-w-0 lg:col-span-5">
+      {/* 4. Paket Paling Diminati + Bantuan WhatsApp & Info Agen */}
+      <section className="mx-auto max-w-7xl space-y-8 px-4 sm:px-6 lg:px-8">
+        <div>
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#E4DCCB] pb-4">
+            <div>
+              <p className="text-sm font-semibold text-[#0C3328]">Katalog 2026–2027</p>
+              <h2 className="mt-0.5 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
+                4 Paket Paling Diminati
+              </h2>
+            </div>
             <button
               type="button"
-              onClick={() => {
-                setActiveBrochureIdx(6);
-                setShowBrochuresModal(true);
-              }}
-              className="group relative block w-full overflow-hidden rounded-2xl border border-[#E4DCCB] bg-[#FAF5FC] cursor-pointer"
+              onClick={() => openMainCategory('paket_lebaran')}
+              className="inline-flex min-h-[44px] items-center gap-1.5 text-sm font-bold text-[#381E5A] hover:text-[#0C3328] cursor-pointer"
             >
-              <img
-                src={IMG_RESELLER_POSTER}
-                alt="Poster Komisi Reseller Eksklusif Sagitarius Parcel"
-                className="aspect-[3/4] w-full object-contain"
-                referrerPolicy="no-referrer"
-              />
-              <span className="absolute right-3 bottom-3 rounded-full bg-[#0C3328]/90 px-3 py-1.5 text-[11px] font-semibold text-[#E8CA82] shadow transition group-hover:bg-[#0C3328]">
-                Klik untuk Perbesar Poster
-              </span>
+              <span>Lihat Semua Paket</span>
+              <ArrowRight className="h-4 w-4" />
             </button>
           </div>
-          <div className="min-w-0 space-y-4 lg:col-span-7">
-            <div>
-              <p className="text-xs font-semibold text-[#C8A053]">
-                Program Kemitraan Priangan Timur · Tanpa Modal Stok Barang
-              </p>
-              <h2 className="mt-1 font-display text-2xl font-bold text-[#381E5A] sm:text-3xl">
-                {RESELLER_PROGRAM.headline}
-              </h2>
-              <p className="mt-1 text-xs leading-relaxed text-stone-600 sm:text-sm">
-                {RESELLER_PROGRAM.subheadline}
-              </p>
-            </div>
 
-            {/* Interactive Group Selector */}
-            <div className="flex flex-wrap gap-2">
-              {RESELLER_PROGRAM.groups.map((grp) => (
-                <button
-                  key={grp.id}
-                  type="button"
-                  onClick={() => setActiveResellerGroup(grp.id)}
-                  className={`min-h-[40px] rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
-                    activeResellerGroup === grp.id
-                      ? 'bg-[#381E5A] text-[#E8CA82]'
-                      : 'border border-[#E4DCCB] bg-[#FAF7F2] text-[#381E5A] hover:bg-stone-100'
-                  }`}
+          <div className="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {featuredHighlight.map((pkg) => {
+              const liked = wishlistIds.includes(pkg.id);
+              return (
+                <article
+                  key={pkg.id}
+                  className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  {grp.title} · {grp.komisiLabel}
-                </button>
-              ))}
-            </div>
-
-            {/* Commission & Target Bonus Table */}
-            <div className="overflow-x-auto rounded-xl border border-[#E4DCCB]">
-              <table className="w-full min-w-[540px] text-left text-xs">
-                <thead className="bg-[#0C3328] text-[#E8CA82]">
-                  <tr>
-                    <th className="px-3 py-2.5 font-semibold">Paket</th>
-                    <th className="px-3 py-2.5 font-semibold">Komisi/Pkt</th>
-                    <th className="px-3 py-2.5 font-semibold">Bonus 20 Pkt</th>
-                    <th className="px-3 py-2.5 font-semibold">Bonus 50 Pkt</th>
-                    <th className="px-3 py-2.5 font-semibold">Bonus 100 Pkt</th>
-                    <th className="px-3 py-2.5 font-semibold">Bonus 200 Pkt</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F0EAE0] bg-white font-mono-nums">
-                  {(
-                    RESELLER_PROGRAM.groups.find((g) => g.id === activeResellerGroup) ||
-                    RESELLER_PROGRAM.groups[0]
-                  ).rows.map((row) => (
-                    <tr key={row.nama} className="hover:bg-[#FAF7F2]">
-                      <td className="px-3 py-2.5 font-sans">
-                        <p className="font-bold text-[#381E5A]">{row.nama}</p>
-                        <p className="text-[11px] text-stone-500">{row.harian}</p>
-                      </td>
-                      <td className="px-3 py-2.5 font-bold text-[#0C3328]">
-                        {formatRupiah(row.komisi)}
-                      </td>
-                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus20)}</td>
-                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus50)}</td>
-                      <td className="px-3 py-2.5 text-stone-700">{formatRupiah(row.bonus100)}</td>
-                      <td className="px-3 py-2.5 font-bold text-[#B98E3A]">
-                        {formatRupiah(row.bonus200)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* 7 Ketentuan Komisi Reseller */}
-            <div className="rounded-xl border border-[#E4DCCB] bg-[#FAF7F2] p-4">
-              <p className="text-xs font-bold text-[#381E5A]">Ketentuan Komisi Reseller:</p>
-              <ol className="mt-2 space-y-1 text-xs leading-relaxed text-stone-700">
-                {RESELLER_PROGRAM.ketentuan.map((rule, idx) => (
-                  <li key={idx} className="flex items-start gap-2">
-                    <span className="font-mono-nums font-bold text-[#0C3328]">{idx + 1}.</span>
-                    <span>{rule}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                type="button"
-                disabled={isAgentLoggedIn}
-                title={isAgentLoggedIn ? 'Anda sudah masuk sebagai Agen' : undefined}
-                onClick={() => onOpenAuth('register_agent')}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#0C3328] px-5 py-2.5 text-xs font-bold text-[#E8CA82] hover:bg-[#144738] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#0C3328] cursor-pointer"
-              >
-                <UserCheck className="h-4 w-4" />
-                <span>Gabung Agen Sekarang</span>
-              </button>
-              <button
-                type="button"
-                disabled={isMemberLoggedIn}
-                title={isMemberLoggedIn ? 'Anda sudah masuk sebagai Member' : undefined}
-                onClick={() => onOpenAuth('register_member')}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#C8A053] bg-white px-5 py-2.5 text-xs font-bold text-[#381E5A] hover:bg-[#FAF7F2] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white cursor-pointer"
-              >
-                <UserPlus className="h-4 w-4 text-[#0C3328]" />
-                <span>Gabung Member</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigate('tentang')}
-                className="inline-flex min-h-[44px] items-center gap-1.5 px-2 text-xs font-semibold text-[#381E5A] underline hover:text-[#C8A053] cursor-pointer"
-              >
-                <span>Lihat Direktori Agen</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Paket Unggulan Preview Strip */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#E4DCCB] pb-4">
-          <div>
-            <p className="text-xs font-semibold text-[#C8A053]">Katalog 2026–2027</p>
-            <h2 className="mt-0.5 font-display text-2xl font-bold text-[#381E5A]">
-              Pilihan Paket Terfavorit Member
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => openMainCategory('paket_lebaran')}
-            className="inline-flex min-h-[38px] items-center gap-1.5 text-xs font-bold text-[#381E5A] hover:text-[#C8A053] cursor-pointer"
-          >
-            <span>Lihat Semua Paket Lebaran</span>
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {featuredHighlight.map((pkg) => {
-            const liked = wishlistIds.includes(pkg.id);
-            return (
-              <article
-                key={pkg.id}
-                className="flex flex-col overflow-hidden rounded-2xl border border-[#E4DCCB] bg-white transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#FAF5FC]">
-                  <img
-                    src={pkg.foto_url}
-                    alt={pkg.nama_paket}
-                    className="h-full w-full object-contain p-1"
-                    referrerPolicy="no-referrer"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onToggleWishlist(pkg.id)}
-                    aria-label={`Simpan ${pkg.nama_paket}`}
-                    className="absolute top-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 shadow cursor-pointer"
-                  >
-                    <Heart
-                      className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#FAF5FC]">
+                    <img
+                      src={pkg.foto_url}
+                      alt={pkg.nama_paket}
+                      className="h-full w-full object-contain p-1.5"
+                      referrerPolicy="no-referrer"
                     />
-                  </button>
-                </div>
-                <div className="flex flex-1 flex-col justify-between p-4">
-                  <div>
-                    <h3 className="text-sm font-bold text-[#381E5A]">{pkg.nama_paket}</h3>
-                    <p className="mt-1 line-clamp-2 text-[11px] text-stone-600">
-                      {pkg.daftar_isi.slice(0, 3).join(', ')}
-                    </p>
-                    <p className="mt-2 font-mono-nums text-xs font-bold text-[#381E5A]">
-                      {formatRupiah(pkg.harga_total)} ·{' '}
-                      <span className="font-normal text-stone-500">
-                        {formatRupiah(pkg.setoran_harian)}/hr
-                      </span>
-                    </p>
+                    <button
+                      type="button"
+                      onClick={() => onToggleWishlist(pkg.id)}
+                      aria-label={`Simpan ${pkg.nama_paket}`}
+                      className="absolute top-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 shadow cursor-pointer"
+                    >
+                      <Heart
+                        className={`h-4 w-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-[#B98E3A]'}`}
+                      />
+                    </button>
                   </div>
-                  <div className="mt-3 flex items-center justify-between border-t border-[#F0EAE0] pt-3">
-                    <span className="text-[11px] font-medium text-[#0C3328]">
-                      {pkg.durasi_hari} Hari
-                    </span>
+                  <div className="flex flex-1 flex-col justify-between p-4 sm:p-5">
+                    <div>
+                      <h3 className="text-base font-bold text-[#381E5A]">{pkg.nama_paket}</h3>
+                      <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-stone-600">
+                        {pkg.daftar_isi.slice(0, 3).join(', ')}
+                      </p>
+                      <p className="mt-3 font-mono-nums text-base font-bold text-[#0C3328]">
+                        {formatRupiah(pkg.setoran_harian)}
+                        <span className="text-sm font-normal text-stone-600"> / hari</span>
+                      </p>
+                      <p className="mt-0.5 font-mono-nums text-sm text-stone-600">
+                        Total {formatRupiah(pkg.harga_total)} ({pkg.durasi_hari} hari)
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
                         onOpenDetail(pkg);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="inline-flex min-h-[36px] items-center gap-1 rounded-full bg-[#241142] px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-[#381E5A] cursor-pointer"
+                      className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#241142] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#381E5A] cursor-pointer"
                     >
-                      <span>Lihat Detail</span>
-                      <ChevronRight className="h-3 w-3" />
+                      <span>Lihat Isi Paket</span>
+                      <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
-                </div>
-              </article>
-            );
-          })}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Kotak Bantuan WhatsApp, Pasang Aplikasi & Info Mitra Agen */}
+        <div className="grid gap-5 rounded-2xl border border-[#E4DCCB] bg-white p-6 shadow-xs md:grid-cols-2 md:gap-8 sm:p-8">
+          <div className="space-y-3">
+            <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
+              Butuh Bantuan Memilih Paket?
+            </h2>
+            <p className="text-sm leading-relaxed text-stone-700 sm:text-base">
+              Tim Admin kami siap membantu menjelaskan pilihan paket dan cara pendaftaran langsung lewat WhatsApp.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <a
+                href={formatWhatsAppUrl(
+                  COMPANY_INFO.csWhatsappDigits,
+                  'Halo Admin Sagitarius Parcel, saya ingin bertanya tentang paket tabungan Lebaran.'
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl bg-[#15803D] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#166534]"
+              >
+                <MessageCircle className="h-4 w-4 shrink-0" />
+                <span>Chat WhatsApp ({COMPANY_INFO.csWhatsappDisplay})</span>
+              </a>
+              <PWAInstallButton />
+            </div>
+          </div>
+
+          <div className="space-y-3 border-t border-[#E4DCCB] pt-5 md:border-t-0 md:border-l md:pt-0 md:pl-8">
+            <h2 className="font-display text-xl font-bold text-[#381E5A] sm:text-2xl">
+              Ingin Bergabung Menjadi Agen?
+            </h2>
+            <p className="text-sm leading-relaxed text-stone-700 sm:text-base">
+              Dapatkan komisi menarik dan bonus target paket tanpa modal stok barang dengan mendampingi member di wilayah Anda.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => onNavigate('tentang')}
+                className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-xl border-2 border-[#C8A053] bg-[#FAF7F2] px-5 py-2.5 text-sm font-bold text-[#381E5A] transition hover:bg-[#F3ECE0] cursor-pointer"
+              >
+                <span>Lihat Info Komisi &amp; Direktori Agen</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
